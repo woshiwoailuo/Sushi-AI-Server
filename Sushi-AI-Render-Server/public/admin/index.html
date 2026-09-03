@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>苏轼AI · 运营后台</title>
+  <style>
+    :root {
+      --bg: #F5F7FA; --card: #FFFFFF; --text: #1B1F2A; --muted: #6B7280;
+      --accent: #3B6FF5; --danger: #E11D48; --line: rgba(27,31,42,.08); --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    input, select, textarea { background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; outline: none; width: 100%; }
+    input:focus, textarea:focus { border-color: rgba(59,111,245,.55); }
+    textarea { min-height: 88px; resize: vertical; }
+    .login-wrap { min-height: 100vh; display: grid; place-items: center; background: var(--bg); }
+    .login { width: 380px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; box-shadow: 0 8px 32px rgba(27,31,42,.06); }
+    .kicker { color: var(--muted); font-size: 13px; }
+    h1 { font-size: 24px; margin: 10px 0 6px; font-weight: 620; }
+    h2 { font-size: 16px; font-weight: 620; margin: 18px 0 10px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .field { margin-top: 12px; }
+    .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .btn { border: 0; border-radius: var(--radius); padding: 11px 14px; cursor: pointer; font-weight: 620; }
+    .btn-lime { background: var(--accent); color: #fff; width: 100%; margin-top: 16px; }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .err { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 8px; }
+    .shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+    .side { border-right: 1px solid var(--line); padding: 22px 16px; background: #FFFFFF; }
+    .logo { font-weight: 700; margin-bottom: 28px; }
+    .navbtn { display: block; width: 100%; text-align: left; background: transparent; border: 0; color: var(--muted); padding: 10px 12px; border-radius: 10px; cursor: pointer; }
+    .navbtn.on, .navbtn:hover { background: #EEF2FF; color: var(--text); }
+    .main { display: flex; flex-direction: column; min-width: 0; }
+    header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: rgba(245,247,250,.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 20px 24px 8px; }
+    .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+    .kpi b { display: block; font-size: 28px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+    .toolbar { display: flex; gap: 8px; padding: 12px 24px; align-items: center; flex-wrap: wrap; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 500; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    td { padding: 12px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: rgba(59,111,245,.04); }
+    .pill { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+    .onvip { background: rgba(59,111,245,.12); color: var(--accent); }
+    .onban { background: rgba(225,29,72,.12); color: var(--danger); }
+    .onfree { background: #F3F4F6; color: var(--muted); }
+    .actions button { background: #FFFFFF; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin-right: 4px; font-size: 12px; cursor: pointer; }
+    .actions button.danger { color: var(--danger); }
+    .panel { padding: 0 24px 40px; }
+    .hidden { display: none !important; }
+    .logs { font-size: 13px; }
+    .log { padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+    .grid .item small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin-bottom: 16px; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .check input { width: auto; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  </style>
+</head>
+<body>
+  <div id="loginView" class="login-wrap">
+    <form class="login" id="loginForm">
+      <div class="kicker">运营后台</div>
+      <h1>苏轼AI</h1>
+      <p class="muted">仅管理员可登录。</p>
+      <div class="field"><label>邮箱</label><input id="email" type="email" autocomplete="username" /></div>
+      <div class="field"><label>密码</label><input id="password" type="password" autocomplete="current-password" /></div>
+      <div class="err" id="err"></div>
+      <button class="btn btn-lime" type="submit">登录</button>
+    </form>
+  </div>
+
+  <div id="appView" class="shell hidden">
+    <aside class="side">
+      <div class="logo">苏轼AI</div>
+      <button class="navbtn on" data-view="users">用户列表</button>
+      <button class="navbtn" data-view="detail">用户详情</button>
+      <button class="navbtn" data-view="app">应用更新</button>
+      <button class="navbtn" data-view="logs">审计日志</button>
+      <button class="navbtn" id="logout">退出</button>
+    </aside>
+    <section class="main">
+      <header>
+        <div>
+          <div class="kicker">管理</div>
+          <div id="who">管理员</div>
+        </div>
+        <div class="muted" id="clock"></div>
+      </header>
+      <div class="kpis" id="kpiBar">
+        <div class="kpi"><span class="muted">总用户</span><b id="kUsers">0</b></div>
+        <div class="kpi"><span class="muted">会员</span><b id="kVip">0</b></div>
+        <div class="kpi"><span class="muted">封禁</span><b id="kBan">0</b></div>
+        <div class="kpi"><span class="muted">今日生成</span><b id="kGen">0</b></div>
+      </div>
+      <div id="usersView">
+        <div class="toolbar">
+          <input id="q" placeholder="搜索邮箱 / 显示名" style="width:240px" />
+          <select id="filter" style="width:auto">
+            <option value="all">全部</option>
+            <option value="vip">会员</option>
+            <option value="free">免费</option>
+            <option value="banned">封禁</option>
+          </select>
+          <button class="btn" id="searchBtn" style="background:#FFFFFF;border:1px solid var(--line)">筛选</button>
+          <span class="muted" id="pageInfo"></span>
+        </div>
+        <div class="panel">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>用户</th><th>方案</th><th>额度</th><th>状态</th><th>操作</th></tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+          <div class="toolbar">
+            <button class="btn" id="prev" style="background:#FFFFFF;border:1px solid var(--line)">上一页</button>
+            <button class="btn" id="next" style="background:#FFFFFF;border:1px solid var(--line)">下一页</button>
+          </div>
+        </div>
+      </div>
+      <div id="detailView" class="panel hidden">
+        <p class="muted" id="detailEmpty">从用户列表点击一行查看详情。</p>
+        <div id="detailBody" class="hidden">
+          <div class="grid" id="detailGrid"></div>
+          <div class="toolbar" style="padding:16px 0" id="detailActions"></div>
+          <h2>生成记录</h2>
+          <table><thead><tr><th>时间</th><th>类型</th></tr></thead><tbody id="genBody"></tbody></table>
+          <h2>相关审计</h2>
+          <div id="userAudits" class="logs"></div>
+        </div>
+      </div>
+      <div id="appViewPanel" class="panel hidden">
+        <div class="card" id="latestBox"><div class="muted">加载中…</div></div>
+        <div class="card">
+          <h2 style="margin-top:0">上传新版本</h2>
+          <form id="apkForm">
+            <div class="form-row">
+              <div class="field"><label>版本号 (int)</label><input id="verCode" type="number" min="1" step="1" required /></div>
+              <div class="field"><label>版本名</label><input id="verName" placeholder="1.1.0" required /></div>
+            </div>
+            <div class="field"><label>更新说明</label><textarea id="verNotes" placeholder="本次更新内容"></textarea></div>
+            <div class="field check"><input id="verForce" type="checkbox" /><label for="verForce" style="margin:0">强制更新</label></div>
+            <div class="field"><label>选择 APK</label><input id="verFile" type="file" accept=".apk,application/vnd.android.package-archive" /></div>
+            <div class="err" id="apkErr"></div>
+            <button class="btn btn-accent" type="submit" style="margin-top:12px">上传发布</button>
+          </form>
+        </div>
+        <h2>历史版本</h2>
+        <table>
+          <thead><tr><th>版本号</th><th>版本名</th><th>强制</th><th>大小</th><th>说明</th><th>时间</th></tr></thead>
+          <tbody id="relBody"></tbody>
+        </table>
+      </div>
+      <div id="logsView" class="panel hidden">
+        <div id="logs" class="logs"></div>
+      </div>
+    </section>
+  </div>
+  <script>
+    const API = location.origin;
+    let token = localStorage.getItem('sushi_admin_jwt') || '';
+    let page = 1, pages = 1, me = null, currentUserId = null;
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({}, opts.headers || {});
+      if (!(opts.body instanceof FormData)) headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const res = await fetch(API + path, Object.assign({}, opts, { headers }));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '请求失败');
+      return data;
+    }
+
+    function showApp(on) {
+      document.getElementById('loginView').classList.toggle('hidden', on);
+      document.getElementById('appView').classList.toggle('hidden', !on);
+    }
+
+    function goView(v) {
+      document.querySelectorAll('.navbtn[data-view]').forEach((x) => x.classList.toggle('on', x.dataset.view === v));
+      usersView.classList.toggle('hidden', v !== 'users');
+      detailView.classList.toggle('hidden', v !== 'detail');
+      appViewPanel.classList.toggle('hidden', v !== 'app');
+      logsView.classList.toggle('hidden', v !== 'logs');
+      kpiBar.classList.toggle('hidden', v === 'detail' || v === 'app');
+    }
+
+    async function loadStats() {
+      const s = await api('/api/admin/stats');
+      kUsers.textContent = s.users; kVip.textContent = s.vip; kBan.textContent = s.banned; kGen.textContent = s.gens_today;
+    }
+
+    async function loadUsers() {
+      const q = document.getElementById('q').value;
+      const filter = document.getElementById('filter').value;
+      const data = await api('/api/admin/users?q=' + encodeURIComponent(q) + '&page=' + page + '&filter=' + filter);
+      pages = data.pages; page = data.page;
+      pageInfo.textContent = '第 ' + page + ' / ' + pages + ' 页 · ' + data.total + ' 人';
+      tbody.innerHTML = data.users.map((u) => {
+        const st = (u.banned ? '<span class="pill onban">封禁</span>' : (u.plan === 'vip' ? '<span class="pill onvip">会员</span>' : '<span class="pill onfree">免费</span>')) +
+          (u.email_verified ? '' : ' <span class="pill onban">未验证</span>');
+        return '<tr data-id="' + u.id + '"><td>' + u.id + '</td><td>' + escapeHtml(u.display_name) + '<div class="muted">' + escapeHtml(u.email) + '</div></td><td>' + u.plan + (u.role === 'admin' ? ' · 管理员' : '') + '</td><td>' + u.gen_quota_daily + '</td><td>' + st + '</td><td class="actions">' +
+          (u.email_verified ? '' : '<button data-a="verify" data-id="' + u.id + '">通过验证</button>') +
+          '<button data-a="vip" data-id="' + u.id + '">赠 30 日会员</button>' +
+          '<button data-a="quota" data-id="' + u.id + '">设额度</button>' +
+          '<button data-a="ban" data-id="' + u.id + '" class="danger">' + (u.banned ? '解封' : '封禁') + '</button>' +
+          '<button data-a="admin" data-id="' + u.id + '">升管理员</button></td></tr>';
+      }).join('') || '<tr><td colspan="6" class="muted">没有匹配用户</td></tr>';
+    }
+
+    function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmt(s) { return s ? String(s).replace('T', ' ').slice(0, 19) : '—'; }
+    function fmtSize(n) {
+      n = Number(n || 0);
+      if (n < 1024) return n + ' B';
+      if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+      return (n / 1048576).toFixed(1) + ' MB';
+    }
+
+    async function loadLogs() {
+      const data = await api('/api/admin/logs');
+      logs.innerHTML = data.logs.map((l) => '<div class="log">' + l.created_at + ' · ' + escapeHtml(l.admin_email || '') + ' → ' + escapeHtml(l.action) + ' #' + (l.target_user_id || '') + ' ' + escapeHtml(l.note || '') + '</div>').join('') || '<div class="muted">暂无日志</div>';
+    }
+
+    async function openUserDetail(id) {
+      currentUserId = Number(id);
+      goView('detail');
+      const data = await api('/api/admin/users/' + id);
+      const u = data.user || {};
+      detailEmpty.classList.add('hidden');
+      detailBody.classList.remove('hidden');
+      const items = [
+        ['显示名', u.display_name], ['邮箱', u.email], ['ID', u.id], ['角色', u.role],
+        ['方案', u.plan], ['额度', u.gen_quota_daily + '（剩余 ' + data.remaining + '）'],
+        ['VIP到期', fmt(u.vip_until)], ['邮箱已验证', (data.email_verified || u.email_verified) ? '是' : '否'],
+        ['注册时间', fmt(data.created_at || u.created_at)], ['最近登录', fmt(data.last_login_at || u.last_login_at)],
+        ['最近IP', data.last_ip || u.last_ip || '—'], ['封禁状态', u.banned ? '已封禁' : '正常']
+      ];
+      detailGrid.innerHTML = items.map(([k, v]) => '<div class="item"><small>' + k + '</small><div>' + escapeHtml(v) + '</div></div>').join('');
+      detailActions.innerHTML =
+        (u.email_verified ? '' : '<button class="btn" data-a="verify" data-id="' + u.id + '" style="background:#fff;border:1px solid var(--line)">通过验证</button>') +
+        '<button class="btn" data-a="vip" data-id="' + u.id + '" style="background:#fff;border:1px solid var(--line)">赠VIP</button>' +
+        '<button class="btn" data-a="quota" data-id="' + u.id + '" style="background:#fff;border:1px solid var(--line)">改额度</button>' +
+        '<button class="btn" data-a="ban" data-id="' + u.id + '" style="background:#fff;border:1px solid var(--line);color:var(--danger)">' + (u.banned ? '解封' : '封禁') + '</button>';
+      genBody.innerHTML = (data.gen_logs || []).map((g) => '<tr><td>' + fmt(g.created_at) + '</td><td>' + escapeHtml(g.kind) + '</td></tr>').join('') || '<tr><td colspan="2" class="muted">暂无生成记录</td></tr>';
+      userAudits.innerHTML = (data.audit_logs || []).map((l) => '<div class="log">' + fmt(l.created_at) + ' · ' + escapeHtml(l.admin_email || '') + ' → ' + escapeHtml(l.action) + ' ' + escapeHtml(l.note || '') + '</div>').join('') || '<div class="muted">暂无相关审计</div>';
+    }
+
+    async function loadAppReleases() {
+      const data = await api('/api/admin/app/releases');
+      const list = data.releases || [];
+      const latest = list[0];
+      latestBox.innerHTML = latest
+        ? '<div class="kicker">当前最新</div><div style="font-size:20px;font-weight:620;margin:6px 0">' + escapeHtml(latest.version_name) + ' <span class="muted">#' + latest.version_code + '</span></div><div class="muted">' + (latest.force_update ? '强制更新 · ' : '') + fmtSize(latest.size_bytes) + ' · ' + fmt(latest.created_at) + '</div><p style="margin-top:8px">' + escapeHtml(latest.notes || '') + '</p>'
+        : '<div class="muted">尚未发布应用版本</div>';
+      relBody.innerHTML = list.map((r) => '<tr><td>' + r.version_code + '</td><td>' + escapeHtml(r.version_name) + '</td><td>' + (r.force_update ? '是' : '否') + '</td><td>' + fmtSize(r.size_bytes) + '</td><td>' + escapeHtml(r.notes || '') + '</td><td>' + fmt(r.created_at) + '</td></tr>').join('') || '<tr><td colspan="6" class="muted">暂无版本</td></tr>';
+    }
+
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault(); err.textContent = '';
+      try {
+        const data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: email.value, password: password.value }) });
+        if (data.user.role !== 'admin') throw new Error('该账号不是管理员');
+        token = data.token; localStorage.setItem('sushi_admin_jwt', token); me = data.user;
+        who.textContent = me.display_name + ' · ' + me.email;
+        showApp(true); await refreshAll();
+      } catch (ex) { err.textContent = ex.message; }
+    };
+
+    async function refreshAll() { await loadStats(); await loadUsers(); }
+
+    async function runAction(id, a, banText) {
+      if (a === 'verify') await api('/api/admin/users/' + id + '/verify', { method: 'POST', body: '{}' });
+      if (a === 'vip' && confirm('确认赠送 30 日会员？')) await api('/api/admin/users/' + id + '/grant-vip', { method: 'POST', body: JSON.stringify({ days: 30 }) });
+      if (a === 'quota') {
+        const n = prompt('每日额度', '9999'); if (n == null) return;
+        await api('/api/admin/users/' + id, { method: 'PATCH', body: JSON.stringify({ gen_quota_daily: Number(n) }) });
+      }
+      if (a === 'ban') {
+        const rowBan = (banText || '').includes('解封');
+        if (!confirm(rowBan ? '确认解封？' : '确认封禁该用户？')) return;
+        await api('/api/admin/users/' + id, { method: 'PATCH', body: JSON.stringify({ banned: rowBan ? 0 : 1 }) });
+      }
+      if (a === 'admin') {
+        if (!confirm('确认将该用户设为管理员？此操作不可轻易撤销。')) return;
+        await api('/api/admin/users/' + id, { method: 'PATCH', body: JSON.stringify({ role: 'admin' }) });
+      }
+      await refreshAll();
+      if (currentUserId) await openUserDetail(currentUserId);
+    }
+
+    tbody.onclick = async (e) => {
+      const b = e.target.closest('button');
+      if (b) {
+        try { await runAction(b.dataset.id, b.dataset.a, b.textContent); } catch (ex) { alert(ex.message); }
+        return;
+      }
+      const tr = e.target.closest('tr[data-id]');
+      if (tr) { try { await openUserDetail(tr.dataset.id); } catch (ex) { alert(ex.message); } }
+    };
+
+    detailActions.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      try { await runAction(b.dataset.id, b.dataset.a, b.textContent); } catch (ex) { alert(ex.message); }
+    };
+
+    apkForm.onsubmit = async (e) => {
+      e.preventDefault(); apkErr.textContent = '';
+      const file = verFile.files[0];
+      if (!file) { apkErr.textContent = '请选择 APK 文件'; return; }
+      const fd = new FormData();
+      fd.append('version_code', verCode.value);
+      fd.append('version_name', verName.value);
+      fd.append('notes', verNotes.value);
+      fd.append('force', verForce.checked ? '1' : '0');
+      fd.append('file', file);
+      try {
+        await api('/api/admin/app/release', { method: 'POST', body: fd });
+        apkForm.reset();
+        await loadAppReleases();
+      } catch (ex) { apkErr.textContent = ex.message; }
+    };
+
+    searchBtn.onclick = () => { page = 1; loadUsers(); };
+    prev.onclick = () => { if (page > 1) { page--; loadUsers(); } };
+    next.onclick = () => { if (page < pages) { page++; loadUsers(); } };
+    logout.onclick = () => { token = ''; localStorage.removeItem('sushi_admin_jwt'); showApp(false); };
+    document.querySelectorAll('.navbtn[data-view]').forEach((b) => {
+      b.onclick = async () => {
+        const v = b.dataset.view;
+        goView(v);
+        if (v === 'logs') await loadLogs();
+        if (v === 'app') await loadAppReleases();
+        if (v === 'detail' && currentUserId) await openUserDetail(currentUserId);
+      };
+    });
+    setInterval(() => { clock.textContent = new Date().toLocaleString('zh-CN', { hour12: false }); }, 1000);
+
+    (async () => {
+      if (!token) return;
+      try {
+        const data = await api('/api/me');
+        if (data.user.role !== 'admin') throw new Error('not admin');
+        me = data.user; who.textContent = me.display_name + ' · ' + me.email;
+        showApp(true); await refreshAll();
+      } catch { token = ''; localStorage.removeItem('sushi_admin_jwt'); }
+    })();
+  </script>
+</body>
+</html>

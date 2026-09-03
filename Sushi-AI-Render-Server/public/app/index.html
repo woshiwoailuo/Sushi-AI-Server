@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#F5F7FA" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>苏轼AI</title>
+  <style>
+    :root {
+      --bg: #F5F7FA;
+      --card: #FFFFFF;
+      --text: #1B1F2A;
+      --muted: #6B7280;
+      --accent: #3B6FF5;
+      --danger: #E11D48;
+      --line: rgba(27,31,42,.08);
+      --radius: 12px;
+      --safe-t: env(safe-area-inset-top);
+      --safe-b: env(safe-area-inset-bottom);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
+    body { min-height: 100dvh; overflow: hidden; }
+    button, input { font: inherit; color: inherit; }
+    input { background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; width: 100%; outline: none; }
+    input:focus { border-color: rgba(59,111,245,.55); box-shadow: 0 0 0 3px rgba(59,111,245,.12); }
+    .screen { position: absolute; inset: 0; display: none; flex-direction: column; }
+    .screen.on { display: flex; }
+    .splash { align-items: center; justify-content: center; background: var(--bg); }
+    .mark { width: 72px; height: 72px; border-radius: 16px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 28px; }
+    .splash h1 { margin-top: 20px; font-size: 28px; font-weight: 650; }
+    .splash p { color: var(--muted); margin-top: 8px; font-size: 13px; }
+    .auth { padding: calc(28px + var(--safe-t)) 24px calc(24px + var(--safe-b)); justify-content: flex-start; background: var(--bg); overflow: auto; -webkit-overflow-scrolling: touch; }
+    .auth .brand { margin-bottom: 8px; padding-top: 12px; flex: 0 0 auto; }
+    #authForm, #verifyForm { flex: 0 0 auto; padding-bottom: 28px; }
+    .kicker { color: var(--muted); font-size: 13px; }
+    .auth h2 { font-size: 32px; margin: 10px 0 8px; font-weight: 620; }
+    .auth .sub { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 28px; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .btn { border: 0; border-radius: var(--radius); padding: 14px 18px; width: 100%; font-weight: 640; cursor: pointer; pointer-events: auto; position: relative; z-index: 2; }
+    .btn-lime { background: var(--accent); color: #fff; }
+    .btn-ghost { background: transparent; color: var(--muted); margin-top: 10px; }
+    .err { color: var(--danger); font-size: 13px; min-height: 18px; margin: 6px 0 12px; }
+    .app { background: var(--bg); }
+    .top { padding: calc(16px + var(--safe-t)) 20px 8px; }
+    .hello { font-size: 22px; font-weight: 620; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .content { flex: 1; overflow: auto; padding: 8px 20px 110px; }
+    .row { display: flex; gap: 12px; }
+    .card { background: var(--card); border-radius: var(--radius); padding: 16px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(27,31,42,.04); }
+    .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,111,245,.1); color: var(--accent); border-radius: 999px; padding: 4px 10px; font-size: 11px; }
+    .quota { flex: 1; }
+    .quota b { font-size: 28px; font-variant-numeric: tabular-nums; }
+    .feat { margin-top: 16px; }
+    .feat h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin-bottom: 10px; }
+    .feat-card { min-height: 118px; margin-bottom: 12px; background: var(--card); position: relative; overflow: hidden; }
+    .feat-card::after { content: ""; position: absolute; right: -20px; top: -30px; width: 120px; height: 120px; border-radius: 50%; background: rgba(59,111,245,.08); }
+    .feat-card .tag { font-size: 11px; color: var(--accent); }
+    .feat-card h4 { margin: 8px 0 6px; font-size: 18px; }
+    .nav { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); height: 64px; background: #FFFFFF; border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; box-shadow: 0 8px 24px rgba(27,31,42,.08); }
+    .nav button { background: none; border: 0; color: var(--muted); font-size: 12px; }
+    .nav button.active { color: var(--accent); font-weight: 640; }
+    .gen-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .gen-wrap iframe { flex: 1; width: 100%; border: 0; background: #fff; min-height: 0; }
+    .paywall { margin: 40px 8px; text-align: center; }
+    .paywall h3 { font-size: 22px; margin: 12px 0; }
+    .hidden { display: none !important; }
+    .profile dt { color: var(--muted); font-size: 12px; margin-top: 14px; }
+    .profile dd { margin-top: 4px; font-size: 16px; }
+    .go-in { min-height: 64px; font-size: 18px; margin-top: 8px; }
+    .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .tpl-btn { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 10px; width: 100%; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text); }
+    .core { color: var(--muted); font-size: 14px; line-height: 1.6; margin-top: 8px; }
+
+  </style>
+</head>
+<body>
+  <section id="splash" class="screen splash on">
+    <div class="mark">苏</div>
+    <h1>苏轼AI</h1>
+    <p>娱乐创作 · 角色与画面生成</p>
+  </section>
+
+  <section id="auth" class="screen auth">
+    <div class="brand">
+      <div class="kicker">苏轼AI</div>
+      <h2 id="authTitle">登录</h2>
+      <p class="sub">娱乐创作 · 角色与画面生成</p>
+    </div>
+    <form id="authForm">
+      <div class="field" id="nameField" style="display:none">
+        <label>显示名</label>
+        <input id="displayName" autocomplete="nickname" placeholder="昵称" />
+      </div>
+      <div class="field">
+        <label>邮箱</label>
+        <input id="email" type="email" autocomplete="username" placeholder="you@mail.com" />
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="至少 6 位" />
+      </div>
+      <div class="field" id="pass2Field" style="display:none">
+        <label>确认密码</label>
+        <input id="password2" type="password" autocomplete="new-password" placeholder="再次输入密码" />
+      </div>
+      <div class="err" id="authErr"></div>
+      <button class="btn btn-lime" type="submit" id="authSubmit">登录</button>
+      <button class="btn btn-ghost" type="button" id="authSwitch">没有账号？去注册</button>
+    </form>
+  </section>
+
+  <section id="verify" class="screen auth">
+    <div class="brand">
+      <div class="kicker">苏轼AI</div>
+      <h2>邮箱验证</h2>
+      <p class="sub" id="verifySub">验证码已发至邮箱，10 分钟有效。</p>
+    </div>
+    <form id="verifyForm">
+      <div class="field">
+        <label>验证码</label>
+        <input id="verifyCode" inputmode="numeric" maxlength="6" placeholder="6 位数字" />
+      </div>
+      <div class="err" id="verifyErr"></div>
+      <button class="btn btn-lime" type="submit">确认</button>
+      <button class="btn btn-ghost" type="button" id="verifyResend">重发</button>
+    </form>
+  </section>
+
+  <section id="home" class="screen app">
+    <div class="top">
+      <div class="hello">苏轼AI</div>
+      <div class="core" id="coreDesc">角色馆 · 正经娱乐，文生图+对话</div>
+    </div>
+    <div class="content">
+      <button class="btn btn-lime go-in" type="button" id="goGen">进去</button>
+      <div class="feat">
+        <h3>文生图模板</h3>
+        <div class="tpl-grid" id="tplGrid"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="gen" class="screen app">
+    <div class="top">
+      <div class="hello">创作</div>
+    </div>
+    <div class="content gen-wrap" id="genBody" style="padding-bottom: 96px;">
+      <div class="card paywall" id="genGate">
+        <h3>正在打开工坊…</h3>
+      </div>
+    </div>
+  </section>
+
+  <section id="me" class="screen app">
+    <div class="top">
+      <div class="hello">我的</div>
+    </div>
+    <div class="content profile">
+      <div class="card">
+        <dt>显示名</dt><dd id="meName">—</dd>
+        <dt>邮箱</dt><dd id="meEmail">—</dd>
+        <dt>方案</dt><dd id="mePlan">—</dd>
+        <dt>每日额度</dt><dd id="meQuota">—</dd>
+        <dt>会员至</dt><dd id="meVip">—</dd>
+        <dt>今日剩余</dt><dd id="meRemain">—</dd>
+        <dt>版本</dt><dd id="meVer">1.1.12</dd>
+      </div>
+      <button class="btn btn-ghost" type="button" id="checkUpdateBtn" style="margin-top:16px;background:var(--card);border:1px solid var(--line);color:var(--text)">检查更新</button>
+      <button class="btn btn-ghost" type="button" id="downloadApkBtn" style="margin-top:10px;background:var(--card);border:1px solid var(--line);color:var(--text)">下载安装包</button>
+      <button class="btn btn-lime" type="button" id="logoutBtn" style="margin-top:16px;background:#FFF1F2;color:var(--danger)">退出登录</button>
+    </div>
+  </section>
+
+  <nav class="nav hidden" id="tabbar">
+    <button data-tab="home" class="active">首页</button>
+    <button data-tab="gen">创作</button>
+    <button data-tab="me">我的</button>
+  </nav>
+
+  <script>
+    const API = location.origin;
+    const GEN_URL = '/workshop';
+    const $ = (id) => document.getElementById(id);
+    let mode = 'login';
+    let me = null;
+    let genLoaded = false;
+    let pendingEmail = '';
+
+    function token() { return localStorage.getItem('sushi_jwt') || ''; }
+    function setToken(t) {
+      if (t) {
+        localStorage.setItem('sushi_jwt', t);
+        localStorage.setItem('sushi_jwt_at', String(Date.now()));
+        document.cookie = 'sushi_token=' + t + '; path=/; SameSite=Lax';
+      } else {
+        localStorage.removeItem('sushi_jwt');
+        localStorage.removeItem('sushi_jwt_at');
+        localStorage.removeItem('sushi_me_ok_at');
+        document.cookie = 'sushi_token=; path=/; max-age=0; SameSite=Lax';
+      }
+    }
+    function jwtUnexpired(tok) {
+      tok = tok || token();
+      if (!tok) return false;
+      try {
+        var parts = tok.split('.');
+        if (parts.length < 2) return !!tok;
+        var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        var payload = JSON.parse(atob(b64));
+        var exp = Number(payload && payload.exp) || 0;
+        if (!exp) return true;
+        return exp * 1000 > Date.now() + 20000;
+      } catch (e) { return !!tok; }
+    }
+    function sessionFresh() {
+      if (!token()) return false;
+      if (jwtUnexpired()) return true;
+      var at = Number(localStorage.getItem('sushi_me_ok_at') || 0);
+      return at && (Date.now() - at < 15 * 60 * 1000);
+    }
+    function cacheMe(user) {
+      me = user;
+      try {
+        localStorage.setItem('sushi_user', JSON.stringify(user || {}));
+        if (user && user.email) localStorage.setItem('sushi_email', user.email);
+        localStorage.setItem('sushi_me_ok_at', String(Date.now()));
+      } catch (e) {}
+    }
+    function restoreMe() {
+      if (me) return me;
+      try {
+        var raw = localStorage.getItem('sushi_user');
+        if (raw) me = JSON.parse(raw);
+      } catch (e) { me = null; }
+      return me;
+    }
+    function workshopUrl(ticket, key, iv) {
+      const hash = (key && iv) ? ('#' + key + '.' + iv) : '';
+      return '/workshop?k=' + encodeURIComponent(ticket) + hash;
+    }
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+      if (token()) headers.Authorization = 'Bearer ' + token();
+      const ctrl = opts.signal ? null : new AbortController();
+      const to = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
+      const res = await fetch(API + path, Object.assign({ credentials: 'include', signal: (opts.signal || (ctrl && ctrl.signal)) }, opts, { headers }));
+      if (to) clearTimeout(to);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(data.error || '请求失败'), { status: res.status, data });
+      return data;
+    }
+
+    function showVerify(email) {
+      pendingEmail = email;
+      $('verifySub').textContent = '验证码已发至 ' + email + '，10 分钟有效。';
+      $('verifyCode').value = '';
+      $('verifyErr').textContent = '';
+      show('verify');
+    }
+
+    function show(id) {
+      document.querySelectorAll('.screen').forEach((el) => el.classList.remove('on'));
+      $(id).classList.add('on');
+      const app = ['home','gen','me'].includes(id);
+      $('tabbar').classList.toggle('hidden', !app);
+      document.querySelectorAll('.nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
+    }
+
+    function renderMe() {
+      if (!me) return;
+      const vip = me.plan === 'vip';
+      $('meName').textContent = me.display_name;
+      $('meEmail').textContent = me.email;
+      $('mePlan').textContent = vip ? '会员' : '免费';
+      $('meQuota').textContent = me.gen_quota_daily;
+      $('meVip').textContent = me.vip_until ? String(me.vip_until).slice(0,16).replace('T',' ') : '—';
+    }
+
+    async function refreshQuota() {
+      const q = await api('/api/me/quota');
+      const el = $('meRemain');
+      if (el) el.textContent = q.remaining;
+      return q;
+    }
+
+    async function bootSession() {
+      restoreMe();
+      if (me) renderMe();
+      show('gen');
+      enterGen();
+      try {
+        const data = await api('/api/me');
+        cacheMe(data.user);
+        renderMe();
+        refreshQuota().catch(function () {});
+      } catch (e) {
+        if (!sessionFresh()) {
+          /* keep cached UI; do not kick on slow link */
+        }
+      }
+    }
+
+    $('authSwitch').onclick = () => {
+      mode = mode === 'login' ? 'register' : 'login';
+      $('nameField').style.display = mode === 'register' ? 'block' : 'none';
+      $('pass2Field').style.display = mode === 'register' ? 'block' : 'none';
+      $('authTitle').textContent = mode === 'login' ? '登录' : '注册';
+      $('authSubmit').textContent = mode === 'login' ? '登录' : '注册';
+      $('authSubmit').disabled = false;
+      $('authSubmit').removeAttribute('disabled');
+      $('authSwitch').textContent = mode === 'login' ? '没有账号？去注册' : '已有账号，去登录';
+      $('authErr').textContent = '';
+      requestAnimationFrame(() => {
+        try { $('authSubmit').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+      });
+    };
+
+    $('authForm').onsubmit = async (e) => {
+      e.preventDefault();
+      $('authErr').textContent = '';
+      try {
+        if (mode === 'register' && $('password').value !== $('password2').value) {
+          $('authErr').textContent = '两次密码不一致';
+          return;
+        }
+        const body = { email: $('email').value, password: $('password').value, display_name: $('displayName').value };
+        const path = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+        const data = await api(path, { method: 'POST', body: JSON.stringify(body) });
+        if (data.need_verify) {
+          showVerify(data.email || body.email);
+          return;
+        }
+        setToken(data.token);
+        cacheMe(data.user);
+        renderMe();
+        refreshQuota().catch(function () {});
+        show('gen');
+        enterGen();
+      } catch (err) {
+        if (err.data && err.data.need_verify) {
+          showVerify($('email').value.trim().toLowerCase());
+          return;
+        }
+        $('authErr').textContent = err.message;
+      }
+    };
+
+    $('verifyForm').onsubmit = async (e) => {
+      e.preventDefault();
+      $('verifyErr').textContent = '';
+      try {
+        const data = await api('/api/auth/verify', {
+          method: 'POST',
+          body: JSON.stringify({ email: pendingEmail, code: $('verifyCode').value.trim() }),
+        });
+        setToken(data.token);
+        cacheMe(data.user);
+        renderMe();
+        refreshQuota().catch(function () {});
+        show('gen');
+        enterGen();
+      } catch (err) {
+        $('verifyErr').textContent = err.message;
+      }
+    };
+
+    $('verifyResend').onclick = async () => {
+      $('verifyErr').textContent = '';
+      try {
+        await api('/api/auth/resend', { method: 'POST', body: JSON.stringify({ email: pendingEmail }) });
+        $('verifyErr').textContent = '已重新发送';
+        $('verifyErr').style.color = 'var(--muted)';
+      } catch (err) {
+        $('verifyErr').style.color = 'var(--danger)';
+        $('verifyErr').textContent = err.message;
+      }
+    };
+
+    const TPLS = [
+      ['古风书生月下', '虚构成年书生立于庭院月下，青衫长袍，手持卷轴，月光清冷，水墨与工笔结合，全身构图，精致细节，电影感光影'],
+      ['赛博夜市', '虚构成年旅人走在霓虹夜市雨后街道，全息招牌与蒸汽小吃摊，潮湿地面反光，电影广角，未来市集氛围'],
+      ['油画肖像', '虚构成年角色半身油画肖像，伦勃朗式侧光，厚涂笔触，古典画室背景，神情平静，高细节皮肤与衣料'],
+      ['雨巷旗袍', '虚构成年女子撑油纸伞走在江南雨巷，旗袍剪裁端庄，青石板湿润反光，电影胶片色，全身中景'],
+      ['水墨仙侠', '虚构成年仙侠立于云海孤峰，水墨渲染与淡彩，广袖道袍，远山留白，清冷仙气，全身构图'],
+      ['室内光影', '虚构成年角色坐在落地窗前阅读，午后阳光切进室内，体积光与柔和阴影，写实摄影，安静生活感'],
+      ['电影分镜', '虚构成年角色在列车车厢靠窗，过道景深虚化，电影分镜中景，自然光，纪实与剧情片质感'],
+      ['角色三视图', '虚构成年角色设定三视图，正面侧面背面并列，干净白底，服装结构清晰，概念设定图风格'],
+      ['图书馆午后', '虚构成年学者坐在木质图书馆长桌，阳光透过高窗，书堆与尘埃光柱，安静氛围，写实光影'],
+      ['雪原旅人', '虚构成年旅人立于雪原与松林之间，厚实冬装，远山淡蓝，清冷空气感，全身远中景'],
+      ['工坊静物', '虚构角色工作室一角，画架颜料与台灯暖光，静物构图，细节丰富，室内写实'],
+      ['星空屋顶', '虚构成年角色坐在老城区屋顶看星空，城市灯火在脚下，仰角构图，安静夜色，电影感']
+    ];
+    (function fillTpl() {
+      var g = $('tplGrid');
+      if (!g) return;
+      TPLS.forEach(function (item) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'tpl-btn';
+        b.textContent = item[0];
+        b.onclick = function () {
+          try { localStorage.setItem('sushi_pending_prompt', item[1]); } catch (e) {}
+          document.querySelector('[data-tab="gen"]').click();
+        };
+        g.appendChild(b);
+      });
+    })();
+    $('goGen').onclick = () => document.querySelector('[data-tab="gen"]').click();
+    $('logoutBtn').onclick = () => { setToken(''); me = null; genLoaded = false; show('auth'); };
+    var chk = $('checkUpdateBtn');
+    if (chk) chk.onclick = async function () {
+      try {
+        const v = await api('/api/app/version');
+        const code = Number(v.versionCode || 0);
+        alert(code > 14 ? ('发现新版本 ' + (v.versionName || '')) : '已是最新版本');
+      } catch (e) { alert('暂时无法连接'); }
+    };
+    var dl = $('downloadApkBtn');
+    if (dl) dl.onclick = function () { location.href = '/api/app/download'; };
+
+    document.querySelectorAll('.nav button').forEach((btn) => {
+      btn.onclick = async () => {
+        const tab = btn.dataset.tab;
+        if (tab === 'gen') await enterGen();
+        else show(tab);
+      };
+    });
+
+    async function enterGen() {
+      show('gen');
+      const body = $('genBody');
+      if (genLoaded) {
+        try {
+          var p = localStorage.getItem('sushi_pending_prompt');
+          var iframe = body.querySelector('iframe');
+          if (p && iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ type: 'sushi_prompt', prompt: p }, '*');
+          }
+        } catch (e) {}
+        return;
+      }
+      body.innerHTML = '<div class="card paywall" id="genGate"><h3>正在打开工坊…</h3></div>';
+      try {
+        const ctrl = new AbortController();
+        const to = setTimeout(function () { ctrl.abort(); }, 8000);
+        const wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', signal: ctrl.signal });
+        clearTimeout(to);
+        refreshQuota().catch(function () {});
+        try {
+          sessionStorage.setItem('sushi_wrap_key', wrap.key);
+          sessionStorage.setItem('sushi_wrap_iv', wrap.iv);
+          sessionStorage.setItem('sushi_wrap_ticket', wrap.ticket);
+        } catch (e) {}
+        body.innerHTML = '';
+        const iframe = document.createElement('iframe');
+        iframe.src = workshopUrl(wrap.ticket, wrap.key, wrap.iv);
+        iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
+        iframe.style.borderRadius = '12px';
+        body.appendChild(iframe);
+        genLoaded = true;
+      } catch (err) {
+        genLoaded = false;
+        const pay = err.status === 402;
+        body.innerHTML = '<div class="card paywall"><h3>' +
+          (pay ? '今日次数已用尽' : (err.name === 'AbortError' ? '暂时无法连接' : err.message)) +
+          '</h3><p class="muted" style="margin:8px 0 18px">请稍后重试进入创作。</p>' +
+          '<button class="btn btn-lime" type="button" id="retryGen">重试</button></div>';
+        const r = $('retryGen');
+        if (r) r.onclick = function () { genLoaded = false; enterGen(); };
+      }
+    }
+
+    setTimeout(async () => {
+      if (!token()) { show('auth'); return; }
+      restoreMe();
+      if (me) renderMe();
+      if (sessionFresh()) {
+        show('gen');
+        enterGen();
+        bootSession().catch(function () {});
+        return;
+      }
+      try { await bootSession(); } catch { show('gen'); enterGen(); }
+    }, 200);
+  </script>
+</body>
+</html>

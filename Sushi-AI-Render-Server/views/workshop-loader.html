@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>苏轼AI</title>
+<style>
+  html,body{margin:0;min-height:100%;background:#f5f7fa;color:#1b1f2a;font-family:system-ui,sans-serif}
+  body{min-height:100vh;display:grid;place-items:center}.message{text-align:center;padding:24px;max-width:32rem}
+  p{color:#6b7280;line-height:1.6}a{color:#3b6ff5}a[hidden]{display:none}
+</style>
+</head>
+<body>
+<div class="message"><h3 id="loaderTitle">正在打开工坊…</h3><p id="loaderDetail">正在恢复创作页面。</p><a href="/" target="_top" id="loaderBack" hidden>返回重新进入</a></div>
+<script>
+(function () {
+  'use strict';
+  const wrap = /*WORKSHOP_PAYLOAD*/{};
+  let activePromise = null;
+  window.__sushiReady = false;
+  window.__sushiLoadError = '';
+  function showError(message) {
+    if (window.__sushiReady) return;
+    window.__sushiLoadError = message;
+    const title = document.getElementById('loaderTitle');
+    const detail = document.getElementById('loaderDetail');
+    const back = document.getElementById('loaderBack');
+    if (title) title.textContent = '工坊未能打开';
+    if (detail) detail.textContent = message;
+    if (back) back.hidden = false;
+  }
+  function hexBytes(hex, size) {
+    if (typeof hex !== 'string' || !new RegExp('^[0-9a-f]{' + (size * 2) + '}$', 'i').test(hex)) throw new Error('进入凭证无效，请返回重新进入。');
+    return Uint8Array.from(hex.match(/../g), function (pair) { return parseInt(pair, 16); });
+  }
+  function base64Bytes(base64) {
+    return Uint8Array.from(atob(base64), function (ch) { return ch.charCodeAt(0); });
+  }
+  async function post(url, body) {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, 25000);
+    try {
+      const response = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '恢复登录失败，请返回重新进入。');
+      return data;
+    } finally { clearTimeout(timer); }
+  }
+  async function unlock(keyHex, ivHex) {
+    if (activePromise) return activePromise;
+    activePromise = (async function () {
+      if (!window.crypto || !window.crypto.subtle) throw new Error('请使用 HTTPS 服务器地址打开工坊；电脑本机可用 localhost。');
+      const keyBytes = hexBytes(String(keyHex || ''), 32);
+      const iv = hexBytes(String(ivHex || wrap.iv), 12);
+      const ciphertext = base64Bytes(wrap.ct);
+      const tag = base64Bytes(wrap.tag);
+      const combined = new Uint8Array(ciphertext.length + tag.length);
+      combined.set(ciphertext); combined.set(tag, ciphertext.length);
+      const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, combined);
+      await post('/api/workshop/session', { ticket: wrap.k, key: keyHex });
+      try {
+        sessionStorage.removeItem('sushi_wrap_key');
+        sessionStorage.removeItem('sushi_wrap_iv');
+        sessionStorage.removeItem('sushi_wrap_ticket');
+        history.replaceState(null, '', location.pathname + location.search);
+      } catch (ignored) {}
+      const html = new TextDecoder().decode(plain);
+      document.open(); document.write(html); document.close();
+      return true;
+    })();
+    try { return await activePromise; }
+    catch (error) { activePromise = null; throw error; }
+  }
+  window.__sushiUnlock = function (key, iv) {
+    return unlock(key, iv).catch(function (error) {
+      showError(error.name === 'AbortError' ? '恢复登录超时，请返回后重试。' : (error.message || '解密失败，请返回重新进入。'));
+      return false;
+    });
+  };
+  async function boot() {
+    const hash = location.hash.replace(/^#/, '').split('.');
+    if (hash[0]) {
+      try { if (await unlock(hash[0], hash[1] || wrap.iv)) return; } catch (ignored) {}
+    }
+    try {
+      const key = sessionStorage.getItem('sushi_wrap_key');
+      const ticket = sessionStorage.getItem('sushi_wrap_ticket');
+      if (key && (!ticket || ticket === wrap.k)) {
+        try { if (await unlock(key, sessionStorage.getItem('sushi_wrap_iv'))) return; } catch (ignored) {}
+      }
+    } catch (ignored) {}
+    try {
+      const data = await post('/api/workshop/unlock', { ticket: wrap.k });
+      if (data.key) await unlock(data.key, data.iv);
+    } catch (ignored) { /* Android supplies its key after the page finishes loading. */ }
+  }
+  setTimeout(function () { showError('打开工坊超时，请返回后重新进入。'); }, 45000);
+  boot().catch(function () { showError('工坊加载失败，请重新进入。'); });
+})();
+</script>
+</body>
+</html>
