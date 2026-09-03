@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">苏轼AI</string>
+    <string name="tagline">娱乐创作 · 角色与画面生成</string>
+    <string name="login">登录</string>
+    <string name="register">注册</string>
+    <string name="email">邮箱</string>
+    <string name="password">密码</string>
+    <string name="display_name">显示名</string>
+    <string name="tab_home">首页</string>
+    <string name="tab_gen">创作</string>
+    <string name="tab_me">我的</string>
+    <string name="logout">退出登录</string>
+    <string name="server_url">服务器地址</string>
+    <string name="save">保存</string>
+    <string name="quota_left">今日剩余次数</string>
+    <string name="go_generate">进去</string>
+    <string name="featured">文生图模板</string>
+    <string name="quota_empty">今日次数已用尽，可升级会员。</string>
+    <string name="banned">账号已被封禁</string>
+    <string name="checking">正在打开工坊…</string>
+    <string name="opening_workshop">正在打开工坊…</string>
+    <string name="temp_offline">暂时无法连接</string>
+    <string name="tap_retry">请稍后点重试。已登录的话可以直接再进创作。</string>
+    <string name="verify_code">验证码</string>
+    <string name="confirm_password">确认密码</string>
+    <string name="confirm">确认</string>
+    <string name="resend">重发</string>
+    <string name="verify_hint">验证码已发至 %1$s，10 分钟有效</string>
+    <string name="resent">已重新发送</string>
+    <string name="password_mismatch">两次密码不一致</string>
+    <string name="check_update">检查更新</string>
+    <string name="download_update">下载更新</string>
+    <string name="already_latest">已是最新版本</string>
+    <string name="home_core">角色馆 · 正经娱乐，文生图+对话</string>
+    <string name="enter_workshop">进去</string>
+    <string name="img_templates">文生图模板</string>
+</resources>
+
+

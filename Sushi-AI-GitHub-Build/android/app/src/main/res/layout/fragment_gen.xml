@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg">
+    <WebView android:id="@+id/webview" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="visible" />
+    <LinearLayout android:id="@+id/gate" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:padding="32dp" android:visibility="gone">
+        <TextView android:id="@+id/gateTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/opening_workshop" android:textColor="@color/text" android:textSize="20sp" />
+        <TextView android:id="@+id/gateBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/muted" android:gravity="center" android:layout_marginTop="10dp" />
+        <android.widget.Button
+            android:id="@+id/retryGate"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_btn"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="重试"
+            android:textAllCaps="false"
+            android:textColor="@color/on_accent" />
+        <Button android:id="@+id/serverGate" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="12dp" android:text="服务器设置 / 检测连接" android:textAllCaps="false" android:textColor="@color/text" />
+    </LinearLayout>
+</FrameLayout>

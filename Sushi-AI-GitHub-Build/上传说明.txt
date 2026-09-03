@@ -1,0 +1,4 @@
+把 android 文件夹和 .github 文件夹上传到 GitHub 仓库根目录（不要放进 Sushi-AI-Render-Server 文件夹）。
+上传后 GitHub Actions 会自动编译可安装的 Sushi-AI.apk。
+该 APK 默认服务器：https://sushi-ai-server.onrender.com
+使用 preview applicationId，避免与旧签名 APK 冲突。

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@color/bg"
+    android:clickable="false"
+    android:focusable="false">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:clickable="false">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="苏轼AI"
+            android:textColor="@color/text"
+            android:textSize="22sp"
+            android:layout_marginTop="6dp" />
+        <TextView
+            android:id="@+id/coreDesc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="角色馆 · 正经娱乐，文生图+对话"
+            android:textColor="@color/muted"
+            android:textSize="14sp"
+            android:lineSpacingExtra="3dp" />
+        <android.widget.Button
+            android:id="@+id/goGen"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_btn"
+            android:clickable="true"
+            android:enabled="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:minHeight="64dp"
+            android:text="进去"
+            android:textAllCaps="false"
+            android:textColor="@color/on_accent"
+            android:textSize="18sp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="文生图模板"
+            android:textColor="@color/muted"
+            android:layout_marginTop="22dp"
+            android:textSize="13sp" />
+        <LinearLayout
+            android:id="@+id/tplGrid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="10dp"
+            android:clickable="false" />
+    </LinearLayout>
+</ScrollView>
