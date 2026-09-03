@@ -1,0 +1,38 @@
+name: Build Sushi AI APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Sushi-AI-GitHub-Build/android/**'
+      - '.github/workflows/main.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Make Gradle executable
+        run: chmod +x Sushi-AI-GitHub-Build/android/gradlew
+
+      - name: Build Sushi AI APK
+        working-directory: Sushi-AI-GitHub-Build/android
+        run: ./gradlew -Ppreview=true assembleDebug --stacktrace
+
+      - name: Rename APK
+        run: cp Sushi-AI-GitHub-Build/android/app/build/outputs/apk/debug/app-debug.apk Sushi-AI.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sushi-AI-APK
+          path: Sushi-AI.apk
+          retention-days: 30
