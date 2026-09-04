@@ -1,5 +1,6 @@
 package org.sushi.club
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -33,9 +34,16 @@ class HomeFragment : Fragment() {
             Session.setPendingPrompt("进入 AI 对话，可直接提问。")
             (activity as? MainActivity)?.openGen()
         }
-        view.findViewById<Button>(R.id.historyQuick).setOnClickListener {
-            Session.setPendingPrompt("查看最近生成图片与生成记录。")
+        view.findViewById<Button>(R.id.aiImageQuick).setOnClickListener {
+            Session.setPendingPrompt("请描述希望 AI 直接生成并在软件内显示的图片。")
             (activity as? MainActivity)?.openGen()
+        }
+        view.findViewById<Button>(R.id.historyQuick).setOnClickListener {
+            Session.setPendingPrompt("查看最近生成图片，并继续上一次的生成记忆。")
+            (activity as? MainActivity)?.openGen()
+        }
+        view.findViewById<Button>(R.id.toolsQuick).setOnClickListener {
+            startActivity(Intent(requireContext(), MiniHubActivity::class.java))
         }
         bindTemplates(view.findViewById(R.id.tplGrid))
     }
