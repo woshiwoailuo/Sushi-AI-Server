@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -20,6 +21,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
@@ -39,6 +41,13 @@ class GenFragment : Fragment() {
     private var loadedBase = ""
     private var deadline = 0L
     private var checking = false
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    private val imagePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val callback = fileChooserCallback
+        fileChooserCallback = null
+        callback?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         inflater.inflate(R.layout.fragment_gen, container, false)
@@ -46,9 +55,7 @@ class GenFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         configure(view.findViewById(R.id.webview))
         view.findViewById<Button>(R.id.retryGate).setOnClickListener { openWorkshop(force = true) }
-        view.findViewById<Button>(R.id.serverGate).setOnClickListener {
-            startActivity(Intent(requireContext(), ServerUrlActivity::class.java))
-        }
+        view.findViewById<Button>(R.id.serverGate).visibility = View.GONE
     }
 
     override fun onResume() {
@@ -104,7 +111,7 @@ class GenFragment : Fragment() {
                     mapOf("X-Pinggy-No-Screen" to "true") else emptyMap()
                 web.loadUrl("$loadedBase/workshop?k=$ticket", headers)
                 web.postDelayed({
-                    if (current == attempt && opening && !loaded) fail("页面加载超时，请检查服务器地址或网络后重试。")
+                    if (current == attempt && opening && !loaded) fail("页面加载超时，请检查网络后重试。")
                 }, 45_000)
             } catch (e: CancellationException) {
                 if (current == attempt && isAdded) fail("连接超时，请检查网络后重试。")
@@ -138,21 +145,40 @@ class GenFragment : Fragment() {
             loadWithOverviewMode = true
             useWideViewPort = true
         }
-        web.webChromeClient = WebChromeClient()
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = filePathCallback
+                return try {
+                    imagePicker.launch("image/*")
+                    true
+                } catch (_: Exception) {
+                    fileChooserCallback = null
+                    filePathCallback?.onReceiveValue(null)
+                    Toast.makeText(requireContext(), "无法打开相册", Toast.LENGTH_SHORT).show()
+                    false
+                }
+            }
+        }
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (!request.isForMainFrame) return false
                 val uri = request.url
                 if (sameOrigin(uri.toString()) && (uri.path ?: "").trimEnd('/') == "/workshop") return false
-                if (request.hasGesture() && uri.scheme in listOf("https", "http", "mailto")) {
-                    try { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
-                    catch (_: Exception) { Toast.makeText(requireContext(), "未找到可打开链接的应用", Toast.LENGTH_SHORT).show() }
+                val host = uri.host.orEmpty()
+                if (host.equals("perchance.org", true) || host.endsWith(".perchance.org", true)) {
+                    Toast.makeText(requireContext(), "已关闭 Perchance 外部网页跳转", Toast.LENGTH_SHORT).show()
+                    return true
                 }
                 return true
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame && opening) fail("无法连接工坊，请检查网络或服务器地址后重试。")
+                if (request.isForMainFrame && opening) fail("无法连接工坊，请检查网络后重试。")
             }
 
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
@@ -234,6 +260,8 @@ class GenFragment : Fragment() {
     override fun onDestroyView() {
         attempt += 1
         ticketJob?.cancel()
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         loaded = false; opening = false; checking = false; wrapKey = null
         view?.findViewById<WebView>(R.id.webview)?.apply {
             stopLoading()
