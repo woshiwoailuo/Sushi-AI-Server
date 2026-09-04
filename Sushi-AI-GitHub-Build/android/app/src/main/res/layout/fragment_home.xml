@@ -3,59 +3,147 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
-    android:background="@color/bg"
-    android:clickable="false"
-    android:focusable="false">
+    android:background="@color/bg">
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp"
-        android:clickable="false">
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="24dp">
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="苏轼AI"
+            android:text="苏轼 AI"
             android:textColor="@color/text"
-            android:textSize="22sp"
-            android:layout_marginTop="6dp" />
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
         <TextView
             android:id="@+id/coreDesc"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="角色馆 · 正经娱乐，文生图+对话"
+            android:layout_marginTop="6dp"
+            android:text="生图、图生图与 AI 对话，都在一个应用里完成"
             android:textColor="@color/muted"
             android:textSize="14sp"
             android:lineSpacingExtra="3dp" />
-        <android.widget.Button
+
+        <Button
             android:id="@+id/goGen"
             android:layout_width="match_parent"
             android:layout_height="64dp"
             android:layout_marginTop="20dp"
             android:background="@drawable/bg_btn"
-            android:clickable="true"
-            android:enabled="true"
-            android:focusable="true"
             android:gravity="center"
             android:minHeight="64dp"
-            android:text="进去"
+            android:text="开始创作"
             android:textAllCaps="false"
             android:textColor="@color/on_accent"
-            android:textSize="18sp" />
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="文生图模板"
+            android:layout_marginTop="24dp"
+            android:text="快捷操作"
+            android:textColor="@color/text"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/randomQuick"
+                android:layout_width="0dp"
+                android:layout_height="58dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_card"
+                android:text="随机生图"
+                android:textAllCaps="false"
+                android:textColor="@color/text"
+                android:textSize="14sp" />
+
+            <Space
+                android:layout_width="10dp"
+                android:layout_height="1dp" />
+
+            <Button
+                android:id="@+id/imageQuick"
+                android:layout_width="0dp"
+                android:layout_height="58dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_card"
+                android:text="图生图 / 换背景"
+                android:textAllCaps="false"
+                android:textColor="@color/text"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/chatQuick"
+                android:layout_width="0dp"
+                android:layout_height="58dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_card"
+                android:text="AI 对话"
+                android:textAllCaps="false"
+                android:textColor="@color/text"
+                android:textSize="14sp" />
+
+            <Space
+                android:layout_width="10dp"
+                android:layout_height="1dp" />
+
+            <Button
+                android:id="@+id/historyQuick"
+                android:layout_width="0dp"
+                android:layout_height="58dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_card"
+                android:text="历史图片"
+                android:textAllCaps="false"
+                android:textColor="@color/text"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="26dp"
+            android:text="灵感模板"
+            android:textColor="@color/text"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="点一下直接带入描述，进入创作后仍可修改"
             android:textColor="@color/muted"
-            android:layout_marginTop="22dp"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
+
         <LinearLayout
             android:id="@+id/tplGrid"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:layout_marginTop="10dp"
-            android:clickable="false" />
+            android:layout_marginTop="10dp" />
+
     </LinearLayout>
 </ScrollView>
