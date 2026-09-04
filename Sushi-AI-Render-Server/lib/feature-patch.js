@@ -39,72 +39,85 @@ function patchWorkshop(source) {
   var ids = ['角色描述','英文描述','中文译文','图像比例','生成数量','引导强度','随机种子','负面提示','图生图强度'];
 
   function byId(id){ return document.getElementById(id); }
-  function enabled(){
-    var box = byId('生成记忆模式');
-    return !box || box.checked;
-  }
+  function enabled(){ var box=byId('生成记忆模式'); return !box || box.checked; }
   function saveMemory(){
     if (!enabled()) return;
     var data = {};
     ids.forEach(function(id){ var el=byId(id); if(el) data[id]=el.value; });
-    var bg = byId('只换背景'); if(bg) data['只换背景']=!!bg.checked;
-    data.savedAt = Date.now();
+    var bg=byId('只换背景'); if(bg) data['只换背景']=!!bg.checked;
+    data.savedAt=Date.now();
     try { localStorage.setItem(memoryKey, JSON.stringify(data)); } catch(e) {}
   }
   function restoreMemory(){
-    var box = byId('生成记忆模式');
-    var pref = '1';
-    try { pref = localStorage.getItem(memoryEnabledKey) || '1'; } catch(e) {}
-    if (box) box.checked = pref !== '0';
-    if (pref === '0') return;
+    var box=byId('生成记忆模式');
+    var pref='1'; try { pref=localStorage.getItem(memoryEnabledKey)||'1'; } catch(e) {}
+    if(box) box.checked=pref!=='0';
+    if(pref==='0') return;
     var raw=''; try { raw=localStorage.getItem(memoryKey)||''; } catch(e) {}
-    if (!raw) return;
+    if(!raw) return;
     try {
       var data=JSON.parse(raw);
-      ids.forEach(function(id){ var el=byId(id); if(el && data[id] !== undefined && data[id] !== '') el.value=String(data[id]); });
-      var bg=byId('只换背景'); if(bg && data['只换背景'] !== undefined) bg.checked=!!data['只换背景'];
-      if (typeof window.刷新画面说明 === 'function') window.刷新画面说明();
+      ids.forEach(function(id){ var el=byId(id); if(el && data[id]!==undefined && data[id]!=='') el.value=String(data[id]); });
+      var bg=byId('只换背景'); if(bg && data['只换背景']!==undefined) bg.checked=!!data['只换背景'];
+      if(typeof window.刷新画面说明==='function') window.刷新画面说明();
     } catch(e) {}
   }
   function installMemory(){
     var box=byId('生成记忆模式');
-    if (box) box.addEventListener('change', function(){
-      try { localStorage.setItem(memoryEnabledKey, box.checked ? '1':'0'); } catch(e) {}
-      if (box.checked) saveMemory();
+    if(box) box.addEventListener('change',function(){
+      try { localStorage.setItem(memoryEnabledKey,box.checked?'1':'0'); } catch(e) {}
+      if(box.checked) saveMemory();
     });
-    ids.forEach(function(id){ var el=byId(id); if(el){ el.addEventListener('input', saveMemory); el.addEventListener('change', saveMemory); } });
-    var bg=byId('只换背景'); if(bg) bg.addEventListener('change', saveMemory);
+    ids.forEach(function(id){ var el=byId(id); if(el){ el.addEventListener('input',saveMemory); el.addEventListener('change',saveMemory); } });
+    var bg=byId('只换背景'); if(bg) bg.addEventListener('change',saveMemory);
     restoreMemory();
   }
   function removePerchanceLinks(){
     document.querySelectorAll('a[href]').forEach(function(a){
       var href=String(a.getAttribute('href')||'');
-      if (/perchance\\.org/i.test(href)) { a.removeAttribute('href'); a.style.display='none'; }
+      if(/perchance\\.org/i.test(href)){ a.removeAttribute('href'); a.removeAttribute('target'); a.style.display='none'; }
     });
   }
   function forceDefaultProvider(){
     var box=byId('出图引擎');
-    if (!box) return;
-    if (!window.__sushiImageProviderLock) box.value='perchance';
+    if(!box) return;
+    if(!window.__sushiImageProviderLock){ box.value='perchance'; box.disabled=false; }
     try { localStorage.setItem('角色生成器_默认平台','perchance'); } catch(e) {}
     var tip=byId('平台提示');
-    if (tip) tip.textContent='Perchance 默认 · 应用内生成；不可用时自动使用免费备用通道';
+    if(tip && !window.__sushiImageProviderLock) tip.textContent='Perchance 默认 · 应用内生成；不可用时自动使用免费备用通道';
+  }
+  function lockProvider(name){
+    name=String(name||'').trim()||'horde';
+    if(window.__sushiImageProviderLock) return;
+    window.__sushiImageProviderLock=name;
+    var box=byId('出图引擎');
+    if(box){ box.value=name==='horde'?'auto':box.value; box.disabled=true; box.title='本次会话已锁定：'+name; }
+    var tip=byId('平台提示'); if(tip) tip.textContent='本次会话已锁定生图通道：'+name+' · 普通与随机生成共用';
+  }
+  function watchImages(){
+    var area=byId('图像输出'); if(!area || area.__sushiWatching) return;
+    area.__sushiWatching=true;
+    function scan(){
+      var img=area.querySelector('img');
+      if(img && (img.complete ? img.naturalWidth>0 : true)) lockProvider(img.getAttribute('data-engine')||'horde');
+    }
+    area.addEventListener('load',function(e){ if(e.target && e.target.tagName==='IMG') lockProvider(e.target.getAttribute('data-engine')||'horde'); },true);
+    new MutationObserver(scan).observe(area,{childList:true,subtree:true});
+    scan();
   }
   function installAiImage(){
     var btn=byId('AI直接生图按钮');
-    if (!btn || btn.__wired) return;
+    if(!btn || btn.__wired) return;
     btn.__wired=true;
-    btn.addEventListener('click', function(){
-      var q=byId('AI问题');
-      var text=q ? String(q.value||'').trim() : '';
-      if (!text) { if(q) q.focus(); return; }
+    btn.addEventListener('click',function(){
+      var q=byId('AI问题'); var text=q?String(q.value||'').trim():'';
+      if(!text){ if(q) q.focus(); return; }
       var prompt=byId('角色描述');
-      if (prompt) { prompt.value=text; prompt.dispatchEvent(new Event('input',{bubbles:true})); }
+      if(prompt){ prompt.value=text; prompt.dispatchEvent(new Event('input',{bubbles:true})); }
       saveMemory();
-      if (typeof window.开始生成 === 'function') {
+      if(typeof window.开始生成==='function'){
         Promise.resolve(window.开始生成()).finally(function(){
-          var result=document.querySelector('.结果区');
-          if(result) result.scrollIntoView({behavior:'smooth',block:'start'});
+          var result=document.querySelector('.结果区'); if(result) result.scrollIntoView({behavior:'smooth',block:'start'});
         });
       }
     });
@@ -114,7 +127,8 @@ function patchWorkshop(source) {
     forceDefaultProvider();
     installMemory();
     installAiImage();
-    var observer=new MutationObserver(function(){ removePerchanceLinks(); installAiImage(); });
+    watchImages();
+    var observer=new MutationObserver(function(){ removePerchanceLinks(); installAiImage(); watchImages(); });
     observer.observe(document.documentElement,{childList:true,subtree:true});
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',ready); else ready();
