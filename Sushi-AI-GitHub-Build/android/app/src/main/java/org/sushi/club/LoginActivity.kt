@@ -16,18 +16,10 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, true)
         setContentView(R.layout.activity_login)
-        if (!Session.hasServerUrl()) {
-            startActivity(Intent(this, ServerUrlActivity::class.java))
-            finish()
-            return
-        }
         val email = findViewById<EditText>(R.id.email)
         val password = findViewById<EditText>(R.id.password)
         val error = findViewById<TextView>(R.id.error)
         val submit = findViewById<TextView>(R.id.submit)
-        findViewById<TextView>(R.id.serverSettings).setOnClickListener {
-            startActivity(Intent(this, ServerUrlActivity::class.java))
-        }
         submit.isEnabled = true
         submit.isClickable = true
         submit.isFocusable = true
@@ -43,7 +35,7 @@ class LoginActivity : AppCompatActivity() {
                     val data = Api.post("/api/auth/login", body, auth = false)
                     Session.setToken(data.getString("token"))
                     Session.persistUser(data.getJSONObject("user"))
-                    startActivity(Intent(this@LoginActivity, MainActivity::class.java).putExtra("open_gen", true))
+                    startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                     finish()
                 } catch (e: Exception) {
                     val msg = e.message.orEmpty().ifBlank { e.toString() }
