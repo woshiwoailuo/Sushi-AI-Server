@@ -12,14 +12,14 @@
         android:paddingStart="18dp"
         android:paddingEnd="18dp"
         android:paddingTop="18dp"
-        android:paddingBottom="24dp">
+        android:paddingBottom="28dp">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="苏轼 AI"
             android:textColor="@color/text"
-            android:textSize="26sp"
+            android:textSize="27sp"
             android:textStyle="bold" />
 
         <TextView
@@ -27,7 +27,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="生图、图生图与 AI 对话，都在一个应用里完成"
+            android:text="创作、AI、工具和小游戏都放在一个应用里"
             android:textColor="@color/muted"
             android:textSize="14sp"
             android:lineSpacingExtra="3dp" />
@@ -50,9 +50,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="快捷操作"
+            android:text="创作"
             android:textColor="@color/text"
-            android:textSize="16sp"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -72,9 +72,7 @@
                 android:textColor="@color/text"
                 android:textSize="14sp" />
 
-            <Space
-                android:layout_width="10dp"
-                android:layout_height="1dp" />
+            <Space android:layout_width="10dp" android:layout_height="1dp" />
 
             <Button
                 android:id="@+id/imageQuick"
@@ -87,6 +85,34 @@
                 android:textColor="@color/text"
                 android:textSize="14sp" />
         </LinearLayout>
+
+        <Button
+            android:id="@+id/historyQuick"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:text="历史图片 / 生成记忆"
+            android:textAllCaps="false"
+            android:textColor="@color/text"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="26dp"
+            android:text="AI"
+            android:textColor="@color/text"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="AI 对话单独使用；需要图片时可直接在软件内生成并显示"
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -105,21 +131,39 @@
                 android:textColor="@color/text"
                 android:textSize="14sp" />
 
-            <Space
-                android:layout_width="10dp"
-                android:layout_height="1dp" />
+            <Space android:layout_width="10dp" android:layout_height="1dp" />
 
             <Button
-                android:id="@+id/historyQuick"
+                android:id="@+id/aiImageQuick"
                 android:layout_width="0dp"
                 android:layout_height="58dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_card"
-                android:text="历史图片"
+                android:text="AI 生图"
                 android:textAllCaps="false"
                 android:textColor="@color/text"
                 android:textSize="14sp" />
         </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="26dp"
+            android:text="工具与小游戏"
+            android:textColor="@color/text"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/toolsQuick"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:text="随机决定 · 专注计时 · 猜数字"
+            android:textAllCaps="false"
+            android:textColor="@color/text"
+            android:textSize="14sp" />
 
         <TextView
             android:layout_width="wrap_content"
