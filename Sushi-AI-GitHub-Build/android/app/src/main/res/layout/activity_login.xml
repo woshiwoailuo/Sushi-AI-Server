@@ -17,7 +17,7 @@
         android:paddingBottom="80dp">
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="苏轼AI" android:textColor="@color/accent" android:textSize="13sp" />
         <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/login" android:textColor="@color/text" android:textSize="32sp" android:layout_marginTop="8dp" />
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/tagline" android:textColor="@color/muted" android:layout_marginTop="8dp" android:layout_marginBottom="28dp" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="登录后直接进入创作平台" android:textColor="@color/muted" android:layout_marginTop="8dp" android:layout_marginBottom="28dp" />
         <EditText android:id="@+id/email" android:layout_width="match_parent" android:layout_height="52dp" android:hint="@string/email" android:inputType="textEmailAddress" android:background="@drawable/bg_input" android:padding="14dp" android:textColor="@color/text" android:textColorHint="@color/muted" android:imeOptions="actionNext" android:nextFocusForward="@id/password" />
         <EditText android:id="@+id/password" android:layout_width="match_parent" android:layout_height="52dp" android:hint="@string/password" android:inputType="textPassword" android:background="@drawable/bg_input" android:padding="14dp" android:layout_marginTop="12dp" android:textColor="@color/text" android:textColorHint="@color/muted" android:imeOptions="actionDone" android:imeActionLabel="@string/login" />
         <TextView android:id="@+id/error" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/danger" android:layout_marginTop="10dp" />
@@ -37,6 +37,5 @@
             android:textColor="@color/on_accent"
             android:textSize="16sp" />
         <TextView android:id="@+id/goRegister" android:layout_width="match_parent" android:layout_height="wrap_content" android:clickable="true" android:focusable="true" android:gravity="center" android:padding="16dp" android:text="没有账号？去注册" android:textColor="@color/muted" />
-        <Button android:id="@+id/serverSettings" android:layout_width="match_parent" android:layout_height="48dp" android:text="服务器设置 / 检测连接" android:textAllCaps="false" android:textColor="@color/text" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
