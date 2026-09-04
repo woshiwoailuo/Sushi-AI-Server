@@ -3,11 +3,13 @@ services:
     name: sushi-ai-server
     runtime: node
     buildCommand: npm ci --omit=dev
-    startCommand: node server.js
+    startCommand: node -r ./lib/runtime-patch.js -r ./lib/image-lock-patch.js server.js
     healthCheckPath: /api/app/version
     envVars:
       - key: NODE_VERSION
         value: 22
+      - key: NODE_ENV
+        value: production
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_EMAIL

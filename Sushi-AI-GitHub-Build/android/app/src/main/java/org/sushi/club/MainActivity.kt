@@ -31,7 +31,7 @@ class MainActivity : AppCompatActivity() {
                 .commitNow()
         }
         bindNav()
-        switchTo(gen, "gen")
+        switchTo(home, "home")
         refreshMeInBackground()
         lifecycleScope.launch { quietVersionCheck() }
     }
