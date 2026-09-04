@@ -34,16 +34,19 @@
 
   async function api(path, options) {
     options = options || {};
+    var method = options.method || 'GET';
     var controller = new AbortController();
     var abort = function () { controller.abort(); };
-    var timer = setTimeout(abort, 32000);
+    // Render 免费实例冷启动可能超过 30 秒。读取请求允许更长时间，提交任务绝不自动重试，避免重复生成。
+    var timeoutMs = options.timeoutMs || (method === 'POST' ? 90000 : 55000);
+    var timer = setTimeout(abort, timeoutMs);
     if (options.signal) {
       if (options.signal.aborted) abort();
       else options.signal.addEventListener('abort', abort, { once: true });
     }
     try {
       var response = await fetch('/api/images' + path, {
-        method: options.method || 'GET', credentials: 'same-origin', cache: 'no-store',
+        method: method, credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: options.body ? JSON.stringify(options.body) : undefined,
         signal: controller.signal
@@ -58,12 +61,34 @@
       }
       return data;
     } catch (error) {
-      if (error.name === 'AbortError') throw new Error('连接服务器超时，请检查网络后重试');
+      if (error.name === 'AbortError') {
+        var timeoutError = new Error('服务器启动或连接耗时较长，请稍后重试');
+        timeoutError.code = 'CLIENT_TIMEOUT';
+        throw timeoutError;
+      }
       throw error;
     } finally {
       clearTimeout(timer);
       if (options.signal) options.signal.removeEventListener('abort', abort);
     }
+  }
+
+  async function safeGet(path, attempts) {
+    var lastError;
+    attempts = attempts || 2;
+    for (var i = 0; i < attempts; i += 1) {
+      try {
+        return await api(path, { method: 'GET', timeoutMs: i === 0 ? 55000 : 70000 });
+      } catch (error) {
+        lastError = error;
+        if (error.status && error.status < 500 && error.status !== 429) throw error;
+        if (i + 1 < attempts) {
+          status('服务器正在启动', '首次连接较慢，正在自动重试，不会重复提交生图任务。', true);
+          await new Promise(function (resolve) { setTimeout(resolve, 2500); });
+        }
+      }
+    }
+    throw lastError;
   }
 
   function ensureActive(run) {
@@ -89,8 +114,6 @@
     var source = run.description;
     if (randomPair && randomPair.chinese === source) return randomPair.english;
     if (!/[\u4e00-\u9fff]/.test(source)) return source;
-    // The existing translator limits input to 400 characters. Longer descriptions
-    // are submitted intact instead of silently losing the end of the prompt.
     if (source.length <= 400 && typeof window.调用开源翻译 === 'function') {
       status('正在翻译画面描述', '翻译完成后提交；连接失败时使用本次原文。', true);
       try {
@@ -127,9 +150,9 @@
         ensureActive(run);
         if (error.status && error.status < 500 && error.status !== 429) throw error;
         errors += 1;
-        if (errors >= 3) throw error;
+        if (errors >= 4) throw error;
         status('连接暂时中断，正在重新查询', '不会重复提交生图任务。', true);
-        await pause(run, 3500);
+        await pause(run, Math.min(3000 + errors * 1500, 7000));
       }
     }
     ensureActive(run);
@@ -145,7 +168,7 @@
       img.alt = run.description || '生成的图片';
       img.referrerPolicy = 'no-referrer';
       img.setAttribute('data-engine', 'horde');
-      var timer = setTimeout(failed, 25000);
+      var timer = setTimeout(failed, 30000);
       var settled = false;
       function cleanup() { clearTimeout(timer); img.onload = null; img.onerror = null; run.controller.signal.removeEventListener('abort', cancelled); }
       function cancelled() {
@@ -166,7 +189,7 @@
         retry.type = 'button'; retry.className = '次按钮'; retry.textContent = '重新加载图片';
         retry.onclick = function () {
           retry.disabled = true; note.textContent = '正在重新加载…';
-          var retryTimer = setTimeout(retryFailed, 25000);
+          var retryTimer = setTimeout(retryFailed, 30000);
           function retryFailed() {
             clearTimeout(retryTimer); img.onload = null; img.onerror = null;
             retry.disabled = false; note.textContent = '加载失败，请检查网络后重试。';
@@ -192,7 +215,7 @@
 
   async function stopJob(run) {
     if (!run.job || ['done', 'failed', 'cancelled'].includes(run.job.state)) return;
-    run.job = await api('/' + encodeURIComponent(run.job.id), { method: 'DELETE' });
+    run.job = await api('/' + encodeURIComponent(run.job.id), { method: 'DELETE', timeoutMs: 30000 });
   }
 
   async function execute(run, restored) {
@@ -209,11 +232,11 @@
       while (run.completed < run.total) {
         ensureActive(run);
         if (!restored) {
-          status('正在提交 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '请稍候，重复点击不会创建新任务。', true);
+          status('正在提交 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '服务器如刚启动可能稍慢；重复点击不会创建新任务。', true);
           var payload = Object.assign({}, run.payload);
           if (payload.seed !== '') payload.seed = String(Number(payload.seed) + run.completed);
-          // Keep the submission alive on cancel so its returned id can be deleted.
-          run.job = await api('', { method: 'POST', body: payload });
+          // POST 不自动重试，防止网络抖动时重复创建任务或重复扣额度。
+          run.job = await api('', { method: 'POST', body: payload, timeoutMs: 90000 });
         }
         ensureActive(run);
         var done = await poll(run, run.job);
@@ -241,7 +264,7 @@
   }
 
   function openOfficial() {
-    status('在 Perchance 官网生成', '复制描述后打开官方页面，在官网粘贴并生成。', false);
+    status('在 Perchance 官网生成', 'Perchance 当前为官方网页通道；复制描述后打开官网生成。内置生成可选择其他平台。', false);
     var copy = document.createElement('button');
     copy.type = 'button'; copy.className = '次按钮'; copy.textContent = '复制画面描述';
     copy.onclick = async function () {
@@ -296,7 +319,7 @@
 
   window.当前引擎 = function () { return value('出图引擎') === 'perchance' ? 'perchance' : 'horde'; };
   window.设平台提示 = function (engine) {
-    $('平台提示').textContent = engine === 'perchance' ? 'Perchance · 前往官网生成' : 'AI Horde · 免费共享算力，繁忙时需要排队';
+    $('平台提示').textContent = engine === 'perchance' ? 'Perchance · 官方网页通道' : 'AI Horde · 免费共享算力，繁忙时需要排队';
   };
 
   async function init() {
@@ -311,8 +334,9 @@
     window.设平台提示(window.当前引擎());
     window.__sushiReady = true; window.__sushiLoadError = '';
     controls(true); $('取消生成按钮').hidden = true;
+    status('正在连接生图服务', '如果服务器刚休眠，首次连接会自动等待并重试。', true);
     try {
-      var results = await Promise.all([api('/config'), api('/current')]);
+      var results = await Promise.all([safeGet('/config', 2), safeGet('/current', 2)]);
       officialUrl = results[0].perchanceUrl || officialUrl;
       if (results[1].job) {
         var run = newRun('', 1);
@@ -321,7 +345,10 @@
         run.promise = execute(run, true);
         return;
       }
-    } catch (error) { status('暂时无法准备生图', error.message, false); }
+      status('生图服务已就绪', '可以开始生成图片。', false);
+    } catch (error) {
+      status('暂时无法准备生图', error.message + ' 可稍后直接再次点击生成。', false);
+    }
     controls(false);
   }
 
