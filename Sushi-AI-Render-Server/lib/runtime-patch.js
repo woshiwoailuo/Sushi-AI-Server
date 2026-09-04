@@ -1,7 +1,7 @@
 'use strict';
 
 // Runtime compatibility patch for the encrypted workshop page.
-// Keeping these small UI/routing changes here avoids duplicating the large workshop.html.
+// Keeps the APK experience in-app and applies routing/UI defaults without duplicating workshop.html.
 const fs = require('fs');
 const path = require('path');
 
@@ -10,7 +10,7 @@ const originalReadFileSync = fs.readFileSync.bind(fs);
 function patchWorkshop(source) {
   let html = String(source || '');
 
-  // Image generation: migrate old/default state to Perchance unless the user explicitly chose Horde.
+  // Image generation: Perchance remains the default label/state. Horde is an in-app fallback.
   html = html.replace(
     /function 规范化出图平台\(值, 用户选过\) \{[\s\S]*?\n  \}/,
     'function 规范化出图平台(值, 用户选过) {\n' +
@@ -36,7 +36,7 @@ function patchWorkshop(source) {
       '            </select>'
   );
 
-  // AI chat: the user must not be able to pin one provider. Every request is an automatic race.
+  // AI chat is permanently automatic: Turbo + Fast + Horde race, first valid answer wins.
   html = html.replace(
     /<select id="AI通道"[\s\S]*?<\/select>/,
     '<select id="AI通道" disabled aria-label="自动抢答已锁定">\n' +
@@ -69,7 +69,6 @@ function patchWorkshop(source) {
       '  }'
   );
 
-  // Replace the whole dispatcher: always race three free routes, first valid response wins.
   html = html.replace(
     /async function 问免费模型\(问句, 模型\) \{[\s\S]*?\n  \}\n\n  async function 提问AI/,
     'async function 问免费模型(问句, 模型) {\n' +
@@ -108,11 +107,77 @@ function patchWorkshop(source) {
       '  }\n\n  async function 提问AI'
   );
 
-  // Force every submitted chat turn to race mode even if stale localStorage exists.
   html = html.replace(
     'var 选择通道 = (选 && 选.value) || "auto";\n    var 本轮通道 = 选择通道;\n    if (选择通道 !== "auto") 本轮通道 = 选择通道;',
     'var 选择通道 = "auto";\n    var 本轮通道 = "auto";\n    if (选) { 选.value = "auto"; 选.disabled = true; }'
   );
+
+  // APK-only policy: block every Perchance external navigation. When the user leaves
+  // the default selector on Perchance, generation stays inside Sushi AI and uses the
+  // configured in-app fallback until a direct Perchance API adapter is available.
+  const inAppGuard = `
+<script id="sushi-apk-only-guard">
+(function () {
+  'use strict';
+  function isPerchanceUrl(value) {
+    try { return new URL(String(value || ''), location.href).hostname === 'perchance.org'; }
+    catch (e) { return /perchance\.org/i.test(String(value || '')); }
+  }
+  function removeExternalPerchanceLinks() {
+    document.querySelectorAll('a[href]').forEach(function (a) {
+      if (!isPerchanceUrl(a.href)) return;
+      a.removeAttribute('href');
+      a.removeAttribute('target');
+      a.setAttribute('aria-disabled', 'true');
+      a.style.display = 'none';
+    });
+  }
+  document.addEventListener('click', function (event) {
+    var a = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+    if (a && isPerchanceUrl(a.href)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+  var nativeOpen = window.open;
+  window.open = function (url) {
+    if (isPerchanceUrl(url)) return null;
+    return nativeOpen.apply(window, arguments);
+  };
+  function installGenerationGuard() {
+    if (typeof window.开始生成 !== 'function' || window.__sushiInAppGenerationGuard) return;
+    window.__sushiInAppGenerationGuard = true;
+    var originalStart = window.开始生成;
+    window.开始生成 = function () {
+      var engine = document.getElementById('出图引擎');
+      if (!engine || engine.value !== 'perchance') return originalStart.apply(this, arguments);
+      var previous = engine.value;
+      engine.value = 'auto';
+      var result;
+      try { result = originalStart.apply(this, arguments); }
+      finally {
+        engine.value = previous;
+        try { localStorage.setItem('角色生成器_默认平台', 'perchance'); } catch (e) {}
+      }
+      var tip = document.getElementById('平台提示');
+      if (tip) tip.textContent = 'Perchance 默认 · APK 内置模式（当前由免费备用通道执行）';
+      return result;
+    };
+  }
+  function ready() {
+    removeExternalPerchanceLinks();
+    installGenerationGuard();
+    var observer = new MutationObserver(function () {
+      removeExternalPerchanceLinks();
+      installGenerationGuard();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready);
+  else ready();
+})();
+</script>`;
+  html = html.replace(/<\/body>/i, inAppGuard + '\n</body>');
 
   return html;
 }
