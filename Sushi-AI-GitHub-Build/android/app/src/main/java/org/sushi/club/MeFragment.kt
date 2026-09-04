@@ -23,11 +23,7 @@ class MeFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         paint(view)
-        view.findViewById<Button>(R.id.serverBtn).apply {
-            visibility = View.VISIBLE
-            text = "服务器设置 / 检测连接"
-            setOnClickListener { startActivity(Intent(requireContext(), ServerUrlActivity::class.java)) }
-        }
+        view.findViewById<Button>(R.id.serverBtn).visibility = View.GONE
         view.findViewById<Button>(R.id.checkUpdate).apply {
             isClickable = true
             isFocusable = true
@@ -82,7 +78,6 @@ class MeFragment : Fragment() {
         view.findViewById<TextView>(R.id.quota).text = "每日额度：" + u?.optInt("gen_quota_daily", 10)
         view.findViewById<TextView>(R.id.appVer).text = "当前版本 " + BuildConfig.VERSION_NAME
     }
-
 
     private fun refreshRemain(view: View) {
         viewLifecycleOwner.lifecycleScope.launch {
