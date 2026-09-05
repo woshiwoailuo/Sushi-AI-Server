@@ -12,8 +12,8 @@ android {
         applicationId = if (previewBuild) "org.sushi.club.preview" else "org.sushi.club"
         minSdk = 24
         targetSdk = 34
-        versionCode = 16
-        versionName = if (previewBuild) "1.1.14-preview" else "1.1.14"
+        versionCode = 17
+        versionName = if (previewBuild) "1.1.15-preview" else "1.1.15"
         manifestPlaceholders["sushiAppLabel"] = if (previewBuild) "苏轼AI 测试版" else "@string/app_name"
         buildConfigField("String", "DEFAULT_BASE_URL", "\"https://sushi-ai-server.onrender.com\"")
     }
