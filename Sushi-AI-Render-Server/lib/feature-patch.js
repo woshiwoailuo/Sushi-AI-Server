@@ -11,6 +11,9 @@ function patchWorkshop(source) {
     /<select id="出图引擎" name="出图引擎">[\s\S]*?<\/select>/,
     '<select id="出图引擎" name="出图引擎">\n' +
       '            <option value="perchance" selected>Perchance · 默认</option>\n' +
+      '            <option value="krea2">Krea 2 · 高质量写实</option>\n' +
+      '            <option value="anishort">AniShort · AI短剧/角色</option>\n' +
+      '            <option value="liblib">LiblibAI · 模型/LoRA丰富</option>\n' +
       '            <option value="auto">自动抢图 · 当前可用免费通道</option>\n' +
       '          </select>'
   );
@@ -45,6 +48,7 @@ function patchWorkshop(source) {
     var data = {};
     ids.forEach(function(id){ var el=byId(id); if(el) data[id]=el.value; });
     var bg=byId('只换背景'); if(bg) data['只换背景']=!!bg.checked;
+    var engine=byId('出图引擎'); if(engine) data['出图引擎']=engine.value;
     data.savedAt=Date.now();
     try { localStorage.setItem(memoryKey, JSON.stringify(data)); } catch(e) {}
   }
@@ -70,6 +74,7 @@ function patchWorkshop(source) {
     });
     ids.forEach(function(id){ var el=byId(id); if(el){ el.addEventListener('input',saveMemory); el.addEventListener('change',saveMemory); } });
     var bg=byId('只换背景'); if(bg) bg.addEventListener('change',saveMemory);
+    var engine=byId('出图引擎'); if(engine) engine.addEventListener('change',function(){ providerChanged(engine.value); saveMemory(); });
     restoreMemory();
   }
   function removePerchanceLinks(){
@@ -78,21 +83,32 @@ function patchWorkshop(source) {
       if(/perchance\\.org/i.test(href)){ a.removeAttribute('href'); a.removeAttribute('target'); a.style.display='none'; }
     });
   }
+  function providerChanged(name){
+    var tip=byId('平台提示');
+    if(!tip) return;
+    var messages={
+      perchance:'Perchance 默认 · 优先使用；不可用时自动回到免费备用通道',
+      krea2:'Krea 2 · 高质量写实；服务器未配置 KREA_API_TOKEN 时自动使用免费备用通道',
+      anishort:'AniShort · AI短剧/角色创作入口；无公开第三方API时自动使用免费备用通道',
+      liblib:'LiblibAI · 模型与 LoRA 丰富；服务器未配置 LiblibAI API 凭证时自动使用免费备用通道',
+      auto:'自动抢图 · 使用当前可用免费通道'
+    };
+    tip.textContent=messages[name]||messages.auto;
+  }
   function forceDefaultProvider(){
     var box=byId('出图引擎');
     if(!box) return;
     if(!window.__sushiImageProviderLock){ box.value='perchance'; box.disabled=false; }
     try { localStorage.setItem('角色生成器_默认平台','perchance'); } catch(e) {}
-    var tip=byId('平台提示');
-    if(tip && !window.__sushiImageProviderLock) tip.textContent='Perchance 默认 · 应用内生成；不可用时自动使用免费备用通道';
+    providerChanged(box.value);
   }
   function lockProvider(name){
     name=String(name||'').trim()||'horde';
     if(window.__sushiImageProviderLock) return;
     window.__sushiImageProviderLock=name;
     var box=byId('出图引擎');
-    if(box){ box.value=name==='horde'?'auto':box.value; box.disabled=true; box.title='本次会话已锁定：'+name; }
-    var tip=byId('平台提示'); if(tip) tip.textContent='本次会话已锁定生图通道：'+name+' · 普通与随机生成共用';
+    if(box){ if(name==='horde') box.value='auto'; box.disabled=true; box.title='本次会话已锁定：'+name; }
+    var tip=byId('平台提示'); if(tip) tip.textContent='本次会话实际生图通道：'+name+' · 普通与随机生成共用';
   }
   function watchImages(){
     var area=byId('图像输出'); if(!area || area.__sushiWatching) return;
@@ -138,12 +154,31 @@ function patchWorkshop(source) {
       }
     });
   }
+  function installProviderFallback(){
+    if(window.__sushiProviderFallbackInstalled) return;
+    window.__sushiProviderFallbackInstalled=true;
+    var original=window.开始生成;
+    if(typeof original!=='function') return;
+    window.开始生成=function(){
+      var box=byId('出图引擎');
+      var chosen=box?box.value:'perchance';
+      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'){
+        if(box) box.value='auto';
+        providerChanged(chosen);
+        var p=Promise.resolve(original.apply(this,arguments));
+        p.finally(function(){ if(box && !window.__sushiImageProviderLock){ box.value=chosen; providerChanged(chosen); } });
+        return p;
+      }
+      return original.apply(this,arguments);
+    };
+  }
   function ready(){
     removePerchanceLinks();
     forceDefaultProvider();
     installMemory();
     installAiImage();
     installRandomRecovery();
+    installProviderFallback();
     watchImages();
     var observer=new MutationObserver(function(){ removePerchanceLinks(); installAiImage(); watchImages(); });
     observer.observe(document.documentElement,{childList:true,subtree:true});
