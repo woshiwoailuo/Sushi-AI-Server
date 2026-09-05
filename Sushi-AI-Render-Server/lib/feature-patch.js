@@ -105,6 +105,22 @@ function patchWorkshop(source) {
     new MutationObserver(scan).observe(area,{childList:true,subtree:true});
     scan();
   }
+  function installRandomRecovery(){
+    if(window.__sushiRandomRecoveryInstalled) return;
+    window.__sushiRandomRecoveryInstalled=true;
+    function recover(){
+      var btn=byId('随机按钮');
+      if(!btn) return;
+      if(!window.正在生成图片){
+        btn.disabled=false;
+        btn.removeAttribute('aria-disabled');
+      }
+    }
+    setInterval(recover,500);
+    document.addEventListener('visibilitychange',function(){ if(!document.hidden) recover(); });
+    window.addEventListener('pageshow',recover);
+    recover();
+  }
   function installAiImage(){
     var btn=byId('AI直接生图按钮');
     if(!btn || btn.__wired) return;
@@ -127,6 +143,7 @@ function patchWorkshop(source) {
     forceDefaultProvider();
     installMemory();
     installAiImage();
+    installRandomRecovery();
     watchImages();
     var observer=new MutationObserver(function(){ removePerchanceLinks(); installAiImage(); watchImages(); });
     observer.observe(document.documentElement,{childList:true,subtree:true});
