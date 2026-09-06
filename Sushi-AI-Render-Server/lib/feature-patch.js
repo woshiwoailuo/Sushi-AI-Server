@@ -7,17 +7,7 @@ const previousReadFileSync = fs.readFileSync.bind(fs);
 function patchWorkshop(source) {
   let html = String(source || '');
 
-  html = html.replace(
-    /<select id="出图引擎" name="出图引擎">[\s\S]*?<\/select>/,
-    '<select id="出图引擎" name="出图引擎">\n' +
-      '            <option value="perchance" selected>Perchance · 默认</option>\n' +
-      '            <option value="krea2">Krea 2 · 高质量写实</option>\n' +
-      '            <option value="anishort">AniShort · AI短剧/角色</option>\n' +
-      '            <option value="liblib">LiblibAI · 模型/LoRA丰富</option>\n' +
-      '            <option value="auto">自动抢图 · 当前可用免费通道</option>\n' +
-      '          </select>'
-  );
-
+  // Provider <select> is owned by runtime-patch (Turbo/Flux/Horde). Do not overwrite here.
   html = html.replace(
     '<div id="管理面板" class="分区" hidden>',
     '<label class="换背景行" style="margin-top:10px">\n' +

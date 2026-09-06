@@ -156,7 +156,7 @@
       </div>
 
       <details class="分区">
-        <summary>中英互译 · 中文会先尝试翻译</summary>
+        <summary>中英互译 · 出图只用英文</summary>
         <label>
           中文
           <textarea
@@ -300,7 +300,7 @@
       >
 
       <details id="图生图区" class="分区">
-        <summary>图生图 / 换背景 · 粘贴即可</summary>
+        <summary>插入图片 · 生成背景</summary>
         <div class="翻译内容">
           <div
             id="贴图区"
@@ -315,7 +315,7 @@
               hidden
               onchange="读取参考图文件(this)"
             >
-            <p>在此 Ctrl+V 贴图，或拖入 / 点击选图</p>
+            <p>插入参考图：点击选图，或 Ctrl+V / 拖入</p>
             <img id="参考图预览" alt="参考图预览" hidden>
           </div>
           <input
@@ -333,6 +333,14 @@
             >
             <span>只换背景，人物、衣服、姿势尽量保持原图</span>
           </label>
+          <label class="换背景行">
+            <input
+              id="纯背景出图"
+              type="checkbox"
+              onchange="同步纯背景()"
+            >
+            <span>纯场景背景（不要人物）</span>
+          </label>
           <label>
             还原程度
             <select id="图生图强度" name="图生图强度">
@@ -343,6 +351,8 @@
             </select>
           </label>
           <div class="核心操作">
+            <button type="button" class="次按钮" onclick="document.getElementById('参考图文件').click()">插入图片</button>
+            <button type="button" class="主按钮" onclick="一键生成背景()">生成背景</button>
             <button type="button" class="次按钮" onclick="清空参考图()">清除参考图</button>
           </div>
           <p id="图生图状态" class="说明文字"></p>
@@ -351,6 +361,10 @@
 
       <details id="问答区" class="分区" open>
         <summary>AI 对话</summary>
+        <div class="模式切换行" role="group" aria-label="对话模式">
+          <button type="button" class="模式钮 开" id="模式对话钮" onclick="切换聊天模式('对话')">对话</button>
+          <button type="button" class="模式钮" id="模式出图钮" onclick="切换聊天模式('出图')">出图</button>
+        </div>
         <label>
           通道
           <select id="AI通道" onchange="对话通道已改()">
@@ -362,7 +376,7 @@
         </label>
         <label class="换背景行">
           <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
-          <span>记忆</span>
+          <span>记忆（默认开，记住设定与前情）</span>
         </label>
         <div id="对话列表" class="对话列表" aria-live="polite"></div>
         <div class="对话输入行">
@@ -372,6 +386,7 @@
         <div class="核心操作">
           <button type="button" class="次按钮" onclick="清空对话()">清空对话</button>
         </div>
+        <p id="聊天模式提示" class="说明文字">当前：对话 · 记忆开时会带上摘要与近轮记录</p>
       </details>
 
 
@@ -554,6 +569,7 @@
     恢复上次创作();
     填入待用提示();
     载入记忆开关();
+    载入聊天模式();
     var 平台框 = document.getElementById("出图引擎");
     if (平台框) {
       if (!平台框.value) 平台框.value = "auto";
@@ -1141,7 +1157,7 @@
     try { 记忆摘要 = String(localStorage.getItem(记忆摘要键()) || ""); } catch (e) { 记忆摘要 = ""; }
   }
   function 写记忆摘要(文) {
-    记忆摘要 = String(文 || "").slice(-800);
+    记忆摘要 = String(文 || "").slice(-1600);
     try { localStorage.setItem(记忆摘要键(), 记忆摘要); } catch (e) {}
   }
   function 滚动写入记忆(用户文, 助手文) {
@@ -1167,7 +1183,7 @@
     if (记忆已开() && 记忆摘要) {
       列.push({
         role: "system",
-        content: "用简体中文回复。延续以下角色记忆（姓名、关系、正在发生的事）：" + String(记忆摘要).slice(-800)
+        content: "用简体中文回复。延续以下角色记忆（姓名、关系、正在发生的事）：" + String(记忆摘要).slice(-1600)
       });
     } else {
       列.push({ role: "system", content: "用简体中文回复，不要突然改成英文。" });
@@ -1192,7 +1208,7 @@
 
   function 组装群体提示(问句) {
     var 文 = "### System:\n用简体中文回复。";
-    if (记忆已开() && 记忆摘要) 文 += "角色记忆：" + String(记忆摘要).slice(-800);
+    if (记忆已开() && 记忆摘要) 文 += "角色记忆：" + String(记忆摘要).slice(-1600);
     文 += "\n";
     var i = 0;
     var 片 = "### User:\n" + String(问句 || "").slice(0, 800) + "\n### Assistant:\n";
@@ -1344,6 +1360,78 @@
     });
   }
 
+
+  var 聊天模式 = "对话";
+  function 切换聊天模式(模式) {
+    聊天模式 = 模式 === "出图" ? "出图" : "对话";
+    var a = document.getElementById("模式对话钮");
+    var b = document.getElementById("模式出图钮");
+    if (a) a.classList.toggle("开", 聊天模式 === "对话");
+    if (b) b.classList.toggle("开", 聊天模式 === "出图");
+    var 问 = document.getElementById("AI问题");
+    var 钮 = document.getElementById("对话发送钮");
+    var 提示 = document.getElementById("聊天模式提示");
+    if (问) 问.placeholder = 聊天模式 === "出图" ? "描述要画的画面，发送后直接出图…" : "输入想问的话…";
+    if (钮) 钮.textContent = 聊天模式 === "出图" ? "出图" : "发送";
+    if (提示) 提示.textContent = 聊天模式 === "出图"
+      ? "当前：出图 · 发送后会把文字送进自动抢出画图"
+      : "当前：对话 · 记忆开时会带上摘要与近轮记录";
+    try { localStorage.setItem("苏轼AI_聊天模式", 聊天模式); } catch (e) {}
+  }
+  function 载入聊天模式() {
+    var m = "对话";
+    try { m = localStorage.getItem("苏轼AI_聊天模式") || "对话"; } catch (e) {}
+    切换聊天模式(m);
+  }
+  function 同步纯背景() {
+    var 纯 = document.getElementById("纯背景出图");
+    var 勾 = document.getElementById("只换背景");
+    if (纯 && 纯.checked) {
+      if (勾) 勾.checked = false;
+      设图生图状态("纯场景背景：出图时尽量不要人物，只画环境。");
+    } else {
+      设图生图状态("已关闭纯背景。可再勾选「只换背景」保留人物。");
+    }
+  }
+  function 一键生成背景() {
+    var 区 = document.getElementById("图生图区");
+    if (区) { 区.open = true; 区.hidden = false; }
+    var 核心 = document.getElementById("角色描述");
+    var 纯 = document.getElementById("纯背景出图");
+    var 勾 = document.getElementById("只换背景");
+    if (有参考图()) {
+      if (纯) 纯.checked = false;
+      if (勾) { 勾.checked = true; 同步换背景强度(); }
+      if (核心 && !(核心.value || "").trim()) {
+        核心.value = "背景换成宁静雪山与晨雾，人物保持原样";
+      }
+      设图生图状态("已准备换背景：保留参考图人物，改场景后开始生成。");
+    } else {
+      if (纯) 纯.checked = true;
+      if (勾) 勾.checked = false;
+      if (核心 && !(核心.value || "").trim()) {
+        核心.value = "空旷的电影感场景背景，没有人物，只有环境与光线";
+      }
+      设图生图状态("无参考图：按纯场景背景出图。");
+    }
+    try { 开始生成(); } catch (e) { 设图生图状态("生成未能启动，请再试一次。"); }
+  }
+  async function 从对话出图(文本) {
+    var 核心 = document.getElementById("角色描述");
+    if (核心) 核心.value = String(文本 || "").trim();
+    var 框 = document.getElementById("出图引擎");
+    if (框 && (!框.value || 框.value === "krea2" || 框.value === "anishort" || 框.value === "lib" || 框.value === "liblib")) {
+      框.value = "auto";
+    }
+    追加对话气泡("assistant", "正在按这段描述出图…", "出图", false);
+    try {
+      await 开始生成();
+      return "已按你的描述开始出图，请看下方画廊。";
+    } catch (e) {
+      return "出图没能启动：" + String(e && e.message ? e.message : e);
+    }
+  }
+
   async function 提问AI() {
     if (正在回答对话) return;
     var 问 = document.getElementById("AI问题");
@@ -1359,6 +1447,18 @@
     对话历史.push(用户项);
     保存对话历史();
     追加对话气泡("user", 文本, 选择通道, false);
+    
+    if (聊天模式 === "出图") {
+      var 出回复 = "";
+      try { 出回复 = await 从对话出图(文本); } catch (e) { 出回复 = "出图失败，请稍后再试。"; }
+      var 出项 = { role: "assistant", text: 出回复, channel: "出图", t: Date.now() };
+      对话历史.push(出项);
+      保存对话历史();
+      滚动写入记忆(文本, 出回复);
+      追加对话气泡("assistant", 出回复, "出图", false);
+      正在回答对话 = false;
+      return;
+    }
     var 等待 = 追加对话气泡("assistant", "正在回答…", "", true);
     对话末通道 = "";
     var 回复 = "";
@@ -1585,6 +1685,10 @@
 
   function 补换背景英文(英文) {
     var 文本 = String(英文 || "").trim();
+    var 纯 = document.getElementById("纯背景出图");
+    if (纯 && 纯.checked) {
+      return "empty scenic environment background only, no people, no characters, no humans, no faces, cinematic atmosphere, " + (文本 || "serene mountain landscape at dawn");
+    }
     if (!正在换背景()) return 文本;
     var 锁定 =
       "use the reference photo as the base, keep the exact same person, same face, same hair, same body shape, same clothing, same pose, same crop and camera angle, do not redraw the subject, only replace the background scene, seamless foreground edge against the new background, " +
@@ -2559,6 +2663,27 @@
     border-radius: 10px;
   }
 
+
+  .模式切换行 {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 10px;
+  }
+  .模式钮 {
+    flex: 1;
+    min-height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--边框);
+    background: #fff;
+    color: var(--淡色);
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .模式钮.开 {
+    color: var(--绿色文字);
+    background: var(--绿色);
+    border-color: transparent;
+  }
   .换背景行 {
     display: flex;
     align-items: center;

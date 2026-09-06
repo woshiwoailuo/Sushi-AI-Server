@@ -285,6 +285,13 @@
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);
+    if ($('纯背景出图') && $('纯背景出图').checked) {
+      run.backgroundOnly = false;
+      if (!/no people|no characters|empty scenic/i.test(description)) {
+        description = 'empty scenic environment background only, no people, no characters, no humans, no faces, cinematic atmosphere, ' + description;
+        run.description = description;
+      }
+    }
     var dimensions = value('图像比例').split('x');
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
