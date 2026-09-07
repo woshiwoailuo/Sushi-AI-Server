@@ -10,17 +10,13 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const { ImageError, createImageService } = require('./lib/image-service');
-
-const envFile = path.join(__dirname, '.env');
-if (fs.existsSync(envFile) && typeof process.loadEnvFile === 'function') process.loadEnvFile(envFile);
 
 const SMTP_SECRET_FILE =
-  process.env.SMTP_PASS_FILE || '';
+  process.env.SMTP_PASS_FILE ||
+  '/home/box/agent-data/connector-secrets/d1a9ee04-b030-407c-82a6-ec2936e455df/smtp.json';
 
 function loadSmtpPass() {
   if (process.env.SMTP_PASS) return process.env.SMTP_PASS;
-  if (!SMTP_SECRET_FILE) return '';
   try {
     const parsed = JSON.parse(fs.readFileSync(SMTP_SECRET_FILE, 'utf8'));
     return parsed && typeof parsed.pass === 'string' ? parsed.pass : '';
@@ -30,9 +26,9 @@ function loadSmtpPass() {
   }
 }
 
-const SMTP_HOST = process.env.SMTP_HOST || '';
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.163.com';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_USER = process.env.SMTP_USER || 'sjdwukai2@163.com';
 const SMTP_PASS = loadSmtpPass();
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
 const SMTP_SECURE = process.env.SMTP_SECURE
@@ -43,7 +39,11 @@ const PORT = Number(process.env.PORT || 8787);
 const JWT_SECRET = process.env.JWT_SECRET || 'sushi-dev-secret';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@sushi.local').toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin123!';
-const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, 'data');
+const CORS_ORIGINS = String(process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const DATA_DIR = path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'app.db');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const APK_DIR = path.join(DATA_DIR, 'apk');
@@ -119,10 +119,6 @@ async function openDatabase() {
     return;
   } catch (err) {
     console.warn('[db] better-sqlite3 unavailable, falling back to sql.js:', err.message);
-  }
-  const walPath = DB_PATH + '-wal';
-  if (fs.existsSync(walPath) && fs.statSync(walPath).size > 0) {
-    throw new Error('数据库有尚未合并的 WAL 文件。请先用原 SQLite 驱动正常关闭数据库并完成 checkpoint，再使用 sql.js；不要删除 WAL 文件。');
   }
   const initSqlJs = require('sql.js');
   const SQL = await initSqlJs();
@@ -359,7 +355,7 @@ function userFromToken(token) {
 }
 
 function setAuthCookie(res, token) {
-  res.setHeader('Set-Cookie', 'sushi_token=' + token + '; HttpOnly; Path=/; SameSite=Lax' + (res.req.secure ? '; Secure' : ''));
+  res.setHeader('Set-Cookie', 'sushi_token=' + token + '; HttpOnly; Path=/; SameSite=Lax');
 }
 
 function publicUser(row) {
@@ -419,16 +415,23 @@ function audit(adminId, action, targetUserId, note) {
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
-app.use(cors({ origin: true, credentials: true, allowedHeaders: ['Content-Type', 'Authorization'] }));
-app.use('/api/images', express.json({ limit: '12mb' }));
-app.use(express.json({ limit: '1mb' }));
+app.use(cors({
+  origin(origin, callback) {
+    // Same-origin and native Android requests normally have no Origin header.
+    if (!origin || CORS_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+app.use(express.json({ limit: '6mb' }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   next();
 });
 
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', rateLimit('register', 5, 15 * 60_000), (req, res) => {
   const email = String((req.body && req.body.email) || '')
     .trim()
     .toLowerCase();
@@ -474,7 +477,7 @@ app.post('/api/auth/verify', (req, res) => {
   res.json({ token, user: publicUser(updated) });
 });
 
-app.post('/api/auth/resend', (req, res) => {
+app.post('/api/auth/resend', rateLimit('resend', 5, 15 * 60_000), (req, res) => {
   const email = String((req.body && req.body.email) || '')
     .trim()
     .toLowerCase();
@@ -488,7 +491,7 @@ app.post('/api/auth/resend', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', rateLimit('login', 12, 15 * 60_000), (req, res) => {
   const email = String((req.body && req.body.email) || '')
     .trim()
     .toLowerCase();
@@ -534,67 +537,6 @@ app.get('/api/me/quota', authMiddleware, (req, res) => {
     plan: req.user.plan,
     vip_until: req.user.vip_until,
   });
-});
-
-const images = createImageService({
-  apiKey: process.env.HORDE_API_KEY || '0000000000',
-  model: process.env.HORDE_MODEL || '',
-  reserve(userId) {
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-    if (!user || user.banned) throw new ImageError('账号不可用', 403, 'ACCOUNT_DISABLED');
-    if (!user.email_verified) throw new ImageError('请先验证邮箱', 403, 'VERIFY_EMAIL');
-    if (remainingQuota(user) <= 0) throw new ImageError('今日额度已用尽', 402, 'QUOTA_EMPTY');
-    const result = db.prepare('INSERT INTO gen_logs (user_id, created_at, kind) VALUES (?, ?, ?)')
-      .run(userId, nowIso(), 'image_pending');
-    persistSqlJs();
-    return Number(result.lastInsertRowid);
-  },
-  refund(id, userId) {
-    db.prepare("DELETE FROM gen_logs WHERE id = ? AND user_id = ? AND kind = 'image_pending'").run(id, userId);
-    persistSqlJs();
-  },
-  commit(id, userId) {
-    db.prepare("UPDATE gen_logs SET kind = 'image' WHERE id = ? AND user_id = ? AND kind = 'image_pending'").run(id, userId);
-    persistSqlJs();
-  },
-});
-
-function imageAccount(req, res, next) {
-  if (req.user.banned) return res.status(403).json({ error: '账号已被封禁' });
-  if (!req.user.email_verified) return res.status(403).json({ error: '请先验证邮箱' });
-  res.setHeader('Cache-Control', 'no-store');
-  next();
-}
-
-function imageRoute(handler) {
-  return (req, res) => Promise.resolve().then(() => handler(req, res)).catch((error) => {
-    if (!res.headersSent && !res.destroyed) res.status(error.status || 500).json({
-      error: error instanceof ImageError ? error.message : '生成服务暂时不可用，请稍后重试',
-      code: error.code || 'SERVER_ERROR',
-    });
-  });
-}
-
-app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
-  let official = 'https://perchance.org/ai-text-to-image-generator';
-  try {
-    const configured = new URL(process.env.PERCHANCE_URL || official);
-    if (configured.protocol === 'https:' && configured.hostname === 'perchance.org' && !configured.username && !configured.password) official = configured.href;
-  } catch { /* keep the official generator */ }
-  res.json({ provider: 'auto', free: true, engines: ['turbo', 'horde'], maxWaitSeconds: 600, perchanceUrl: official });
-});
-app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
-app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {
-  const job = await images.create(req.user.id, req.body);
-  if (res.destroyed) { await images.cancel(req.user.id, job.id); return; }
-  res.status(202).json(job);
-}));
-app.get('/api/images/:id', authMiddleware, imageAccount, imageRoute(async (req, res) => res.json(await images.get(req.user.id, req.params.id))));
-app.delete('/api/images/:id', authMiddleware, imageAccount, imageRoute(async (req, res) => res.json(await images.cancel(req.user.id, req.params.id))));
-
-app.get('/assets/workshop-generation.js', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache');
-  res.sendFile(path.join(PUBLIC_DIR, 'assets', 'workshop-generation.js'));
 });
 
 app.post('/api/gen/check', authMiddleware, (req, res) => {
@@ -853,8 +795,34 @@ app.get('/api/admin/logs', authMiddleware, adminMiddleware, (req, res) => {
 
 
 const WORKSHOP_FILE = path.join(PUBLIC_DIR, 'workshop.html');
-const TICKET_TTL_MS = 90_000;
+// The workshop is decrypted in the client, but image requests can legitimately
+// wait several minutes in a public queue. Keep the short-lived ticket while
+// allowing a normal generation round to finish.
+const TICKET_TTL_MS = 10 * 60_000;
 const workshopTickets = new Map();
+const rateBuckets = new Map();
+
+function rateLimit(bucket, max, windowMs) {
+  return (req, res, next) => {
+    const key = bucket + ':' + clientIp(req);
+    const now = Date.now();
+    const old = rateBuckets.get(key);
+    const state = old && now - old.startedAt < windowMs
+      ? old
+      : { startedAt: now, count: 0 };
+    state.count += 1;
+    rateBuckets.set(key, state);
+    if (state.count > max) return res.status(429).json({ error: '请求过于频繁，请稍后再试' });
+    next();
+  };
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - 15 * 60_000;
+  for (const [key, state] of rateBuckets) {
+    if (state.startedAt < cutoff) rateBuckets.delete(key);
+  }
+}, 5 * 60_000).unref();
 
 const WORKSHOP_401 = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -904,7 +872,134 @@ function getLiveTicket(id) {
   return ticket;
 }
 
-const workshopLoaderHtml = require('./lib/workshop-loader');
+function workshopLoaderHtml(ticket) {
+  const payload = {
+    k: ticket.id,
+    iv: ticket.iv,
+    ct: ticket.ciphertext,
+    tag: ticket.tag,
+  };
+  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>苏轼AI</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0e10;color:#8b8a84;font-family:system-ui,sans-serif}
+  body{display:grid;place-items:center}
+  .msg{font-size:13px;letter-spacing:.18em}
+</style>
+</head>
+<body>
+<div class="msg">UNLOCKING</div>
+<script>window.__SUSHI_WRAP__=${json};</script>
+<script>
+(function(){
+  const wrap = window.__SUSHI_WRAP__ || {};
+  let unlocking = false;
+  function hexToBytes(hex){
+    const s = String(hex || '').replace(/[^0-9a-f]/gi,'');
+    const out = new Uint8Array(s.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
+    return out;
+  }
+  function b64ToBytes(b64){
+    const bin = atob(String(b64 || ''));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function ticketId(){
+    const q = new URLSearchParams(location.search);
+    return q.get('k') || wrap.k || '';
+  }
+  async function decryptAndWrite(keyHex, ivHex, ctB64, tagB64){
+    if (unlocking) return;
+    unlocking = true;
+    try {
+      const keyBytes = hexToBytes(keyHex);
+      const iv = hexToBytes(ivHex || wrap.iv);
+      const ct = b64ToBytes(ctB64 || wrap.ct);
+      const tag = b64ToBytes(tagB64 || wrap.tag);
+      const combined = new Uint8Array(ct.length + tag.length);
+      combined.set(ct, 0);
+      combined.set(tag, ct.length);
+      const cryptoKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, combined);
+      const html = new TextDecoder().decode(plain);
+      document.open();
+      document.write(html);
+      document.close();
+    } catch (err) {
+      unlocking = false;
+      console.warn('unlock failed', err);
+    }
+  }
+  window.__sushiUnlock = function(keyHex, ivHex){
+    if (!keyHex) return;
+    decryptAndWrite(String(keyHex), ivHex);
+  };
+  async function loadBlob(){
+    if (wrap.ct && wrap.tag && wrap.iv) return wrap;
+    const k = ticketId();
+    if (!k) return wrap;
+    const res = await fetch('/api/workshop/blob?k=' + encodeURIComponent(k));
+    if (!res.ok) return wrap;
+    const data = await res.json();
+    wrap.iv = data.iv || wrap.iv;
+    wrap.ct = data.ct || wrap.ct;
+    wrap.tag = data.tag || wrap.tag;
+    return wrap;
+  }
+  async function tryUnlockCookie(){
+    const k = ticketId();
+    if (!k) return false;
+    try {
+      const res = await fetch('/api/workshop/unlock', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket: k })
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.key) {
+        await decryptAndWrite(data.key, data.iv);
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  async function tryHash(){
+    const hash = (location.hash || '').replace(/^#/, '');
+    if (!hash) return false;
+    const parts = hash.split('.');
+    const key = parts[0];
+    const iv = parts.slice(1).join('.') || wrap.iv;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    if (!key) return false;
+    await decryptAndWrite(key, iv);
+    return true;
+  }
+  async function boot(){
+    await loadBlob();
+    const ssKey = sessionStorage.getItem('sushi_wrap_key');
+    const ssIv = sessionStorage.getItem('sushi_wrap_iv');
+    if (ssKey) {
+      await decryptAndWrite(ssKey, ssIv);
+      return;
+    }
+    if (await tryHash()) return;
+    if (await tryUnlockCookie()) return;
+  }
+  boot();
+})();
+</script>
+</body>
+</html>`;
+}
 
 function sendWorkshopLoader(req, res) {
   const k = String((req.query && req.query.k) || '');
@@ -957,18 +1052,144 @@ app.post('/api/workshop/unlock', authMiddleware, (req, res) => {
   res.json({ key: ticket.key, iv: ticket.iv });
 });
 
-app.post('/api/workshop/session', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store');
-  const ticket = getLiveTicket(String((req.body && req.body.ticket) || ''));
-  const key = String((req.body && req.body.key) || '');
-  if (!ticket || !/^[0-9a-f]{64}$/i.test(key) || !crypto.timingSafeEqual(Buffer.from(key, 'hex'), Buffer.from(ticket.key, 'hex'))) {
-    return res.status(401).json({ error: '进入凭证已过期，请返回后重新进入' });
+const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
+
+function workshopImageError(res, status, error) {
+  res.status(status).json({ error });
+}
+
+// Same-origin image proxy for the workshop fallback engines. Keeping this on
+// the server avoids WebView CORS/referrer failures and prevents the browser
+// from talking to an arbitrary URL supplied by page input.
+app.get('/api/workshop/image', async (req, res) => {
+  const ticket = getLiveTicket(String((req.query && req.query.k) || ''));
+  if (!ticket) return workshopImageError(res, 401, '工坊票据无效或已过期');
+
+  const model = String(req.query.model || 'turbo');
+  if (!IMAGE_MODELS.has(model)) return workshopImageError(res, 400, '不支持的生图模型');
+
+  const prompt = String(req.query.prompt || '').trim().slice(0, 1600);
+  if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
+
+  const width = Math.min(1024, Math.max(256, Number(req.query.width) || 768));
+  const height = Math.min(1024, Math.max(256, Number(req.query.height) || 768));
+  const seed = Number.isFinite(Number(req.query.seed)) ? Math.trunc(Number(req.query.seed)) : Math.floor(Math.random() * 2147483646);
+  const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
+  upstream.searchParams.set('model', model);
+  upstream.searchParams.set('width', String(width));
+  upstream.searchParams.set('height', String(height));
+  upstream.searchParams.set('seed', String(seed));
+  upstream.searchParams.set('nologo', 'true');
+  upstream.searchParams.set('enhance', 'false');
+  upstream.searchParams.set('safe', 'false');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const upstreamResponse = await fetch(upstream, {
+      signal: controller.signal,
+      headers: { Accept: 'image/*' },
+    });
+    if (!upstreamResponse.ok || !upstreamResponse.body) {
+      return workshopImageError(res, 502, `上游生图服务返回 ${upstreamResponse.status}`);
+    }
+    res.status(200);
+    res.set('Content-Type', upstreamResponse.headers.get('content-type') || 'image/jpeg');
+    res.set('Cache-Control', 'no-store');
+    res.set('X-Sushi-Image-Proxy', 'pollinations');
+    const reader = upstreamResponse.body.getReader();
+    const pump = async () => {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        res.write(Buffer.from(part.value));
+      }
+      res.end();
+    };
+    await pump();
+  } catch (error) {
+    if (!res.headersSent) workshopImageError(res, 504, '备用生图服务超时');
+    else res.destroy(error);
+  } finally {
+    clearTimeout(timer);
   }
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(ticket.userId);
-  if (!user || user.banned) return res.status(403).json({ error: '账号不可用' });
-  if (!user.email_verified) return res.status(403).json({ error: '请先验证邮箱' });
-  setAuthCookie(res, signToken(user));
-  res.json({ ok: true });
+});
+
+function decodeImageDataUrl(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^data:image\/[a-z0-9.+-]+;base64,([a-z0-9+/=\s]+)$/i);
+  return match ? match[1].replace(/\s+/g, '') : '';
+}
+
+app.post('/api/workshop/img2img', async (req, res) => {
+  const ticket = getLiveTicket(String((req.body && req.body.k) || ''));
+  if (!ticket) return workshopImageError(res, 401, '工坊票据无效或已过期');
+
+  const sourceImage = decodeImageDataUrl(req.body && req.body.image);
+  if (!sourceImage || sourceImage.length > 5_000_000) {
+    return workshopImageError(res, 400, '参考图无效或过大，请重新选择图片');
+  }
+  const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
+  if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
+  const width = Math.min(1024, Math.max(256, Number(req.body.width) || 768));
+  const height = Math.min(1024, Math.max(256, Number(req.body.height) || 768));
+  const strength = Math.min(0.95, Math.max(0.05, Number(req.body.strength) || 0.52));
+  const seed = Number.isFinite(Number(req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
+  const body = {
+    prompt,
+    source_image: sourceImage,
+    source_processing: 'img2img',
+    nsfw: false,
+    censor_nsfw: true,
+    params: {
+      n: 1,
+      width,
+      height,
+      steps: 20,
+      denoising_strength: strength,
+      ...(seed === undefined ? {} : { seed: String(seed) }),
+    },
+  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: '0000000000',
+        'Client-Agent': 'woshisushi:1.0:server-img2img',
+      },
+      body: JSON.stringify(body),
+    });
+    const acceptedJson = await accepted.json().catch(() => ({}));
+    if (!accepted.ok || !acceptedJson.id) {
+      return workshopImageError(res, 502, '图生图服务器未受理请求');
+    }
+    for (let i = 0; i < 75; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const status = await fetch(`https://aihorde.net/api/v2/generate/status/${encodeURIComponent(acceptedJson.id)}`, {
+        signal: controller.signal,
+        headers: {
+          apikey: '0000000000',
+          'Client-Agent': 'woshisushi:1.0:server-img2img',
+        },
+      });
+      const statusJson = await status.json().catch(() => ({}));
+      const image = statusJson && statusJson.generations && statusJson.generations[0] && statusJson.generations[0].img;
+      if (statusJson.faulted) return workshopImageError(res, 502, '图生图服务器生成失败');
+      if (image) {
+        res.set('Cache-Control', 'no-store');
+        return res.json({ url: image, provider: 'aihorde' });
+      }
+    }
+    return workshopImageError(res, 504, '图生图服务器排队超时');
+  } catch (error) {
+    return workshopImageError(res, 504, error && error.name === 'AbortError' ? '图生图服务器超时' : '图生图服务器连接失败');
+  } finally {
+    clearTimeout(timer);
+  }
 });
 
 app.get('/workshop', sendWorkshopLoader);
@@ -989,24 +1210,13 @@ async function main() {
   await openDatabase();
   migrate();
   seedAdmin();
-  db.prepare("DELETE FROM gen_logs WHERE kind = 'image_pending'").run();
   persistSqlJs();
-  const maintenance = setInterval(() => { void images.sweep(); }, 30_000);
-  maintenance.unref();
-  const server = app.listen(PORT, process.env.HOST || '0.0.0.0', () => {
-    console.log('[sushi-club] listening on port ' + server.address().port);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log('[sushi-club] listening on http://0.0.0.0:' + PORT);
     console.log('[sushi-club] db mode:', dbMode);
     console.log('[sushi-club] JWT_SECRET is', process.env.JWT_SECRET ? 'from env' : 'default sushi-dev-secret (override in production)');
     console.log('[sushi-club] SMTP is', smtpConfigured() ? 'configured' : 'missing (codes stored, email skipped)');
   });
-  server.on('close', () => {
-    clearInterval(maintenance);
-    if (sqlJsSaveTimer) clearInterval(sqlJsSaveTimer);
-    persistSqlJs();
-    if (dbMode === 'better-sqlite3') db.close();
-    else db.database.close();
-  });
-  return server;
 }
 
 process.on('SIGINT', () => {
@@ -1015,9 +1225,7 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-if (require.main === module) main().catch((err) => {
+main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
-module.exports = { app, main };
