@@ -389,6 +389,7 @@
             <option value="auto" selected>自动抢答 · 推荐</option>
             <option value="openai">OpenAI 兼容模型</option>
             <option value="openai-fast">快速模型</option>
+            <option value="deepseek">DeepSeek · 需配置密钥</option>
             <option value="turbo">Turbo 备用</option>
             <option value="horde">Horde</option>
           </select>
@@ -1118,6 +1119,7 @@
     if (通道 === "turbo") return "Turbo";
     if (通道 === "fast") return "快答";
     if (通道 === "horde") return "Horde";
+    if (通道 === "deepseek") return "DeepSeek";
     if (通道 === "auto") return "自动抢答";
     return 通道 || "";
   }
@@ -1353,6 +1355,7 @@
   }
 
   function 花粉通道名(模型) {
+    if (模型 === "deepseek") return "deepseek";
     if (模型 === "openai-fast" || 模型 === "openai" || 模型 === "fast") return "fast";
     return "turbo";
   }
@@ -1390,7 +1393,7 @@
     } catch (e) {
       内容 = "";
     }
-    if (!内容) {
+    if (!内容 && 模型 !== "deepseek") {
       try {
         var getResp = await 限时拉取("https://text.pollinations.ai/" + encodeURIComponent(组装群体提示(问句).slice(0, 1200)), {
           method: "GET",
@@ -1457,6 +1460,7 @@
 
   async function 问免费模型(问句, 模型) {
     var 指定 = 模型 || "";
+    if (指定 === "deepseek") return 问花粉(问句, "deepseek");
     if (指定 === "horde") return 问群体模型(问句);
     if (指定 === "fast" || 指定 === "openai-fast" || 指定 === "openai") return 问花粉(问句, "openai-fast");
     if (指定 && 指定 !== "auto") return 问花粉(问句, "turbo");
