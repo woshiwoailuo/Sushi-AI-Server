@@ -2904,6 +2904,14 @@
     输出区.style.display = "";
     var 状态区 = document.getElementById("状态提示");
     var 执行生成 = document.getElementById("执行生成");
+    if (typeof update !== "function") {
+      输出区.innerHTML = "";
+      状态区.style.display = "flex";
+      状态区.innerHTML = '<div class="加载动画"></div><b>Perchance 官方组件未加载</b><p>已自动切换免费写实线路，请稍候。</p>';
+      记录失败原因("Perchance 官方组件未加载，已切换 Turbo 备用线路");
+      用写实引擎出图("turbo", 0);
+      return;
+    }
     执行生成.value =
       String(Date.now()) + "-" + String(Math.floor(Math.random() * 1000000));
     try {
