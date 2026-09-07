@@ -1075,7 +1075,9 @@ app.post('/api/workshop/unlock', authMiddleware, (req, res) => {
 });
 
 const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
-const CHAT_MODELS = new Set(['turbo', 'openai-fast']);
+const CHAT_MODELS = new Set(['turbo', 'openai-fast', 'deepseek']);
+const DEEPSEEK_API_KEY = String(process.env.DEEPSEEK_API_KEY || '').trim();
+const DEEPSEEK_MODEL = String(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim();
 
 function workshopImageError(res, status, error) {
   res.status(status).json({ error });
@@ -1088,14 +1090,27 @@ app.post('/api/workshop/chat', async (req, res) => {
   if (!CHAT_MODELS.has(model)) return workshopImageError(res, 400, '不支持的对话模型');
   const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-20) : [];
   if (!messages.length) return workshopImageError(res, 400, '对话内容不能为空');
+  if (model === 'deepseek' && !DEEPSEEK_API_KEY) {
+    return workshopImageError(res, 503, 'DeepSeek 尚未配置，请在 Render Environment 添加 DEEPSEEK_API_KEY');
+  }
+  const endpoint = model === 'deepseek'
+    ? 'https://api.deepseek.com/chat/completions'
+    : 'https://text.pollinations.ai/openai';
+  const requestBody = model === 'deepseek'
+    ? { model: DEEPSEEK_MODEL, messages, max_tokens: 800, temperature: 0.7 }
+    : { model, messages };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
-    const upstream = await fetch('https://text.pollinations.ai/openai', {
+    const upstream = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ model, messages }),
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(model === 'deepseek' ? { Authorization: 'Bearer ' + DEEPSEEK_API_KEY } : {}),
+      },
+      body: JSON.stringify(requestBody),
     });
     const body = await upstream.text();
     if (!upstream.ok) return workshopImageError(res, 502, `对话服务器返回 ${upstream.status}`);
