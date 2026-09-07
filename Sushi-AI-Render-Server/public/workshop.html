@@ -2242,6 +2242,35 @@
     }
     正在生成图片 = false;
     设置生成按钮状态(false, "重新生成角色图片");
+    // Perchance may render into its own gallery while a fallback request is
+    // still finishing. Do not replace a real image with a false all-failed
+    // state; this was especially visible on mobile WebViews.
+    var 画廊 = [
+      document.getElementById("图像输出"),
+      document.getElementById("官方画廊")
+    ];
+    var 已有图片 = false;
+    var g = 0;
+    for (g = 0; g < 画廊.length; g++) {
+      var 节点 = 画廊[g];
+      if (!节点) continue;
+      var 图片 = 节点.querySelectorAll("img");
+      for (var p = 0; p < 图片.length; p++) {
+        if (图片[p].complete && 图片[p].naturalWidth > 0) {
+          已有图片 = true;
+          break;
+        }
+      }
+      if (已有图片) break;
+    }
+    if (已有图片) {
+      var 已成功状态 = document.getElementById("分类状态");
+      if (已成功状态) 已成功状态.textContent = "已生成图片，失败线路已忽略。";
+      var 旧状态 = document.getElementById("状态提示");
+      if (旧状态) 旧状态.style.display = "none";
+      设置生成按钮状态(false, "生成角色图片");
+      return;
+    }
     var 状态区 = document.getElementById("状态提示");
     if (状态区) {
       状态区.style.display = "flex";
