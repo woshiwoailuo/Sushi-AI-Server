@@ -1097,10 +1097,16 @@ app.post('/api/workshop/chat', async (req, res) => {
     ? 'https://api.deepseek.com/chat/completions'
     : 'https://text.pollinations.ai/openai';
   const requestBody = model === 'deepseek'
-    ? { model: DEEPSEEK_MODEL, messages, max_tokens: 800, temperature: 0.7 }
+    ? {
+        model: DEEPSEEK_MODEL,
+        messages,
+        max_tokens: 800,
+        temperature: 0.7,
+        thinking: { type: 'disabled' },
+      }
     : { model, messages };
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20_000);
+  const timer = setTimeout(() => controller.abort(), 60_000);
   try {
     const upstream = await fetch(endpoint, {
       method: 'POST',
@@ -1113,7 +1119,17 @@ app.post('/api/workshop/chat', async (req, res) => {
       body: JSON.stringify(requestBody),
     });
     const body = await upstream.text();
-    if (!upstream.ok) return workshopImageError(res, 502, `对话服务器返回 ${upstream.status}`);
+    if (!upstream.ok) {
+      let detail = '';
+      try {
+        const parsed = JSON.parse(body);
+        detail = String(parsed && parsed.error && (parsed.error.message || parsed.error.type) || '').slice(0, 160);
+      } catch (error) {
+        detail = String(body || '').replace(/\s+/g, ' ').slice(0, 160);
+      }
+      const status = upstream.status === 401 || upstream.status === 402 ? upstream.status : 502;
+      return workshopImageError(res, status, `DeepSeek 返回 ${upstream.status}${detail ? '：' + detail : ''}`);
+    }
     res.status(200).type('application/json').send(body || '{}');
   } catch (error) {
     return workshopImageError(res, 504, error && error.name === 'AbortError' ? '对话服务器超时' : '对话服务器连接失败');
