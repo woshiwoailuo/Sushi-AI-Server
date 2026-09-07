@@ -7,7 +7,7 @@ const previousReadFileSync = fs.readFileSync.bind(fs);
 function patchWorkshop(source) {
   let html = String(source || '');
 
-  // Provider <select> is owned by runtime-patch (Turbo/Flux/Horde). Do not overwrite here.
+  // Provider <select> is owned by runtime-patch (Turbo/Horde/auto). Do not overwrite here.
   html = html.replace(
     '<div id="管理面板" class="分区" hidden>',
     '<label class="换背景行" style="margin-top:10px">\n' +
@@ -77,27 +77,41 @@ function patchWorkshop(source) {
     var tip=byId('平台提示');
     if(!tip) return;
     var messages={
-      perchance:'Perchance 默认 · 优先使用；不可用时自动回到免费备用通道',
+      auto:'自动抢出 · Turbo + Horde 同时开跑，先到先得',
+      turbo:'Turbo · Pollinations 极速免费通道',
+      horde:'AI Horde · 免费共享算力，繁忙时需要排队',
       krea2:'Krea 2 · 高质量写实；服务器未配置 KREA_API_TOKEN 时自动使用免费备用通道',
       anishort:'AniShort · AI短剧/角色创作入口；无公开第三方API时自动使用免费备用通道',
-      liblib:'LiblibAI · 模型与 LoRA 丰富；服务器未配置 LiblibAI API 凭证时自动使用免费备用通道',
-      auto:'自动抢图 · 使用当前可用免费通道'
+      liblib:'LiblibAI · 模型与 LoRA 丰富；服务器未配置 LiblibAI API 凭证时自动使用免费备用通道'
     };
     tip.textContent=messages[name]||messages.auto;
   }
   function forceDefaultProvider(){
     var box=byId('出图引擎');
     if(!box) return;
-    if(!window.__sushiImageProviderLock){ box.value='perchance'; box.disabled=false; }
-    try { localStorage.setItem('角色生成器_默认平台','perchance'); } catch(e) {}
-    providerChanged(box.value);
+    box.querySelectorAll('option[value="perchance"]').forEach(function(opt){ opt.remove(); });
+    if(!window.__sushiImageProviderLock){
+      var saved='';
+      try { saved=localStorage.getItem('角色生成器_默认平台')||''; } catch(e) {}
+      if(saved==='perchance' || saved==='官方' || !saved) saved='auto';
+      if(!box.querySelector('option[value="'+saved+'"]')) saved='auto';
+      box.value=saved;
+      box.disabled=false;
+    }
+    try { localStorage.setItem('角色生成器_默认平台', box.value || 'auto'); } catch(e) {}
+    providerChanged(box.value || 'auto');
   }
   function lockProvider(name){
     name=String(name||'').trim()||'horde';
     if(window.__sushiImageProviderLock) return;
     window.__sushiImageProviderLock=name;
     var box=byId('出图引擎');
-    if(box){ if(name==='horde') box.value='auto'; box.disabled=true; box.title='本次会话已锁定：'+name; }
+    if(box){
+      if(name==='horde' || name==='turbo') box.value=name;
+      else box.value='auto';
+      box.disabled=true;
+      box.title='本次会话已锁定：'+name;
+    }
     var tip=byId('平台提示'); if(tip) tip.textContent='本次会话实际生图通道：'+name+' · 普通与随机生成共用';
   }
   function watchImages(){
@@ -151,7 +165,8 @@ function patchWorkshop(source) {
     if(typeof original!=='function') return;
     window.开始生成=function(){
       var box=byId('出图引擎');
-      var chosen=box?box.value:'perchance';
+      if(box && box.value==='perchance') box.value='auto';
+      var chosen=box?box.value:'auto';
       if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'){
         if(box) box.value='auto';
         providerChanged(chosen);

@@ -70,8 +70,9 @@
         <label>
           生图平台
           <select id="出图引擎" name="出图引擎">
-            <option value="auto" selected>免费生图 · AI Horde</option>
-            <option value="perchance">Perchance · 前往官网</option>
+            <option value="auto" selected>自动抢出 · Turbo+Horde</option>
+            <option value="turbo">Turbo · 极速</option>
+            <option value="horde">Horde · 免费共享算力</option>
           </select>
         </label>
 
@@ -101,8 +102,9 @@
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
-              <option value="auto">免费生图 · AI Horde</option>
-              <option value="perchance">Perchance · 前往官网</option>
+              <option value="auto" selected>自动抢出 · Turbo+Horde</option>
+              <option value="turbo">Turbo</option>
+              <option value="horde">Horde</option>
             </select>
           </label>
           <label class="换背景行">
@@ -428,7 +430,7 @@
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">AI Horde · 免费共享算力，繁忙时需要排队</p>
+      <p id="平台提示" class="平台提示">自动抢出 · Turbo + Horde 同时开跑，先到先得</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -462,7 +464,7 @@
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["perchance", "turbo", "flux-realism", "flux", "sana"];
+  var 引擎顺序 = ["auto", "turbo", "horde", "flux-realism", "flux", "sana"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -582,8 +584,8 @@
         本平台失败 = 0;
         var 提示 = document.getElementById("分类状态");
         if (提示) 提示.textContent = 用户选定平台 === "auto"
-          ? "AI Horde 免费共享算力，繁忙时需要排队。"
-          : (用户选定平台 === "perchance" ? "将在 Perchance 官网生成。" : "已选定 AI Horde 免费生图。");
+          ? "自动抢出：Turbo + Horde 同时开跑，先到先得。"
+          : (用户选定平台 === "turbo" ? "已选定 Turbo 极速通道。" : "已选定 AI Horde 免费生图。");
       });
     }
     var 对话框 = document.getElementById("AI通道");
@@ -685,7 +687,9 @@
   }
   function 规范化出图平台(值, 用户选过) {
     值 = String(值 || "").trim();
-    return 值 === "perchance" ? "perchance" : "auto";
+    if (值 === "perchance" || 值 === "官方") return "auto";
+    if (值 === "turbo" || 值 === "horde") return 值;
+    return "auto";
   }
   function 规范化对话通道(值, 用户选过) {
     值 = String(值 || "").trim();
@@ -2089,13 +2093,13 @@
 
   function 引擎名称(值) {
     var 真 = {
-      auto: "AI Horde 免费生图",
+      auto: "自动抢出",
       turbo: "Turbo",
       flux: "Flux",
       "flux-realism": "Flux写实",
       sana: "Sana",
       horde: "AI Horde 免费生图",
-      perchance: "Perchance 官方"
+      perchance: "自动抢出"
     };
     return 真[值] || 值;
   }
@@ -2198,7 +2202,7 @@
   }
 
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.13" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';document.getElementById('状态提示').textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.17" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';document.getElementById('状态提示').textContent=window.__sushiLoadError;"></script>
 
 <style>
   [hidden] { display: none !important; }

@@ -4,7 +4,7 @@
   var active = null;
   var lastEdited = '角色描述';
   var randomPair = null;
-  var officialUrl = 'https://perchance.org/ai-text-to-image-generator';
+  var lockedImageProvider = (window.__sushiImageProviderLock || '');
   var $ = function (id) { return document.getElementById(id); };
   var value = function (id) { return ($(id) && $(id).value || '').trim(); };
 
@@ -32,12 +32,28 @@
     $('取消生成按钮').disabled = false;
   }
 
+  function lockImageProvider(name) {
+    name = String(name || '').trim();
+    if (!name || name === 'auto') return;
+    if (!lockedImageProvider) {
+      lockedImageProvider = name;
+      window.__sushiImageProviderLock = name;
+    }
+    var box = $('出图引擎');
+    if (box) {
+      if (lockedImageProvider === 'horde') box.value = 'horde';
+      else if (lockedImageProvider === 'turbo') box.value = 'turbo';
+      else box.value = 'auto';
+      box.disabled = true;
+      box.title = '本次会话已锁定生图平台：' + lockedImageProvider;
+    }
+  }
+
   async function api(path, options) {
     options = options || {};
     var method = options.method || 'GET';
     var controller = new AbortController();
     var abort = function () { controller.abort(); };
-    // Render 免费实例冷启动可能超过 30 秒。读取请求允许更长时间，提交任务绝不自动重试，避免重复生成。
     var timeoutMs = options.timeoutMs || (method === 'POST' ? 90000 : 55000);
     var timer = setTimeout(abort, timeoutMs);
     if (options.signal) {
@@ -160,15 +176,15 @@
     return job;
   }
 
-  function addImage(run, result) {
+  function addImage(run, result, engine) {
     return new Promise(function (resolve, reject) {
       var card = document.createElement('figure');
       card.className = '生图卡片';
       var img = document.createElement('img');
       img.alt = run.description || '生成的图片';
       img.referrerPolicy = 'no-referrer';
-      img.setAttribute('data-engine', 'horde');
-      var timer = setTimeout(failed, 30000);
+      img.setAttribute('data-engine', engine || 'horde');
+      var timer = setTimeout(failed, 45000);
       var settled = false;
       function cleanup() { clearTimeout(timer); img.onload = null; img.onerror = null; run.controller.signal.removeEventListener('abort', cancelled); }
       function cancelled() {
@@ -177,7 +193,9 @@
       }
       function loaded() {
         if (settled || !img.naturalWidth) return;
-        settled = true; cleanup(); resolve();
+        settled = true; cleanup();
+        lockImageProvider(engine || 'horde');
+        resolve();
       }
       function failed() {
         if (settled) return;
@@ -218,6 +236,154 @@
     run.job = await api('/' + encodeURIComponent(run.job.id), { method: 'DELETE', timeoutMs: 30000 });
   }
 
+  function turboUrl(prompt, width, height, seed) {
+    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(String(prompt || 'photo').slice(0, 1400)) +
+      '?model=turbo&width=' + (width || 512) +
+      '&height=' + (height || 512) +
+      '&nologo=true&enhance=false&safe=false&seed=' + seed;
+  }
+
+  function loadImageUrl(run, url, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('Turbo 出图超时'));
+      }, timeoutMs || 45000);
+      function cleanup() {
+        clearTimeout(timer);
+        img.onload = null;
+        img.onerror = null;
+        run.controller.signal.removeEventListener('abort', onAbort);
+      }
+      function onAbort() {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('已取消生成'));
+      }
+      img.referrerPolicy = 'no-referrer';
+      img.onload = function () {
+        if (settled || !img.naturalWidth) return;
+        settled = true;
+        cleanup();
+        resolve(url);
+      };
+      img.onerror = function () {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('Turbo 出图失败'));
+      };
+      run.controller.signal.addEventListener('abort', onAbort, { once: true });
+      img.src = url;
+    });
+  }
+
+  async function generateTurbo(run, prompt, index) {
+    var seedBase = run.payload.seed !== '' && run.payload.seed != null
+      ? Number(run.payload.seed)
+      : Math.floor(Math.random() * 2147483646);
+    if (!Number.isFinite(seedBase)) seedBase = Math.floor(Math.random() * 2147483646);
+    var seed = seedBase + (index || 0) * 97;
+    var url = turboUrl(prompt, run.payload.width, run.payload.height, seed);
+    status('正在用 Turbo 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', 'Pollinations 免费极速通道。', true);
+    // Prefer fetch so we can surface HTTP errors; fall back to <img> load.
+    try {
+      var response = await fetch(url, { method: 'GET', credentials: 'omit', cache: 'no-store', signal: run.controller.signal });
+      if (!response.ok) throw new Error('Turbo HTTP ' + response.status);
+      var blob = await response.blob();
+      if (!blob || !blob.type || blob.type.indexOf('image/') !== 0) throw new Error('Turbo 未返回图片');
+      var dataUrl = await new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function () { resolve(reader.result); };
+        reader.onerror = function () { reject(new Error('Turbo 读图失败')); };
+        reader.readAsDataURL(blob);
+      });
+      return { url: dataUrl, engine: 'turbo' };
+    } catch (error) {
+      if (run.cancelled || (error && error.name === 'AbortError')) throw new Error('已取消生成');
+      await loadImageUrl(run, url, 40000);
+      return { url: url, engine: 'turbo' };
+    }
+  }
+
+  async function generateHorde(run, prompt, index) {
+    var payload = Object.assign({}, run.payload, { prompt: prompt });
+    if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
+    status('正在提交 Horde · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '服务器如刚启动可能稍慢；重复点击不会创建新任务。', true);
+    run.job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: run.controller.signal });
+    ensureActive(run);
+    var done = await poll(run, run.job);
+    return { url: done.image.url, engine: 'horde', job: done };
+  }
+
+  async function generateOne(run, prompt, index) {
+    var engine = resolveEngine();
+    if (engine === 'turbo') return generateTurbo(run, prompt, index);
+    if (engine === 'horde') return generateHorde(run, prompt, index);
+
+    // auto: race Turbo + Horde; first success wins; cancel the other.
+    status('自动抢出 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', 'Turbo 与 Horde 同时开跑，先到先得。', true);
+    var winner = null;
+    var turboCtrl = { cancelled: false };
+    var hordeJobId = null;
+
+    var turboPromise = generateTurbo(run, prompt, index).then(function (result) {
+      if (winner) throw new Error('lost-race');
+      winner = result;
+      turboCtrl.cancelled = true;
+      return result;
+    }).catch(function (error) {
+      if (winner || (error && error.message === 'lost-race')) throw error;
+      throw error;
+    });
+
+    var hordePromise = (async function () {
+      var payload = Object.assign({}, run.payload, { prompt: prompt });
+      if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
+      var job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: run.controller.signal });
+      hordeJobId = job.id;
+      run.job = job;
+      if (winner) {
+        try { await api('/' + encodeURIComponent(job.id), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
+        throw new Error('lost-race');
+      }
+      var done = await poll(run, job);
+      if (winner) throw new Error('lost-race');
+      winner = { url: done.image.url, engine: 'horde', job: done };
+      return winner;
+    })();
+
+    try {
+      return await Promise.any([turboPromise, hordePromise]);
+    } catch (error) {
+      // Promise.any AggregateError — both failed
+      var msg = '自动抢出失败：Turbo 与 Horde 均未成功';
+      if (error && error.errors && error.errors.length) {
+        msg = error.errors.map(function (e) { return e && e.message; }).filter(Boolean).join('；') || msg;
+      }
+      throw new Error(msg);
+    } finally {
+      if (winner && winner.engine === 'turbo' && hordeJobId) {
+        try { await api('/' + encodeURIComponent(hordeJobId), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
+        run.job = null;
+      }
+    }
+  }
+
+  function resolveEngine() {
+    if (lockedImageProvider === 'turbo' || lockedImageProvider === 'horde') return lockedImageProvider;
+    var raw = value('出图引擎');
+    if (raw === 'turbo') return 'turbo';
+    if (raw === 'horde') return 'horde';
+    // auto / perchance (legacy redirect stub) / unknown → free race
+    return 'auto';
+  }
+
   async function execute(run, restored) {
     try {
       if (!restored) {
@@ -231,17 +397,16 @@
       if ($('说明英文')) $('说明英文').textContent = run.payload.prompt || '';
       while (run.completed < run.total) {
         ensureActive(run);
-        if (!restored) {
-          status('正在提交 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '服务器如刚启动可能稍慢；重复点击不会创建新任务。', true);
-          var payload = Object.assign({}, run.payload);
-          if (payload.seed !== '') payload.seed = String(Number(payload.seed) + run.completed);
-          // POST 不自动重试，防止网络抖动时重复创建任务或重复扣额度。
-          run.job = await api('', { method: 'POST', body: payload, timeoutMs: 90000 });
+        if (restored) {
+          var done = await poll(run, run.job);
+          status('图片已生成，正在加载', '', true);
+          await addImage(run, done.image, (done.provider || 'horde'));
+        } else {
+          var result = await generateOne(run, run.payload.prompt, run.completed);
+          ensureActive(run);
+          status('图片已生成，正在加载', '', true);
+          await addImage(run, result, result.engine);
         }
-        ensureActive(run);
-        var done = await poll(run, run.job);
-        status('图片已生成，正在加载', '', true);
-        await addImage(run, done.image);
         ensureActive(run);
         run.completed += 1;
         restored = false;
@@ -263,23 +428,20 @@
     return { description: description, total: total, completed: 0, payload: {}, job: null, cancelled: false, controller: new AbortController() };
   }
 
-  function openOfficial() {
-    status('在 Perchance 官网生成', 'Perchance 当前为官方网页通道；复制描述后打开官网生成。内置生成可选择其他平台。', false);
-    var copy = document.createElement('button');
-    copy.type = 'button'; copy.className = '次按钮'; copy.textContent = '复制画面描述';
-    copy.onclick = async function () {
-      try { await navigator.clipboard.writeText(value('角色描述')); copy.textContent = '已复制'; }
-      catch (e) { copy.textContent = '请长按描述框手动复制'; $('角色描述').focus(); }
-    };
-    var link = document.createElement('a');
-    link.href = officialUrl; link.target = '_top'; link.rel = 'noopener';
-    link.className = '次按钮'; link.textContent = '打开 Perchance 官网';
-    $('状态提示').append(copy, link);
-  }
-
   window.开始生成 = function () {
     if (active || $('生成按钮').disabled) return Promise.resolve();
-    if (window.当前引擎() === 'perchance') { openOfficial(); return Promise.resolve(); }
+    if (lockedImageProvider) {
+      var providerBox = $('出图引擎');
+      if (providerBox) {
+        if (lockedImageProvider === 'horde') providerBox.value = 'horde';
+        else if (lockedImageProvider === 'turbo') providerBox.value = 'turbo';
+        providerBox.disabled = true;
+      }
+    }
+    // Never open Perchance official site — remapped to in-app free race.
+    var engineBox = $('出图引擎');
+    if (engineBox && engineBox.value === 'perchance') engineBox.value = 'auto';
+
     var description = lastEdited === '英文描述' ? value('英文描述') : value('角色描述');
     if (!description) description = value('角色描述') || value('英文描述');
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
@@ -300,13 +462,21 @@
     };
     active = run; controls(true);
     $('图像输出').replaceChildren(); $('官方画廊').replaceChildren(); $('官方画廊').hidden = true;
-    window.设平台提示('horde');
+    window.设平台提示(resolveEngine());
     run.promise = execute(run, false);
     return run.promise;
   };
 
   window.开始随机生成 = function () {
     if (active || $('随机按钮').disabled) return Promise.resolve();
+    if (lockedImageProvider) {
+      var providerBox = $('出图引擎');
+      if (providerBox) {
+        if (lockedImageProvider === 'horde') providerBox.value = 'horde';
+        else if (lockedImageProvider === 'turbo') providerBox.value = 'turbo';
+        providerBox.disabled = true;
+      }
+    }
     var pair = window.本地随机一对();
     randomPair = { chinese: pair[0], english: pair[1] };
     $('角色描述').value = pair[0]; $('中文译文').value = pair[0]; $('英文描述').value = pair[1];
@@ -324,9 +494,13 @@
     status('正在取消', '等待服务器确认后即可开始下一次。', false);
   };
 
-  window.当前引擎 = function () { return value('出图引擎') === 'perchance' ? 'perchance' : 'horde'; };
+  window.当前引擎 = function () { return resolveEngine(); };
   window.设平台提示 = function (engine) {
-    $('平台提示').textContent = engine === 'perchance' ? 'Perchance · 官方网页通道' : 'AI Horde · 免费共享算力，繁忙时需要排队';
+    var tip = $('平台提示');
+    if (!tip) return;
+    if (engine === 'turbo') tip.textContent = 'Turbo · Pollinations 极速免费通道';
+    else if (engine === 'horde') tip.textContent = 'AI Horde · 免费共享算力，繁忙时需要排队';
+    else tip.textContent = '自动抢出 · Turbo + Horde 同时开跑，先到先得';
   };
 
   async function init() {
@@ -337,14 +511,28 @@
         randomPair = null;
       });
     });
-    $('出图引擎').addEventListener('change', function () { window.设平台提示(window.当前引擎()); });
+    var engineSelect = $('出图引擎');
+    if (engineSelect) {
+      // Drop legacy official-redirect option if still present in raw HTML before patches.
+      var perchanceOpt = engineSelect.querySelector('option[value="perchance"]');
+      if (perchanceOpt) perchanceOpt.remove();
+      if (!engineSelect.querySelector('option[value="auto"]')) {
+        var autoOpt = document.createElement('option');
+        autoOpt.value = 'auto'; autoOpt.textContent = '自动抢出 · Turbo+Horde';
+        engineSelect.insertBefore(autoOpt, engineSelect.firstChild);
+      }
+      if (!engineSelect.value || engineSelect.value === 'perchance') engineSelect.value = 'auto';
+      engineSelect.addEventListener('change', function () {
+        if (engineSelect.value === 'perchance') engineSelect.value = 'auto';
+        window.设平台提示(window.当前引擎());
+      });
+    }
     window.设平台提示(window.当前引擎());
     window.__sushiReady = true; window.__sushiLoadError = '';
     controls(true); $('取消生成按钮').hidden = true;
     status('正在连接生图服务', '如果服务器刚休眠，首次连接会自动等待并重试。', true);
     try {
       var results = await Promise.all([safeGet('/config', 2), safeGet('/current', 2)]);
-      officialUrl = results[0].perchanceUrl || officialUrl;
       if (results[1].job) {
         var run = newRun('', 1);
         run.job = results[1].job;
@@ -352,7 +540,7 @@
         run.promise = execute(run, true);
         return;
       }
-      status('生图服务已就绪', '可以开始生成图片。', false);
+      status('生图服务已就绪', '可以开始生成图片（自动抢出：Turbo + Horde）。', false);
     } catch (error) {
       status('暂时无法准备生图', error.message + ' 可稍后直接再次点击生成。', false);
     }

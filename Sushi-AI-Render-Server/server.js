@@ -581,7 +581,7 @@ app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
     const configured = new URL(process.env.PERCHANCE_URL || official);
     if (configured.protocol === 'https:' && configured.hostname === 'perchance.org' && !configured.username && !configured.password) official = configured.href;
   } catch { /* keep the official generator */ }
-  res.json({ provider: 'horde', free: true, maxWaitSeconds: 600, perchanceUrl: official });
+  res.json({ provider: 'auto', free: true, engines: ['turbo', 'horde'], maxWaitSeconds: 600, perchanceUrl: official });
 });
 app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
 app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {

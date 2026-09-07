@@ -53,6 +53,10 @@ async function setup(t, handler, imageFails = false) {
   await until(() => w.__sushiReady && !w.document.getElementById('生成按钮').disabled, 'workshop initialization');
   assert.deepEqual(errors, [], errors.map(e => e.message).join('\n'));
   w.document.getElementById('角色描述').value = 'A small cat by a sunny window';
+  // Default unit tests exercise the authenticated /api/images (Horde) path.
+  // Race/turbo coverage is in dedicated tests that mock Pollinations.
+  var engine = w.document.getElementById('出图引擎');
+  if (engine) engine.value = 'horde';
   return { w, calls, errors, text: () => w.document.getElementById('状态提示').textContent };
 }
 
@@ -118,17 +122,48 @@ test('the current Chinese prompt is translated before submission, never replaced
   assert.equal(payload.prompt, 'A small cat by the window');
 });
 
-test('failed translation preserves the current text, and explicit Perchance selection does not submit to Horde', async t => {
+test('failed translation preserves the current text, and legacy perchance selection stays in-app (no official redirect)', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('角色描述').value = '窗边的小猫';
   f.w.调用开源翻译 = async () => { throw new Error('translation offline'); };
+  // Force horde-only so unit test does not hit live Pollinations.
+  f.w.document.getElementById('出图引擎').value = 'horde';
   await f.w.开始生成();
   assert.equal(JSON.parse(f.calls.find(c => c.method === 'POST').body).prompt, '窗边的小猫');
+  const posts = f.calls.filter(c => c.method === 'POST').length;
+  // Legacy perchance value must remap to in-app race/auto — never window.open / official link.
   f.w.document.getElementById('出图引擎').value = 'perchance';
+  const opened = [];
+  f.w.open = (url) => { opened.push(url); return null; };
   await f.w.开始生成();
-  assert.equal(f.calls.filter(c => c.method === 'POST').length, 1);
-  assert.match(f.text(), /在 Perchance 官网生成/);
-  assert.equal(f.w.document.querySelector('#状态提示 a').href, 'https://perchance.org/ai-text-to-image-generator');
+  assert.equal(opened.length, 0, 'must not open perchance.org');
+  assert.equal(f.w.document.querySelectorAll('#状态提示 a[href*="perchance.org"]').length, 0);
+  assert.ok(f.calls.filter(c => c.method === 'POST').length >= posts);
+  assert.doesNotMatch(f.text(), /在 Perchance 官网生成/);
+});
+
+test('auto race prefers turbo without requiring official redirect', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('出图引擎').value = 'auto';
+  // Make turbo win immediately via mocked fetch to pollinations.
+  const realFetch = f.w.fetch;
+  f.w.fetch = async (url, options = {}) => {
+    if (String(url).includes('image.pollinations.ai')) {
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6JkAAAAASUVORK5CYII=', 'base64');
+      return {
+        ok: true,
+        status: 200,
+        blob: async () => new f.w.Blob([png], { type: 'image/png' })
+      };
+    }
+    return realFetch(url, options);
+  };
+  const opened = [];
+  f.w.open = (url) => { opened.push(String(url)); return null; };
+  await f.w.开始生成();
+  assert.equal(opened.length, 0);
+  assert.ok(f.w.document.querySelector('#图像输出 img'));
+  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'turbo');
 });
 
 test('failed image downloads show a reload action and do not silently create another paid/quota task', async t => {

@@ -11,16 +11,18 @@ function patchWorkshop(source) {
     /function 规范化出图平台\(值, 用户选过\) \{[\s\S]*?\n  \}/,
     'function 规范化出图平台(值, 用户选过) {\n' +
       '    值 = String(值 || "").trim();\n' +
-      '    var 可用 = ["perchance","turbo","flux","flux-real","zimage","sdxl","krea2","liblib","anishort","auto"];\n' +
+      '    var 可用 = ["auto","turbo","horde","flux","flux-real","zimage","sdxl","krea2","liblib","anishort"];\n' +
+      '    if (值 === "perchance" || 值 === "官方") return "auto";\n' +
       '    if (用户选过 && 可用.indexOf(值) >= 0) return 值;\n' +
-      '    return "perchance";\n' +
+      '    return "auto";\n' +
       '  }'
   );
 
   const providerOptions =
       '<select id="出图引擎" name="出图引擎">\n' +
-      '            <option value="perchance" selected>Perchance · 默认第一优先</option>\n' +
+      '            <option value="auto" selected>自动抢出 · Turbo+Horde</option>\n' +
       '            <option value="turbo">Turbo · 极速</option>\n' +
+      '            <option value="horde">Horde · 免费共享算力</option>\n' +
       '            <option value="flux">Flux · 通用高质量</option>\n' +
       '            <option value="flux-real">Flux 写实 · 人像优先</option>\n' +
       '            <option value="zimage">Z-Image · 中文友好</option>\n' +
@@ -28,15 +30,15 @@ function patchWorkshop(source) {
       '            <option value="krea2">Krea 2 · 高质量写实</option>\n' +
       '            <option value="liblib">LiblibAI · 模型/LoRA</option>\n' +
       '            <option value="anishort">AniShort · 角色/短剧</option>\n' +
-      '            <option value="auto">自动免费通道 · AI Horde 兜底</option>\n' +
       '          </select>';
   html = html.replace(/<select id="出图引擎" name="出图引擎">[\s\S]*?<\/select>/, providerOptions);
 
   html = html.replace(
     /<select id="管理默认平台"[\s\S]*?<\/select>/,
     '<select id="管理默认平台" onchange="保存默认平台(this.value, true)">\n' +
-      '              <option value="perchance" selected>Perchance · 默认第一优先</option>\n' +
+      '              <option value="auto" selected>自动抢出 · Turbo+Horde</option>\n' +
       '              <option value="turbo">Turbo</option>\n' +
+      '              <option value="horde">Horde</option>\n' +
       '              <option value="flux">Flux</option>\n' +
       '              <option value="flux-real">Flux 写实</option>\n' +
       '              <option value="zimage">Z-Image</option>\n' +
@@ -44,7 +46,6 @@ function patchWorkshop(source) {
       '              <option value="krea2">Krea 2</option>\n' +
       '              <option value="liblib">LiblibAI</option>\n' +
       '              <option value="anishort">AniShort</option>\n' +
-      '              <option value="auto">自动免费通道</option>\n' +
       '            </select>'
   );
 
@@ -77,10 +78,10 @@ function patchWorkshop(source) {
 <script id="sushi-provider-pack-v3">
 (function () {
   'use strict';
-  var priority = ['perchance','krea2','liblib','anishort','turbo','flux-real','flux','zimage','sdxl','auto'];
+  var priority = ['auto','turbo','horde','krea2','liblib','anishort','flux-real','flux','zimage','sdxl'];
   var labels = {
-    perchance:'Perchance', turbo:'Turbo', flux:'Flux', 'flux-real':'Flux 写实', zimage:'Z-Image', sdxl:'SDXL',
-    krea2:'Krea 2', liblib:'LiblibAI', anishort:'AniShort', auto:'AI Horde'
+    auto:'自动抢出', turbo:'Turbo', horde:'Horde', flux:'Flux', 'flux-real':'Flux 写实', zimage:'Z-Image', sdxl:'SDXL',
+    krea2:'Krea 2', liblib:'LiblibAI', anishort:'AniShort'
   };
   function el(id){ return document.getElementById(id); }
   function isPerchanceUrl(value) {
@@ -93,24 +94,29 @@ function patchWorkshop(source) {
       a.removeAttribute('href'); a.removeAttribute('target'); a.setAttribute('aria-disabled','true'); a.style.display='none';
     });
   }
-  function selected(){ var box=el('出图引擎'); return box ? box.value : 'perchance'; }
+  function selected(){ var box=el('出图引擎'); return box ? box.value : 'auto'; }
   function tipFor(name){
-    if(name==='perchance') return 'Perchance 默认第一优先 · APK 内运行；当前无直连时自动使用免费兜底通道';
+    if(name==='auto') return '自动抢出 · Turbo + Horde 同时开跑，先到先得';
+    if(name==='turbo') return 'Turbo · Pollinations 极速免费通道';
+    if(name==='horde') return 'AI Horde · 免费共享算力，繁忙时需要排队';
     if(name==='krea2') return 'Krea 2 · 配置官方 API 后直连；未配置时自动免费兜底';
     if(name==='liblib') return 'LiblibAI · 配置开放平台凭证后直连；未配置时自动免费兜底';
     if(name==='anishort') return 'AniShort · 当前无公开第三方生图 API，自动免费兜底';
-    if(name==='auto') return '自动免费通道 · AI Horde 兜底';
     return (labels[name]||name) + ' · 当前兼容模式，自动使用可用免费通道';
   }
   function updateTip(){ var tip=el('平台提示'); if(tip) tip.textContent=tipFor(selected()); }
   function installProviderSelect(){
     var box=el('出图引擎'); if(!box || box.__sushiV3) return;
     box.__sushiV3=true;
+    // Remove any leftover official-redirect option.
+    box.querySelectorAll('option[value="perchance"]').forEach(function(opt){ opt.remove(); });
     try {
       var saved=localStorage.getItem('角色生成器_默认平台');
-      if(priority.indexOf(saved)>=0) box.value=saved; else box.value='perchance';
-    } catch(e){ box.value='perchance'; }
+      if(saved==='perchance' || saved==='官方') saved='auto';
+      if(priority.indexOf(saved)>=0) box.value=saved; else box.value='auto';
+    } catch(e){ box.value='auto'; }
     box.addEventListener('change',function(){
+      if(box.value==='perchance') box.value='auto';
       try { localStorage.setItem('角色生成器_默认平台',box.value); } catch(e){}
       window.__sushiPreferredProvider=box.value; updateTip();
     });
@@ -122,14 +128,18 @@ function patchWorkshop(source) {
     var original=window.开始生成;
     window.开始生成=function(){
       var box=el('出图引擎');
-      var chosen=box ? box.value : 'perchance';
+      if(box && box.value==='perchance') box.value='auto';
+      var chosen=box ? box.value : 'auto';
       window.__sushiPreferredProvider=chosen;
-      if(!box || chosen==='auto') return original.apply(this,arguments);
-      box.value='auto';
-      var result;
-      try { result=original.apply(this,arguments); }
-      finally { box.value=chosen; try{localStorage.setItem('角色生成器_默认平台',chosen);}catch(e){} updateTip(); }
-      return result;
+      // Paid/stub providers without credentials fall back to free race for this run.
+      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='flux'||chosen==='flux-real'||chosen==='zimage'||chosen==='sdxl'){
+        if(box) box.value='auto';
+        var result;
+        try { result=original.apply(this,arguments); }
+        finally { if(box && !window.__sushiImageProviderLock){ box.value=chosen; try{localStorage.setItem('角色生成器_默认平台',chosen);}catch(e){} updateTip(); } }
+        return result;
+      }
+      return original.apply(this,arguments);
     };
   }
   function installHistoryMetadata(){
