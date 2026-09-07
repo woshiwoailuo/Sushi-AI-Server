@@ -70,11 +70,31 @@
         <label>
           生图平台
           <select id="出图引擎" name="出图引擎">
-            <option value="auto" selected>自动抢出 · Turbo+Horde</option>
-            <option value="turbo">Turbo · 极速</option>
-            <option value="horde">Horde · 免费共享算力</option>
+            <option value="perchance" selected>
+              Perchance 官方 · 默认
+            </option>
+            <option value="perchance">
+              Perchance 官方
+            </option>
+            <option value="turbo">
+              Turbo
+            </option>
+            <option value="flux-realism">
+              Flux写实 · 备用更像真人
+            </option>
+            <option value="flux">
+              Flux · 备用
+            </option>
+            <option value="sana">
+              Sana · 备用
+            </option>
+
+            <option value="horde">
+              群体计算 · 备用不跟 Pollinations 抢队列
+            </option>
           </select>
         </label>
+        <input id="备用引擎" type="hidden" value="turbo">
 
         <div class="核心操作">
 
@@ -102,9 +122,12 @@
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
-              <option value="auto" selected>自动抢出 · Turbo+Horde</option>
+              <option value="auto">自动抢出</option>
+              <option value="perchance">Perchance 官方</option>
               <option value="turbo">Turbo</option>
-              <option value="horde">Horde</option>
+              <option value="flux">Flux</option>
+              <option value="flux-realism">Flux写实</option>
+              <option value="sana">Sana</option>
             </select>
           </label>
           <label class="换背景行">
@@ -302,7 +325,7 @@
       >
 
       <details id="图生图区" class="分区">
-        <summary>插入图片 · 生成背景</summary>
+        <summary>图生图 / 换背景 · 粘贴即可</summary>
         <div class="翻译内容">
           <div
             id="贴图区"
@@ -317,7 +340,7 @@
               hidden
               onchange="读取参考图文件(this)"
             >
-            <p>插入参考图：点击选图，或 Ctrl+V / 拖入</p>
+            <p>在此 Ctrl+V 贴图，或拖入 / 点击选图</p>
             <img id="参考图预览" alt="参考图预览" hidden>
           </div>
           <input
@@ -335,14 +358,6 @@
             >
             <span>只换背景，人物、衣服、姿势尽量保持原图</span>
           </label>
-          <label class="换背景行">
-            <input
-              id="纯背景出图"
-              type="checkbox"
-              onchange="同步纯背景()"
-            >
-            <span>纯场景背景（不要人物）</span>
-          </label>
           <label>
             还原程度
             <select id="图生图强度" name="图生图强度">
@@ -352,9 +367,14 @@
               <option value="0.84">很高 · 几乎不改</option>
             </select>
           </label>
+          <label>
+            图生图平台
+            <select id="图生图平台" name="图生图平台" onchange="保存图生图平台(this.value)">
+              <option value="aihorde" selected>AI Horde · 真实图生图</option>
+              <option value="server-auto">服务器自动选择（当前 AI Horde）</option>
+            </select>
+          </label>
           <div class="核心操作">
-            <button type="button" class="次按钮" onclick="document.getElementById('参考图文件').click()">插入图片</button>
-            <button type="button" class="主按钮" onclick="一键生成背景()">生成背景</button>
             <button type="button" class="次按钮" onclick="清空参考图()">清除参考图</button>
           </div>
           <p id="图生图状态" class="说明文字"></p>
@@ -363,22 +383,27 @@
 
       <details id="问答区" class="分区" open>
         <summary>AI 对话</summary>
-        <div class="模式切换行" role="group" aria-label="对话模式">
-          <button type="button" class="模式钮 开" id="模式对话钮" onclick="切换聊天模式('对话')">对话</button>
-          <button type="button" class="模式钮" id="模式出图钮" onclick="切换聊天模式('出图')">出图</button>
-        </div>
-        <label>
-          通道
+          <label>
+            通道
           <select id="AI通道" onchange="对话通道已改()">
-            <option value="auto" selected>自动抢答</option>
-            <option value="turbo">Turbo</option>
-            <option value="fast">快答</option>
+            <option value="auto" selected>自动抢答 · 推荐</option>
+            <option value="openai">OpenAI 兼容模型</option>
+            <option value="openai-fast">快速模型</option>
+            <option value="turbo">Turbo 备用</option>
             <option value="horde">Horde</option>
           </select>
         </label>
         <label class="换背景行">
           <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
-          <span>记忆（默认开，记住设定与前情）</span>
+          <span>启用记忆</span>
+        </label>
+        <label>
+          记忆模式
+          <select id="记忆模式" onchange="切换记忆模式(this.value)">
+            <option value="short">短记忆 · 最近对话</option>
+            <option value="long" selected>长记忆 · 跨次保留</option>
+            <option value="off">关闭记忆</option>
+          </select>
         </label>
         <div id="对话列表" class="对话列表" aria-live="polite"></div>
         <div class="对话输入行">
@@ -388,7 +413,17 @@
         <div class="核心操作">
           <button type="button" class="次按钮" onclick="清空对话()">清空对话</button>
         </div>
-        <p id="聊天模式提示" class="说明文字">当前：对话 · 记忆开时会带上摘要与近轮记录</p>
+      </details>
+
+      <details id="工具区" class="分区">
+        <summary>实用小工具</summary>
+        <div class="核心操作">
+          <button type="button" class="次按钮" onclick="生成随机种子()">生成随机种子</button>
+          <button type="button" class="次按钮" onclick="复制当前提示()">复制当前提示</button>
+          <button type="button" class="次按钮" onclick="清理当前提示()">清理提示词</button>
+          <button type="button" class="次按钮" onclick="重置生成参数()">重置参数</button>
+        </div>
+        <p id="工具状态" class="说明文字">可快速生成种子、复制英文提示和恢复默认参数。</p>
       </details>
 
 
@@ -413,7 +448,7 @@
 
       </div>
 
-      <div id="状态提示" class="状态提示" role="status" aria-live="polite">
+      <div id="状态提示" class="状态提示">
 
         <div class="状态图标">✦</div>
 
@@ -425,12 +460,11 @@
 
       </div>
 
-      <button type="button" id="取消生成按钮" class="次按钮" onclick="取消生成()" hidden>取消本轮生成</button>
-      <div id="官方画廊" class="画廊" hidden></div>
+      <div id="官方画廊" class="画廊">[生成启动]</div>
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">自动抢出 · Turbo + Horde 同时开跑，先到先得</p>
+      <p id="平台提示" class="平台提示">生图平台：自动抢出 · 先到先得</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -464,7 +498,7 @@
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["auto", "turbo", "horde", "flux-realism", "flux", "sana"];
+  var 引擎顺序 = ["perchance", "turbo", "flux-realism", "flux", "sana"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -472,7 +506,8 @@
   var 进度成功 = 0;
   var 十八禁点击 = 0;
   var 十八禁行已开 = false;
-  var 用户选定平台 = "auto";
+  var 用户选定平台 = "perchance";
+  var 用户选定图生图平台 = "aihorde";
   var 本轮胜出 = "";
   var 管理员已解锁 = false;
   var 管理员口令 = "我是小笨蛋哦哦";
@@ -571,21 +606,21 @@
     恢复上次创作();
     填入待用提示();
     载入记忆开关();
-    载入聊天模式();
+    载入图生图平台();
     var 平台框 = document.getElementById("出图引擎");
     if (平台框) {
-      if (!平台框.value) 平台框.value = "auto";
-      用户选定平台 = 平台框.value || "auto";
+      if (!平台框.value) 平台框.value = "perchance";
+      用户选定平台 = 平台框.value || "perchance";
       平台框.addEventListener("change", function () {
-        用户选定平台 = 平台框.value || "auto";
+        用户选定平台 = 平台框.value || "perchance";
         保存默认平台(用户选定平台, true);
         本引擎已出张数 = 0;
         本平台成功 = 0;
         本平台失败 = 0;
         var 提示 = document.getElementById("分类状态");
         if (提示) 提示.textContent = 用户选定平台 === "auto"
-          ? "自动抢出：Turbo + Horde 同时开跑，先到先得。"
-          : (用户选定平台 === "turbo" ? "已选定 Turbo 极速通道。" : "已选定 AI Horde 免费生图。");
+          ? "自动抢出：各路一起跑，先出的留下。"
+          : ("已选定 " + 引擎名称(用户选定平台) + "，本轮只用这一路。");
       });
     }
     var 对话框 = document.getElementById("AI通道");
@@ -607,6 +642,7 @@
     监听画廊历史();
     载入对话();
     载入记忆摘要();
+    载入记忆模式();
     var 核框 = document.getElementById("角色描述");
     if (核框) {
       核框.addEventListener("input", function () {
@@ -687,9 +723,26 @@
   }
   function 规范化出图平台(值, 用户选过) {
     值 = String(值 || "").trim();
-    if (值 === "perchance" || 值 === "官方") return "auto";
-    if (值 === "turbo" || 值 === "horde") return 值;
-    return "auto";
+    if (!用户选过 && (!值 || 值 === "auto")) return "perchance";
+    return 值 || "perchance";
+  }
+
+  function 图生图平台键() {
+    var 邮箱 = (window.当前用户邮箱 || window.登录邮箱 || "").toString().trim().toLowerCase();
+    return "苏轼AI_图生图平台" + (邮箱 ? "_" + 邮箱 : "");
+  }
+  function 载入图生图平台() {
+    var 值 = "aihorde";
+    try { 值 = localStorage.getItem(图生图平台键()) || 值; } catch (e) {}
+    用户选定图生图平台 = 值 === "server-auto" ? "server-auto" : "aihorde";
+    var 框 = document.getElementById("图生图平台");
+    if (框) 框.value = 用户选定图生图平台;
+  }
+  function 保存图生图平台(值) {
+    用户选定图生图平台 = 值 === "server-auto" ? "server-auto" : "aihorde";
+    try { localStorage.setItem(图生图平台键(), 用户选定图生图平台); } catch (e) {}
+    var 状态 = document.getElementById("工具状态");
+    if (状态) 状态.textContent = "图生图平台已保存：" + (用户选定图生图平台 === "server-auto" ? "服务器自动选择（当前 AI Horde）" : "AI Horde");
   }
   function 规范化对话通道(值, 用户选过) {
     值 = String(值 || "").trim();
@@ -736,7 +789,7 @@
       var 平台 = 规范化出图平台(localStorage.getItem("角色生成器_默认平台"), 读取是否用户选过平台());
       if (平台框) {
         平台框.value = 平台;
-        用户选定平台 = 平台框.value || "auto";
+        用户选定平台 = 平台框.value || "perchance";
       }
       var 对话框 = document.getElementById("AI通道");
       var 通道 = 规范化对话通道(localStorage.getItem("角色生成器_对话通道"), 读取是否用户选过对话());
@@ -889,12 +942,12 @@
     ["生成按钮", "手机生成按钮"].forEach(function (id) {
       var 按钮 = document.getElementById(id);
       if (!按钮) return;
-      按钮.disabled = !!禁用;
-      if (文案) 按钮.textContent = id === "手机生成按钮" ? (禁用 ? "生成中…" : "生成图片") : (文案 || "生成角色图片");
+      按钮.disabled = false;
+      if (文案) 按钮.textContent = id === "手机生成按钮" ? "生成图片" : (文案 || "生成角色图片");
     });
     ["随机按钮", "手机随机按钮"].forEach(function (id) {
       var 按钮 = document.getElementById(id);
-      if (按钮) 按钮.disabled = !!禁用;
+      if (按钮) 按钮.disabled = false;
     });
   }
 
@@ -1136,6 +1189,11 @@
     var 邮 = 读取登录邮箱();
     return 邮 ? 基 + "_" + 邮 : 基;
   }
+  function 记忆模式键() {
+    var 基 = "苏轼AI_记忆模式";
+    var 邮 = 读取登录邮箱();
+    return 邮 ? 基 + "_" + 邮 : 基;
+  }
   function 记忆摘要键() {
     var 基 = "苏轼AI_记忆摘要";
     var 邮 = 读取登录邮箱();
@@ -1143,6 +1201,7 @@
   }
   var 记忆摘要 = "";
   function 记忆已开() {
+    if (记忆模式值() === "off") return false;
     try {
       var v = localStorage.getItem(记忆开键());
       if (v === "0" || v === "off") return false;
@@ -1154,14 +1213,40 @@
     if (开) 开.checked = 记忆已开();
   }
   function 切换记忆(开) {
-    try { localStorage.setItem(记忆开键(), 开 ? "1" : "0"); } catch (e) {}
+    try {
+      localStorage.setItem(记忆开键(), 开 ? "1" : "0");
+      if (!开) localStorage.setItem(记忆模式键(), "off");
+      else if (记忆模式值() === "off") localStorage.setItem(记忆模式键(), "long");
+    } catch (e) {}
+    载入记忆模式();
+  }
+  function 记忆模式值() {
+    try {
+      var v = localStorage.getItem(记忆模式键()) || "long";
+      return v === "short" || v === "long" || v === "off" ? v : "long";
+    } catch (e) { return "long"; }
+  }
+  function 载入记忆模式() {
+    var 模式 = document.getElementById("记忆模式");
+    var 开 = document.getElementById("记忆开关");
+    var 值 = 记忆模式值();
+    if (模式) 模式.value = 值;
+    if (开) 开.checked = 值 !== "off" && 记忆已开();
+  }
+  function 切换记忆模式(值) {
+    值 = 值 === "short" || 值 === "off" ? 值 : "long";
+    try {
+      localStorage.setItem(记忆模式键(), 值);
+      localStorage.setItem(记忆开键(), 值 === "off" ? "0" : "1");
+    } catch (e) {}
+    载入记忆开关();
   }
   function 载入记忆摘要() {
     记忆摘要 = "";
     try { 记忆摘要 = String(localStorage.getItem(记忆摘要键()) || ""); } catch (e) { 记忆摘要 = ""; }
   }
   function 写记忆摘要(文) {
-    记忆摘要 = String(文 || "").slice(-1600);
+    记忆摘要 = String(文 || "").slice(-800);
     try { localStorage.setItem(记忆摘要键(), 记忆摘要); } catch (e) {}
   }
   function 滚动写入记忆(用户文, 助手文) {
@@ -1187,19 +1272,20 @@
     if (记忆已开() && 记忆摘要) {
       列.push({
         role: "system",
-        content: "用简体中文回复。延续以下角色记忆（姓名、关系、正在发生的事）：" + String(记忆摘要).slice(-1600)
+        content: "用简体中文回复。延续以下角色记忆（姓名、关系、正在发生的事）：" + String(记忆摘要).slice(-800)
       });
     } else {
       列.push({ role: "system", content: "用简体中文回复，不要突然改成英文。" });
     }
     if (!正在预载 && 记忆已开()) {
-      var 起 = Math.max(0, 对话历史.length - 20);
+      var 保留 = 记忆模式值() === "long" ? 40 : 12;
+      var 起 = Math.max(0, 对话历史.length - 保留);
       for (i = 起; i < 对话历史.length; i++) {
         var 项 = 对话历史[i];
         if (!项 || !项.text) continue;
         列.push({
           role: 项.role === "user" ? "user" : "assistant",
-          content: String(项.text).slice(0, 800)
+          content: String(项.text).slice(0, 520)
         });
       }
     }
@@ -1212,12 +1298,13 @@
 
   function 组装群体提示(问句) {
     var 文 = "### System:\n用简体中文回复。";
-    if (记忆已开() && 记忆摘要) 文 += "角色记忆：" + String(记忆摘要).slice(-1600);
+    if (记忆已开() && 记忆摘要) 文 += "角色记忆：" + String(记忆摘要).slice(-800);
     文 += "\n";
     var i = 0;
     var 片 = "### User:\n" + String(问句 || "").slice(0, 800) + "\n### Assistant:\n";
     if (!正在预载 && 记忆已开()) {
-      var 起 = Math.max(0, 对话历史.length - 20);
+      var 保留 = 记忆模式值() === "long" ? 30 : 10;
+      var 起 = Math.max(0, 对话历史.length - 保留);
       for (i = 起; i < 对话历史.length; i++) {
         var 项 = 对话历史[i];
         if (!项 || !项.text) continue;
@@ -1364,78 +1451,6 @@
     });
   }
 
-
-  var 聊天模式 = "对话";
-  function 切换聊天模式(模式) {
-    聊天模式 = 模式 === "出图" ? "出图" : "对话";
-    var a = document.getElementById("模式对话钮");
-    var b = document.getElementById("模式出图钮");
-    if (a) a.classList.toggle("开", 聊天模式 === "对话");
-    if (b) b.classList.toggle("开", 聊天模式 === "出图");
-    var 问 = document.getElementById("AI问题");
-    var 钮 = document.getElementById("对话发送钮");
-    var 提示 = document.getElementById("聊天模式提示");
-    if (问) 问.placeholder = 聊天模式 === "出图" ? "描述要画的画面，发送后直接出图…" : "输入想问的话…";
-    if (钮) 钮.textContent = 聊天模式 === "出图" ? "出图" : "发送";
-    if (提示) 提示.textContent = 聊天模式 === "出图"
-      ? "当前：出图 · 发送后会把文字送进自动抢出画图"
-      : "当前：对话 · 记忆开时会带上摘要与近轮记录";
-    try { localStorage.setItem("苏轼AI_聊天模式", 聊天模式); } catch (e) {}
-  }
-  function 载入聊天模式() {
-    var m = "对话";
-    try { m = localStorage.getItem("苏轼AI_聊天模式") || "对话"; } catch (e) {}
-    切换聊天模式(m);
-  }
-  function 同步纯背景() {
-    var 纯 = document.getElementById("纯背景出图");
-    var 勾 = document.getElementById("只换背景");
-    if (纯 && 纯.checked) {
-      if (勾) 勾.checked = false;
-      设图生图状态("纯场景背景：出图时尽量不要人物，只画环境。");
-    } else {
-      设图生图状态("已关闭纯背景。可再勾选「只换背景」保留人物。");
-    }
-  }
-  function 一键生成背景() {
-    var 区 = document.getElementById("图生图区");
-    if (区) { 区.open = true; 区.hidden = false; }
-    var 核心 = document.getElementById("角色描述");
-    var 纯 = document.getElementById("纯背景出图");
-    var 勾 = document.getElementById("只换背景");
-    if (有参考图()) {
-      if (纯) 纯.checked = false;
-      if (勾) { 勾.checked = true; 同步换背景强度(); }
-      if (核心 && !(核心.value || "").trim()) {
-        核心.value = "背景换成宁静雪山与晨雾，人物保持原样";
-      }
-      设图生图状态("已准备换背景：保留参考图人物，改场景后开始生成。");
-    } else {
-      if (纯) 纯.checked = true;
-      if (勾) 勾.checked = false;
-      if (核心 && !(核心.value || "").trim()) {
-        核心.value = "空旷的电影感场景背景，没有人物，只有环境与光线";
-      }
-      设图生图状态("无参考图：按纯场景背景出图。");
-    }
-    try { 开始生成(); } catch (e) { 设图生图状态("生成未能启动，请再试一次。"); }
-  }
-  async function 从对话出图(文本) {
-    var 核心 = document.getElementById("角色描述");
-    if (核心) 核心.value = String(文本 || "").trim();
-    var 框 = document.getElementById("出图引擎");
-    if (框 && (!框.value || 框.value === "krea2" || 框.value === "anishort" || 框.value === "lib" || 框.value === "liblib")) {
-      框.value = "auto";
-    }
-    追加对话气泡("assistant", "正在按这段描述出图…", "出图", false);
-    try {
-      await 开始生成();
-      return "已按你的描述开始出图，请看下方画廊。";
-    } catch (e) {
-      return "出图没能启动：" + String(e && e.message ? e.message : e);
-    }
-  }
-
   async function 提问AI() {
     if (正在回答对话) return;
     var 问 = document.getElementById("AI问题");
@@ -1451,18 +1466,6 @@
     对话历史.push(用户项);
     保存对话历史();
     追加对话气泡("user", 文本, 选择通道, false);
-    
-    if (聊天模式 === "出图") {
-      var 出回复 = "";
-      try { 出回复 = await 从对话出图(文本); } catch (e) { 出回复 = "出图失败，请稍后再试。"; }
-      var 出项 = { role: "assistant", text: 出回复, channel: "出图", t: Date.now() };
-      对话历史.push(出项);
-      保存对话历史();
-      滚动写入记忆(文本, 出回复);
-      追加对话气泡("assistant", 出回复, "出图", false);
-      正在回答对话 = false;
-      return;
-    }
     var 等待 = 追加对话气泡("assistant", "正在回答…", "", true);
     对话末通道 = "";
     var 回复 = "";
@@ -1689,10 +1692,6 @@
 
   function 补换背景英文(英文) {
     var 文本 = String(英文 || "").trim();
-    var 纯 = document.getElementById("纯背景出图");
-    if (纯 && 纯.checked) {
-      return "empty scenic environment background only, no people, no characters, no humans, no faces, cinematic atmosphere, " + (文本 || "serene mountain landscape at dawn");
-    }
     if (!正在换背景()) return 文本;
     var 锁定 =
       "use the reference photo as the base, keep the exact same person, same face, same hair, same body shape, same clothing, same pose, same crop and camera angle, do not redraw the subject, only replace the background scene, seamless foreground edge against the new background, " +
@@ -1856,11 +1855,37 @@
     return 项;
   }
 
-  function 预载一条() {
-    while (预载描写.length < 3) {
+  async function 预载一条() {
+    if (正在预载 || 预载描写.length >= 3) return;
+    if (正在生成图片) return;
+    正在预载 = true;
+    var 项 = null;
+    try {
+      项 = 解析AI两行(await 问免费模型("雨夜街头一名成年女人撑伞。\nA fictional adult woman with an umbrella on a rainy night street, photoreal photo.\n再写一组全新的，只要上面这种两行。", "auto"));
+    } catch (e) {}
+    if (!项) {
       var p = 本地随机一对();
-      预载描写.push({ 中文: p[0], 英文: p[1] });
+      项 = new Object();
+      项.中文 = p[0];
+      项.英文 = p[1];
     }
+    预载描写.push(项);
+    if (!预载图 && !正在生成图片) 预热出图(项.英文);
+    正在预载 = false;
+    if (预载描写.length < 3 && !正在生成图片) setTimeout(预载一条, 800);
+  }
+
+  function 预热出图(英文) {
+    if (!英文 || 正在生成图片) return;
+    var 图 = new Image();
+    图.onload = function () {
+      if (预载图) return;
+      预载图 = new Object();
+      预载图.英文 = 英文;
+      预载图.src = 图.src;
+    };
+    var 提示 = encodeURIComponent((写实提示(英文) || "photo").slice(0, 500));
+    图.src = 写实根址[0] + "?k=" + encodeURIComponent(工坊票据()) + "&prompt=" + 提示 + "&model=turbo&width=768&height=768&nologo=true&enhance=false&safe=false&seed=" + Math.floor(Math.random() * 1e9);
   }
 
   function 取出预载() {
@@ -1872,6 +1897,29 @@
       项.英文 = p[1];
     }
     return 项;
+  }
+
+  function 写出安全英文() {
+    var 英 = document.getElementById("英文描述");
+    var 核 = document.getElementById("角色描述");
+    var 安 = document.getElementById("安全英文");
+    var 文 = "";
+    if (有参考图()) {
+      var 参考描述 = (英 && 英.value) || (核 && 核.value) || "replace the background with a natural cinematic scene";
+      文 = 补换背景英文(只留英文(去掉方括号(参考描述)));
+    } else {
+      文 = 只留英文(去掉方括号((英 && 英.value) || ""));
+      if (!文) {
+        var 核文 = 去掉方括号((核 && 核.value) || "");
+        文 = 含中文(核文) ? 去重描述(核文) : 只留英文(核文);
+      }
+    }
+    文 = 去重描述(文);
+    if (!文 || /女性[:：]\s*[\d.]+/.test(文) || (文.match(/\d/g) || []).length >= 12) {
+      文 = "photoreal cinematic photo of a fictional adult, natural light, DSLR";
+    }
+    if (安) 安.value = 文;
+    return 文;
   }
 
   function 像画面描述(文) {
@@ -1912,6 +1960,273 @@
     return 去重描述(文).replace(/[\u4e00-\u9fff]+/g, " ").replace(/\s+/g, " ").trim();
   }
 
+  function 清空本轮画廊() {
+    var ids = ["图像输出", "抢出备用", "抢出探测", "上次画廊"];
+    var i = 0;
+    for (i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el) el.innerHTML = "";
+    }
+  }
+
+  function 选定抢出平台(引擎) {
+    if (抢出已定) return;
+    抢出已定 = true;
+    本轮抢出 = false;
+    本轮胜出 = 引擎 || "turbo";
+    var 框 = document.getElementById("出图引擎");
+    var 用户选 = (框 && 框.value) || 用户选定平台 || "auto";
+    if (用户选 !== "auto") {
+      用户选定平台 = 用户选;
+    }
+    设平台提示(本轮胜出);
+    var 隐 = document.getElementById("抢出探测");
+    if (隐) 隐.innerHTML = "";
+    var 备 = document.getElementById("抢出备用");
+    if (备) 备.innerHTML = "";
+    var 输出区 = document.getElementById("图像输出");
+    if (输出区) 输出区.style.visibility = "";
+    计划张数 = 抢出目标张数 || 计划张数 || 1;
+    if (引擎 !== "perchance") {
+      if (生成检查器) { clearInterval(生成检查器); 生成检查器 = null; }
+      var 官 = document.getElementById("官方画廊");
+      if (官) 官.style.display = "none";
+      if (输出区) 输出区.style.visibility = "";
+      var 已好 = 0;
+      if (输出区) {
+        var 图们 = 输出区.querySelectorAll("img");
+        var i = 0;
+        for (i = 0; i < 图们.length; i++) {
+          if (图们[i].complete && 图们[i].naturalWidth) 已好 += 1;
+        }
+      }
+      if (已好 > 0) {
+        if (计划张数 <= 已好) 结束本次生成("生成角色图片");
+        return;
+      }
+      清空本轮画廊();
+      if (引擎 === "horde") 用群体出图();
+      else 用写实引擎出图(引擎, 0);
+    } else {
+      var 官 = document.getElementById("官方画廊");
+      if (官) 官.style.display = "";
+      if (计划张数 > 1) 用官方插件出图();
+    }
+  }
+
+
+  async function 开始随机生成() {
+    正在生成图片 = false;
+    var 描述框 = document.getElementById("角色描述");
+    var 英文框 = document.getElementById("英文描述");
+    var 中文框 = document.getElementById("中文译文");
+    var 项 = 取出预载();
+    var 中文 = 项.中文;
+    var 英文 = 项.英文;
+    if (描述框) 描述框.value = 中文;
+    if (英文框) 英文框.value = 英文;
+    if (中文框) 中文框.value = 中文;
+    写出安全英文();
+    刷新画面说明();
+    即将抢出 = true;
+    抢出已定 = false;
+    本轮胜出 = "";
+    开始生成();
+  }
+
+  function 开始智能分类() {
+    var 核心描述 = document.getElementById("角色描述");
+    var 分类输出 = document.getElementById("分类输出");
+    var 分类状态 = document.getElementById("分类状态");
+    var 执行分类 = document.getElementById("执行分类");
+
+    if (正在执行分类) {
+      return;
+    }
+
+    if (!核心描述.value.trim()) {
+      alert("请先填写完整的核心描述。");
+      核心描述.focus();
+      return;
+    }
+
+    正在执行分类 = true;
+    执行分类.value = String(Date.now());
+    分类状态.textContent = "正在出图。AI 同时在整理画面细节。";
+
+    try {
+      update(分类输出);
+    } catch (错误) {
+      正在执行分类 = false;
+      分类后继续生成 = false;
+      分类状态.textContent = "自动整理未启动，已按核心描述出图。";
+      console.error(错误);
+    }
+  }
+
+  function 自动接收分类(返回内容) {
+    var 分类状态 = document.getElementById("分类状态");
+
+    try {
+      var 文本 = String(返回内容 || "")
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+
+      var 开始位置 = 文本.indexOf("{");
+      var 结束位置 = 文本.lastIndexOf("}");
+
+      if (开始位置 === -1 || 结束位置 === -1) {
+        throw new Error("AI没有返回JSON对象");
+      }
+
+      文本 = 文本.slice(开始位置, 结束位置 + 1);
+      var 分类数据 = JSON.parse(文本);
+
+      var 字段名称 = [
+        "角色姓名",
+        "身份职业",
+        "年龄阶段",
+        "性别气质",
+        "脸部特征",
+        "发型发色",
+        "体型特征",
+        "服装配饰",
+        "表情情绪",
+        "动作姿势",
+        "场景环境",
+        "构图景别",
+        "镜头视角",
+        "光线氛围",
+        "色彩方案",
+        "艺术风格",
+        "补充细节"
+      ];
+
+      字段名称.forEach(function (名称) {
+        var 元素 = document.getElementById(名称);
+        var 新内容 = 分类数据[名称];
+        if (!元素 || 新内容 == null || String(新内容).trim() === "") {
+          return;
+        }
+        元素.value = String(新内容).trim();
+      });
+
+      分类状态.textContent = "画面已自动整理，正在出图。";
+    } catch (错误) {
+      console.error("自动分类失败：", 错误, 返回内容);
+      分类状态.textContent = "自动整理未完成，改为按核心描述直接出图。";
+    } finally {
+      正在执行分类 = false;
+      分类后继续生成 = false;
+    }
+  }
+
+  async function 开始官方生成() {
+    走备用线路 = false;
+    var 框 = document.getElementById("出图引擎");
+    if (框) 框.value = "perchance";
+    用户选定平台 = "perchance";
+    await 开始生成();
+  }
+
+  async function 开始备用生成() {
+    走备用线路 = true;
+    var 备 = document.getElementById("备用引擎");
+    用户选定平台 = (备 && 备.value) || "turbo";
+    await 开始生成();
+  }
+
+  async function 开始生成() {
+    var 令牌 = ++出图令牌;
+    本轮抢出 = (!!即将抢出 || 当前引擎() === "auto") && !有参考图();
+    即将抢出 = false;
+    本轮胜出 = "";
+    if (生成检查器) { clearInterval(生成检查器); 生成检查器 = null; }
+    正在生成图片 = true;
+
+    var 描述框 = document.getElementById("角色描述");
+    var 英文框 = document.getElementById("英文描述");
+    if (描述框) 描述框.value = 去掉方括号(描述框.value);
+    if (英文框) 英文框.value = 去掉方括号(英文框.value);
+    if (!有参考图() && (!描述框 || !描述框.value.trim())) {
+      alert("请先填写角色的核心描述，或点随机生成图片。");
+      if (描述框) 描述框.focus();
+      return;
+    }
+
+    var 核心 = 描述框 ? 描述框.value.trim() : "";
+    写出安全英文();
+    刷新画面说明();
+    真正生成图片(令牌);
+    if (!有参考图() && 核心 && 含中文(核心)) {
+      var 现英 = 英文框 ? (英文框.value || "").trim() : "";
+      if (!现英 || !像画面描述(现英) || 含中文(现英)) {
+        调用开源翻译(核心, "en").then(function (译) {
+          if (英文框 && 译) 英文框.value = 去掉方括号(译);
+        }).catch(function () {});
+      }
+    }
+  }
+
+
+  function 结束本次生成(文案, 成功) {
+    if (生成检查器) {
+      clearInterval(生成检查器);
+      生成检查器 = null;
+    }
+    正在生成图片 = false;
+    setTimeout(预载一条, 600);
+    var 状态区 = document.getElementById("状态提示");
+    if (状态区 && 成功 !== false) {
+      状态区.style.display = "none";
+    }
+    设置生成按钮状态(false, "生成角色图片");
+  }
+
+  function 显示全部失败() {
+    if (生成检查器) {
+      clearInterval(生成检查器);
+      生成检查器 = null;
+    }
+    正在生成图片 = false;
+    设置生成按钮状态(false, "重新生成角色图片");
+    var 状态区 = document.getElementById("状态提示");
+    if (状态区) {
+      状态区.style.display = "flex";
+      状态区.innerHTML =
+        '<div class="状态图标">!</div>' +
+        "<b>三家机房均出图失败</b>" +
+        "<p>请稍后重试，或简化描述后再生成。</p>";
+    }
+    var 提示 = document.getElementById("分类状态");
+    if (提示) 提示.textContent = "已试完全部免费机房，都没有成功。";
+  }
+
+  function 下一个未试引擎() {
+    var 起点 = 当前引擎();
+    var 下标 = 引擎顺序.indexOf(起点);
+    if (下标 < 0) 下标 = 0;
+    for (var i = 1; i <= 引擎顺序.length; i++) {
+      var 候选 = 引擎顺序[(下标 + i) % 引擎顺序.length];
+      if (本轮已试引擎.indexOf(候选) === -1) return 候选;
+    }
+    return "";
+  }
+
+  function 切换备用引擎(原因) {
+    记录失败原因(原因);
+    结束本次生成("生成角色图片", false);
+  }
+
+  function 图片生成完成() {
+    已完成张数 += 1;
+    if (已完成张数 >= 计划张数) {
+      结束本次生成("生成角色图片");
+    }
+  }
+  try { window.图片生成完成 = 图片生成完成; } catch (e) {}
+
   function 解析尺寸() {
     var 值 = (document.getElementById("图像比例") || {}).value || "512x512";
     var 段 = String(值).split("x");
@@ -1924,6 +2239,19 @@
   function 有参考图() {
     var 地址 = document.getElementById("参考图地址");
     return !!(地址 && (地址.value || "").trim());
+  }
+
+  function 当前引擎() {
+    var 框 = document.getElementById("出图引擎");
+    var 值 = (框 && 框.value) || 用户选定平台 || "perchance";
+    if (有参考图()) return "perchance";
+    return 值 || "auto";
+  }
+
+
+  function 立即更换出图平台() {
+    记录失败原因("出图失败，仍使用当前平台");
+    结束本次生成("生成角色图片", false);
   }
 
   var 历史键 = "角色生成器_生成历史";
@@ -2073,7 +2401,7 @@
     if (区) 图们 = 区.getElementsByTagName("img");
     if ((!图们 || !图们.length) && 官) 图们 = 官.getElementsByTagName("img");
     if (!图们.length) {
-      alert("还没有可下载的图片，请先完成生成。");
+      alert("还没有可下载的图片。官方插件出的图请先点开原图再另存。");
       return;
     }
     var i = 0;
@@ -2098,8 +2426,8 @@
       flux: "Flux",
       "flux-realism": "Flux写实",
       sana: "Sana",
-      horde: "AI Horde 免费生图",
-      perchance: "自动抢出"
+      horde: "群体计算",
+      perchance: "Perchance 官方"
     };
     return 真[值] || 值;
   }
@@ -2124,7 +2452,7 @@
   }
 
   function 保存默认平台(值, 用户选的) {
-    用户选定平台 = 值 || "auto";
+    用户选定平台 = 值 || "perchance";
     var 框 = document.getElementById("出图引擎");
     if (框) 框.value = 用户选定平台;
     try {
@@ -2150,6 +2478,50 @@
   function 切换区块(id, 开) {
     var 区 = document.getElementById(id);
     if (区) 区.hidden = !开;
+  }
+
+  function 工具提示(文案) {
+    var 状态 = document.getElementById("工具状态");
+    if (状态) 状态.textContent = 文案 || "";
+  }
+  function 生成随机种子() {
+    var 框 = document.getElementById("随机种子");
+    if (!框) return;
+    var 值 = Math.floor(Math.random() * 2147483646) + 1;
+    框.value = String(值);
+    工具提示("已生成新随机种子：" + 值);
+  }
+  async function 复制当前提示() {
+    var 框 = document.getElementById("英文描述");
+    var 文 = String((框 && 框.value) || document.getElementById("角色描述").value || "").trim();
+    if (!文) return 工具提示("当前还没有可复制的提示词。");
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(文);
+      else { 框.focus(); 框.select(); document.execCommand("copy"); }
+      工具提示("当前提示词已复制。");
+    } catch (e) { 工具提示("复制失败，请手动选择文字复制。"); }
+  }
+  function 清理当前提示() {
+    ["角色描述", "英文描述", "中文译文"].forEach(function (id) {
+      var 框 = document.getElementById(id);
+      if (框) 框.value = 去掉方括号(框.value).replace(/\s+/g, " ").trim();
+    });
+    刷新画面说明();
+    工具提示("已清理多余空格和括号，未删除主要描述。");
+  }
+  function 重置生成参数() {
+    var 默认值 = {
+      "出图引擎": "perchance", "图像比例": "512x512", "生成数量": "1",
+      "引导强度": "7", "图生图强度": "0.52"
+    };
+    Object.keys(默认值).forEach(function (id) {
+      var 框 = document.getElementById(id);
+      if (框) 框.value = 默认值[id];
+    });
+    用户选定平台 = "perchance";
+    同步换背景强度();
+    设平台提示("perchance");
+    工具提示("已恢复推荐参数，核心描述和历史记录未改变。");
   }
 
   function 刷新十八禁开关() {
@@ -2201,14 +2573,440 @@
     刷新出图进度(本平台成功 + 本平台失败, 本平台成功);
   }
 
+  var 写实根址 = [
+    "/api/workshop/image"
+  ];
+
+  function 工坊票据() {
+    try { return new URLSearchParams(location.search).get("k") || ""; }
+    catch (e) { return ""; }
+  }
+
+  function 写实提示(英文) {
+    var 文 = String(英文 || "").trim();
+    var 核 = ((document.getElementById("角色描述") || {}).value || "") + ((document.getElementById("英文描述") || {}).value || "");
+    var 尾 = ", RAW photo, sharp focus, real human, not anime";
+    if (/性爱|插入|抽插|口交|后入|骑乘|性交|做爱|sex|penetrat|oral|doggy|cowgirl/i.test(核)) {
+      尾 += ", explicit adult sex";
+    }
+    return 去重描述(文) + 尾;
+  }
+
+  function 构建写实图址(英文, 种子, 模型, 根号) {
+    var 尺寸 = 解析尺寸();
+    var 提示 = encodeURIComponent(写实提示(英文).slice(0, 1400));
+    var 号 = Number(根号) || 0;
+    if (号 < 0 || 号 >= 写实根址.length) 号 = 0;
+    return 写实根址[0] +
+      "?k=" + encodeURIComponent(工坊票据()) +
+      "&prompt=" + 提示 +
+      "&model=" + encodeURIComponent(模型) +
+      "&width=" + 尺寸.宽 +
+      "&height=" + 尺寸.高 +
+      "&seed=" + 种子 +
+      "&nologo=true&enhance=false&safe=false";
+  }
+
+  function 用写实引擎出图(模型, 已有) {
+    var 输出区 = document.getElementById("图像输出");
+    var 状态区 = document.getElementById("状态提示");
+    var 英文框 = document.getElementById("英文描述");
+    var 种子框 = document.getElementById("随机种子");
+    var 安 = document.getElementById("安全英文");
+    var 英文 = (安 && 安.value) || (英文框 && 英文框.value) || "";
+    英文 = String(英文).trim();
+    var 基础种子 = Number(种子框 && 种子框.value) || Math.floor(Math.random() * 2147483646);
+    已有 = Number(已有) || 0;
+    if (已有 <= 0) 输出区.innerHTML = "";
+    状态区.style.display = "flex";
+    状态区.innerHTML =
+      '<div class="加载动画"></div>' +
+      "<b>正在用 " + 引擎名称(模型) + " 生成 " + 计划张数 + " 张</b>" +
+      "<p>Pollinations 一次只排 1 张，正在按张出。</p>";
+    var 完成 = 已有;
+    var 成功 = 已有;
+    var 序号 = 已有;
+    function 出下一张() {
+      if (当前出图令牌 !== 出图令牌) return;
+      if (完成 >= 计划张数) {
+        if (成功 > 0) 结束本次生成("生成角色图片");
+        else 切换备用引擎(引擎名称(模型) + " 全部失败");
+        return;
+      }
+      var 本号 = 序号;
+      序号 += 1;
+      var 图 = document.createElement("img");
+      图.alt = "生成结果 " + 本号;
+      图.setAttribute("data-engine", 模型);
+      图._根号 = 0;
+      图.onload = function () {
+        if (当前出图令牌 !== 出图令牌) return;
+        if (本轮胜出 && 本轮胜出 !== 模型) return;
+        if (!抢出已定 && (本轮抢出 || 当前引擎() === "auto")) 选定抢出平台(模型);
+        if (本轮胜出 && 本轮胜出 !== 模型) return;
+        成功 += 1;
+        完成 += 1;
+        记一张结果(true);
+        刷新出图进度(完成, 成功);
+        出下一张();
+      };
+      图.onerror = function () {
+        if (当前出图令牌 !== 出图令牌) return;
+        图._根号 += 1;
+        if (图._根号 < 写实根址.length) {
+          图.src = 构建写实图址(英文, 基础种子 + 本号 * 97, 模型, 图._根号);
+          return;
+        }
+        完成 += 1;
+        记一张结果(false);
+        刷新出图进度(完成, 成功);
+        出下一张();
+      };
+      图.referrerPolicy = "no-referrer";
+      图.decoding = "async";
+      图.src = 构建写实图址(英文, 基础种子 + 本号 * 97, 模型, 0);
+      输出区.appendChild(图);
+      setTimeout(function () {
+        if (!图.complete || !图.naturalWidth) 图.dispatchEvent(new Event("error"));
+      }, 22000);
+    }
+    出下一张();
+  }
+
+  function 用写实引擎追加(模型) {
+    var 英文框 = document.getElementById("英文描述");
+    var 安 = document.getElementById("安全英文");
+    var 种子框 = document.getElementById("随机种子");
+    var 英文 = ((安 && 安.value) || (英文框 && 英文框.value) || "").trim();
+    var 基础种子 = Number(种子框 && 种子框.value) || Math.floor(Math.random() * 2147483646);
+    var 隐 = document.getElementById("抢出探测");
+    if (!隐) {
+      隐 = document.createElement("div");
+      隐.id = "抢出探测";
+      隐.hidden = true;
+      document.body.appendChild(隐);
+    }
+    var 图 = document.createElement("img");
+    图.alt = "";
+    图.onload = function () {
+      if (当前出图令牌 !== 出图令牌) return;
+      if (抢出已定) return;
+      选定抢出平台(模型);
+    };
+    图.onerror = function () {};
+    var 尺寸 = 解析尺寸();
+    var 提示 = encodeURIComponent((写实提示(英文) || "photo").slice(0, 400));
+    图.src = 写实根址[0] + "?k=" + encodeURIComponent(工坊票据()) + "&prompt=" + 提示 + "&model=" + encodeURIComponent(模型) + "&width=256&height=256&seed=" + 基础种子 + "&nologo=true&enhance=false&safe=false";
+    隐.appendChild(图);
+  }
+
+  async function 群体出一张(英文) {
+    var 尺寸 = 解析尺寸();
+    var w = Math.min(768, Math.max(512, Math.round((尺寸.宽 || 512) / 64) * 64));
+    var h = Math.min(768, Math.max(512, Math.round((尺寸.高 || 512) / 64) * 64));
+    var 体 = new Object();
+    体.prompt = (写实提示(英文) || "photo").slice(0, 1000);
+    体.nsfw = true;
+    体.censor_nsfw = false;
+    var 参 = new Object();
+    参.n = 1;
+    参.width = w;
+    参.height = h;
+    参.steps = 15;
+    体.params = 参;
+    var resp = await 限时拉取("https://aihorde.net/api/v2/generate/async", {
+      method: "POST",
+      mode: "cors",
+      credentials: "omit",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": "0000000000",
+        "Client-Agent": "woshisushi:1.0:perchance.org"
+      },
+      body: JSON.stringify(体)
+    }, 8000);
+    var data = JSON.parse(await resp.text());
+    if (!resp.ok || !data || !data.id) throw new Error("群体未受理");
+    var n = 0;
+    for (n = 0; n < 12; n++) {
+      await new Promise(function (r) { setTimeout(r, 900); });
+      if (当前出图令牌 !== 出图令牌) throw new Error("已取消");
+      var st = await 限时拉取("https://aihorde.net/api/v2/generate/status/" + data.id, {
+        mode: "cors",
+        credentials: "omit",
+        headers: {
+          "apikey": "0000000000",
+          "Client-Agent": "woshisushi:1.0:perchance.org"
+        }
+      }, 6000);
+      var j = JSON.parse(await st.text());
+      if (j && j.done && j.generations && j.generations[0] && j.generations[0].img) {
+        return j.generations[0].img;
+      }
+      if (j && j.faulted) throw new Error("群体失败");
+    }
+    throw new Error("群体超时");
+  }
+
+  function 用群体出图探测() {
+    var 安 = document.getElementById("安全英文");
+    var 英文 = (安 && 安.value) || "";
+    群体出一张(英文).then(function () {
+      if (当前出图令牌 !== 出图令牌) return;
+      if (抢出已定) return;
+      选定抢出平台("horde");
+    }).catch(function () {});
+  }
+
+  function 用群体出图() {
+    var 输出区 = document.getElementById("图像输出");
+    var 官 = document.getElementById("官方画廊");
+    var 状态区 = document.getElementById("状态提示");
+    var 安 = document.getElementById("安全英文");
+    var 英文 = (安 && 安.value) || "";
+    if (官) 官.style.display = "none";
+    输出区.innerHTML = "";
+    输出区.style.visibility = "";
+    状态区.style.display = "flex";
+    状态区.innerHTML = '<div class="加载动画"></div><b>正在用群体计算生成 ' + 计划张数 + ' 张</b>';
+    var 完成 = 0;
+    var 成功 = 0;
+    var i = 0;
+    for (i = 0; i < 计划张数; i++) {
+      (function () {
+        var 图 = document.createElement("img");
+        图.alt = "群体计算";
+        输出区.appendChild(图);
+        群体出一张(英文).then(function (url) {
+          if (当前出图令牌 !== 出图令牌) return;
+          图.onload = function () {
+            成功 += 1;
+            完成 += 1;
+            记一张结果(true);
+            刷新出图进度(完成, 成功);
+            if (完成 >= 计划张数) 结束本次生成("生成角色图片");
+          };
+          图.src = url;
+        }).catch(function () {
+          完成 += 1;
+          记一张结果(false);
+          刷新出图进度(完成, 成功);
+          if (完成 >= 计划张数) {
+            if (成功 > 0) 结束本次生成("生成角色图片");
+            else 结束本次生成("生成角色图片", false);
+          }
+        });
+      })();
+    }
+  }
+
+  async function 用图生图出图() {
+    var 地址框 = document.getElementById("参考图地址");
+    var 状态区 = document.getElementById("状态提示");
+    var 输出区 = document.getElementById("图像输出");
+    var 种子框 = document.getElementById("随机种子");
+    var 强度框 = document.getElementById("图生图强度");
+    var 英文 = String((document.getElementById("安全英文") || {}).value || "").trim();
+    var 原图 = String((地址框 && 地址框.value) || "").trim();
+    if (!原图) return 显示全部失败();
+    输出区.innerHTML = "";
+    状态区.style.display = "flex";
+    状态区.innerHTML = '<div class="加载动画"></div><b>正在进行图生图</b><p>参考图正在提交到备用图生图服务器，请稍候。</p>';
+    var 目标 = Math.min(3, Math.max(1, Number(抢出目标张数) || 1));
+    var 完成 = 0;
+    var 成功 = 0;
+    var 基础种子 = Number(种子框 && 种子框.value) || Math.floor(Math.random() * 2147483646);
+    var 尺寸 = 解析尺寸();
+    async function 生成一张(序号) {
+      var resp = await 限时拉取("/api/workshop/img2img", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
+          width: 尺寸.宽, height: 尺寸.高,
+          strength: Number((强度框 && 强度框.value) || 0.52), seed: 基础种子 + 序号 * 97
+        })
+      }, 95_000);
+      var data = await resp.json().catch(function () { return {}; });
+      if (!resp.ok || !data.url) throw new Error(data.error || "图生图失败");
+      var 图 = document.createElement("img");
+      图.alt = "图生图结果 " + (序号 + 1);
+      图.setAttribute("data-engine", "aihorde-img2img");
+      图.src = data.url;
+      输出区.appendChild(图);
+      成功 += 1;
+    }
+    var 下一个 = 0;
+    async function 工作者() {
+      while (下一个 < 目标) {
+        var 当前 = 下一个++;
+        if (当前出图令牌 !== 出图令牌) return;
+        try { await 生成一张(当前); }
+        catch (e) { 记录失败原因(String(e && e.message || e)); }
+        完成 += 1;
+        刷新出图进度(完成, 成功);
+      }
+    }
+    await Promise.all([工作者(), 工作者()]);
+    if (当前出图令牌 !== 出图令牌) return;
+    if (成功) {
+      设平台提示("horde");
+      结束本次生成("图生图");
+    } else {
+      显示全部失败();
+    }
+  }
+
+  function 用官方插件出图(竞速) {
+    上次官方张数 = 0;
+    var 输出区 = document.getElementById("官方画廊") || document.getElementById("图像输出");
+    var 备用区 = document.getElementById("图像输出");
+    if (备用区 && !竞速) 备用区.innerHTML = "";
+    输出区.style.display = "";
+    var 状态区 = document.getElementById("状态提示");
+    var 执行生成 = document.getElementById("执行生成");
+    执行生成.value =
+      String(Date.now()) + "-" + String(Math.floor(Math.random() * 1000000));
+    try {
+      执行生成.dispatchEvent(new Event("input", { bubbles: true }));
+      执行生成.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch (e) {}
+    状态区.style.display = "flex";
+    状态区.innerHTML =
+      '<div class="加载动画"></div>' +
+      (竞速
+        ? ("<b>正在抢出 " + 计划张数 + " 张</b><p>Turbo 已开跑，官方若先到也算。</p>")
+        : ("<b>正在用官方插件生成 " + 计划张数 + " 张</b><p>本轮只用这一路。</p>"));
+    try {
+      update(输出区);
+    } catch (错误) {
+      console.error(错误);
+      切换备用引擎("官方插件没有启动");
+      return;
+    }
+    var 检查次数 = 0;
+    if (生成检查器) clearInterval(生成检查器);
+    生成检查器 = setInterval(function () {
+      if (当前出图令牌 !== 出图令牌) {
+        clearInterval(生成检查器);
+        生成检查器 = null;
+        return;
+      }
+      检查次数++;
+      var 当前结果 = 输出区.querySelectorAll("iframe, img, canvas");
+      var 已出 = Math.min(当前结果.length, 计划张数);
+      while (上次官方张数 < 已出) {
+        记一张结果(true);
+        上次官方张数 += 1;
+        选定抢出平台("perchance");
+      }
+      刷新出图进度(已出, 已出);
+      if (当前结果.length > 0 && 检查次数 >= 2) {
+        状态区.style.display = "none";
+      }
+      if (当前结果.length >= 计划张数 && 检查次数 >= 3) {
+        结束本次生成("生成角色图片");
+      } else if (检查次数 >= 17) {
+        if (当前结果.length > 0) {
+          结束本次生成("生成角色图片");
+        } else if (竞速) {
+          /* Turbo / Horde 已在跑，官方迟到不再挡 */
+        } else if (!抢出已定) {
+          var 行 = document.getElementById("平台提示");
+          if (行) 行.textContent = "生图平台：官方超时，改抢 Turbo";
+          用写实引擎出图("turbo");
+          用群体出图探测();
+        } else {
+          结束本次生成("生成角色图片");
+        }
+      }
+    }, 600);
+  }
+
+  function 设平台提示(引擎) {
+    var 行 = document.getElementById("平台提示");
+    if (!行) return;
+    if (!引擎) 行.textContent = "生图平台：Turbo";
+    else 行.textContent = "生图平台：" + 引擎名称(引擎);
+  }
+
+  function 按指定引擎出图(引擎) {
+    本轮已试引擎.push(引擎);
+    var 框 = document.getElementById("出图引擎");
+    if (框) 框.value = 引擎;
+    设平台提示(引擎);
+    if (引擎 === "perchance") 用官方插件出图();
+    else if (引擎 === "horde") 用群体出图();
+    else 用写实引擎出图(引擎);
+  }
+
+  function 真正生成图片(令牌) {
+    var 数量框 = document.getElementById("生成数量");
+    if (令牌 && 令牌 !== 出图令牌) return;
+    写出安全英文();
+    正在生成图片 = true;
+    当前出图令牌 = 出图令牌;
+    已完成张数 = 0;
+    抢出目标张数 = Number(数量框 && 数量框.value) || 1;
+    计划张数 = 抢出目标张数;
+    本轮已试引擎 = [];
+    进度已报 = 0;
+    进度成功 = 0;
+    刷新出图进度(0, 0);
+    设置生成按钮状态(false, "再出一张");
+    清空本轮画廊();
+    var 安英 = ((document.getElementById("安全英文") || {}).value || "");
+    if (预载图 && 预载图.src && 预载图.英文 && 安英.indexOf(预载图.英文.slice(0, 24)) !== -1) {
+      var 输出区 = document.getElementById("图像输出");
+      var 官 = document.getElementById("官方画廊");
+      if (官) 官.style.display = "none";
+      if (输出区) {
+        输出区.style.visibility = "";
+        var 图 = document.createElement("img");
+        图.alt = "预载";
+        图.src = 预载图.src;
+        输出区.appendChild(图);
+      }
+      预载图 = null;
+      抢出已定 = true;
+      本轮抢出 = false;
+      本轮胜出 = "turbo";
+      设平台提示("turbo");
+      if (计划张数 <= 1) {
+        结束本次生成("生成角色图片");
+        return;
+      }
+      用写实引擎出图("turbo", 1);
+      return;
+    }
+    var 选引擎 = 当前引擎() || "auto";
+    if (有参考图()) {
+      本轮抢出 = false;
+      设平台提示("horde");
+      用图生图出图();
+      return;
+    }
+    if (本轮抢出 || 选引擎 === "auto") {
+      抢出已定 = false;
+      本轮胜出 = "";
+      设平台提示("auto");
+      var 行 = document.getElementById("平台提示");
+      if (行) 行.textContent = "生图平台：自动抢出 · 先到先得";
+      var 输出区 = document.getElementById("图像输出");
+      if (输出区) 输出区.style.visibility = "";
+      计划张数 = 抢出目标张数 || 1;
+      用写实引擎出图("turbo");
+      用群体出图探测();
+      用官方插件出图(true);
+    } else {
+      本轮抢出 = false;
+      按指定引擎出图(选引擎 || "turbo");
+    }
+  }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.17" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';document.getElementById('状态提示').textContent=window.__sushiLoadError;"></script>
 
 <style>
-  [hidden] { display: none !important; }
-  .生图卡片 { margin: 0; }
-  .生图卡片 img { width: 100%; height: auto; }
-  #取消生成按钮 { margin: 0 0 16px; }
   :root {
     color-scheme: light;
     --底色: #F5F7FA;
@@ -2667,27 +3465,6 @@
     border-radius: 10px;
   }
 
-
-  .模式切换行 {
-    display: flex;
-    gap: 8px;
-    margin: 0 0 10px;
-  }
-  .模式钮 {
-    flex: 1;
-    min-height: 38px;
-    border-radius: 10px;
-    border: 1px solid var(--边框);
-    background: #fff;
-    color: var(--淡色);
-    font-weight: 800;
-    cursor: pointer;
-  }
-  .模式钮.开 {
-    color: var(--绿色文字);
-    background: var(--绿色);
-    border-color: transparent;
-  }
   .换背景行 {
     display: flex;
     align-items: center;
