@@ -1075,10 +1075,37 @@ app.post('/api/workshop/unlock', authMiddleware, (req, res) => {
 });
 
 const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
+const CHAT_MODELS = new Set(['turbo', 'openai-fast']);
 
 function workshopImageError(res, status, error) {
   res.status(status).json({ error });
 }
+
+app.post('/api/workshop/chat', async (req, res) => {
+  const access = getWorkshopAccess(req, String((req.body && req.body.k) || ''));
+  if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
+  const model = String((req.body && req.body.model) || 'turbo');
+  if (!CHAT_MODELS.has(model)) return workshopImageError(res, 400, '不支持的对话模型');
+  const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-20) : [];
+  if (!messages.length) return workshopImageError(res, 400, '对话内容不能为空');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const upstream = await fetch('https://text.pollinations.ai/openai', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ model, messages }),
+    });
+    const body = await upstream.text();
+    if (!upstream.ok) return workshopImageError(res, 502, `对话服务器返回 ${upstream.status}`);
+    res.status(200).type('application/json').send(body || '{}');
+  } catch (error) {
+    return workshopImageError(res, 504, error && error.name === 'AbortError' ? '对话服务器超时' : '对话服务器连接失败');
+  } finally {
+    clearTimeout(timer);
+  }
+});
 
 // Same-origin image proxy for the workshop fallback engines. Keeping this on
 // the server avoids WebView CORS/referrer failures and prevents the browser
