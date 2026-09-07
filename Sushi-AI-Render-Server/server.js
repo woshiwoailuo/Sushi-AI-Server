@@ -1001,24 +1001,13 @@ function workshopLoaderHtml(ticket) {
 </html>`;
 }
 
-function sendWorkshopLoader(req, res) {
-  const k = String((req.query && req.query.k) || '');
-  const ticket = getLiveTicket(k);
-  if (!ticket) {
-    res.status(401).type('html').send(WORKSHOP_401);
-    return;
-  }
-  res.status(200).type('html').send(workshopLoaderHtml(ticket));
-}
-
-app.post('/api/workshop/ticket', authMiddleware, (req, res) => {
-  if (req.user.banned) return res.status(403).json({ error: '账号已被封禁' });
+function createWorkshopTicket(userId) {
   sweepTickets();
   const enc = encryptWorkshopHtml();
   const id = crypto.randomBytes(32).toString('hex');
   workshopTickets.set(id, {
     id,
-    userId: req.user.id,
+    userId,
     key: enc.key.toString('hex'),
     iv: enc.iv.toString('hex'),
     ciphertext: enc.ct.toString('base64'),
@@ -1027,11 +1016,44 @@ app.post('/api/workshop/ticket', authMiddleware, (req, res) => {
     keyUsed: false,
     unlocks: 0,
   });
+  return workshopTickets.get(id);
+}
+
+function getWorkshopAccess(req, ticketId) {
+  const ticket = getLiveTicket(ticketId);
+  if (ticket) return ticket;
+  // WebView/browser image requests cannot add the Android Bearer header after
+  // the page is loaded. A valid login cookie is therefore a safe fallback for
+  // an expired or lost query-string ticket; public requests remain blocked.
+  const user = userFromToken(extractToken(req));
+  if (user && !user.banned) return { userId: user.id, authFallback: true };
+  return null;
+}
+
+function sendWorkshopLoader(req, res) {
+  const k = String((req.query && req.query.k) || '');
+  const ticket = getLiveTicket(k);
+  if (!ticket) {
+    const user = userFromToken(extractToken(req));
+    if (user && !user.banned) {
+      const fresh = createWorkshopTicket(user.id);
+      res.redirect(302, '/workshop?k=' + encodeURIComponent(fresh.id));
+      return;
+    }
+    res.status(401).type('html').send(WORKSHOP_401);
+    return;
+  }
+  res.status(200).type('html').send(workshopLoaderHtml(ticket));
+}
+
+app.post('/api/workshop/ticket', authMiddleware, (req, res) => {
+  if (req.user.banned) return res.status(403).json({ error: '账号已被封禁' });
+  const ticket = createWorkshopTicket(req.user.id);
   res.json({
-    ticket: id,
-    key: enc.key.toString('hex'),
-    iv: enc.iv.toString('hex'),
-    expires_in: 90,
+    ticket: ticket.id,
+    key: ticket.key,
+    iv: ticket.iv,
+    expires_in: Math.floor(TICKET_TTL_MS / 1000),
   });
 });
 
@@ -1062,8 +1084,8 @@ function workshopImageError(res, status, error) {
 // the server avoids WebView CORS/referrer failures and prevents the browser
 // from talking to an arbitrary URL supplied by page input.
 app.get('/api/workshop/image', async (req, res) => {
-  const ticket = getLiveTicket(String((req.query && req.query.k) || ''));
-  if (!ticket) return workshopImageError(res, 401, '工坊票据无效或已过期');
+  const access = getWorkshopAccess(req, String((req.query && req.query.k) || ''));
+  if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
 
   const model = String(req.query.model || 'turbo');
   if (!IMAGE_MODELS.has(model)) return workshopImageError(res, 400, '不支持的生图模型');
@@ -1122,8 +1144,8 @@ function decodeImageDataUrl(value) {
 }
 
 app.post('/api/workshop/img2img', async (req, res) => {
-  const ticket = getLiveTicket(String((req.body && req.body.k) || ''));
-  if (!ticket) return workshopImageError(res, 401, '工坊票据无效或已过期');
+  const access = getWorkshopAccess(req, String((req.body && req.body.k) || ''));
+  if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
 
   const sourceImage = decodeImageDataUrl(req.body && req.body.image);
   if (!sourceImage || sourceImage.length > 5_000_000) {
