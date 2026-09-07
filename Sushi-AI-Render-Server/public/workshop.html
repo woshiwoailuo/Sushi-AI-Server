@@ -1374,13 +1374,12 @@
       var 体 = new Object();
       体.model = 模型;
       体.messages = 组装花粉消息(问句);
-      var resp = await 限时拉取("https://text.pollinations.ai/openai", {
+      var resp = await 限时拉取("/api/workshop/chat", {
         method: "POST",
-        mode: "cors",
-        credentials: "omit",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(体)
-      }, 6000);
+        body: JSON.stringify({ k: 工坊票据(), model: 体.model, messages: 体.messages })
+      }, 15000);
       var 文本 = (await resp.text() || "").trim();
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       var data = JSON.parse(文本);
@@ -1391,15 +1390,22 @@
     } catch (e) {
       内容 = "";
     }
-    if (!内容 && 花粉通道名(模型) === "turbo") {
-      var getResp = await 限时拉取("https://text.pollinations.ai/" + encodeURIComponent(组装群体提示(问句).slice(0, 1200)), {
-        method: "GET",
-        mode: "cors",
-        credentials: "omit",
-        cache: "no-store"
-      }, 6000);
-      内容 = 可用对话文(await getResp.text() || "");
-      if (!getResp.ok || !内容) throw new Error("Turbo 空回复");
+    if (!内容) {
+      try {
+        var getResp = await 限时拉取("https://text.pollinations.ai/" + encodeURIComponent(组装群体提示(问句).slice(0, 1200)), {
+          method: "GET",
+          mode: "cors",
+          credentials: "omit",
+          cache: "no-store"
+        }, 12000);
+        var getText = (await getResp.text() || "").trim();
+        if (getText.charAt(0) === "{" && getText.indexOf("choices") !== -1) {
+          var getData = JSON.parse(getText);
+          getText = getData && getData.choices && getData.choices[0] && getData.choices[0].message
+            ? getData.choices[0].message.content : "";
+        }
+        内容 = 可用对话文(getText);
+      } catch (e2) {}
     }
     if (!内容) throw new Error("空回复");
     对话末通道 = 花粉通道名(模型);
@@ -2176,13 +2182,6 @@
   }
 
   async function 开始生成() {
-    var 令牌 = ++出图令牌;
-    本轮抢出 = (!!即将抢出 || 当前引擎() === "auto") && !有参考图();
-    即将抢出 = false;
-    本轮胜出 = "";
-    if (生成检查器) { clearInterval(生成检查器); 生成检查器 = null; }
-    正在生成图片 = true;
-
     var 描述框 = document.getElementById("角色描述");
     var 英文框 = document.getElementById("英文描述");
     if (描述框) 描述框.value = 去掉方括号(描述框.value);
@@ -2192,6 +2191,16 @@
       if (描述框) 描述框.focus();
       return;
     }
+
+    var 令牌 = ++出图令牌;
+    本轮抢出 = (!!即将抢出 || 当前引擎() === "auto") && !有参考图();
+    即将抢出 = false;
+    本轮胜出 = "";
+    抢出已定 = false;
+    本平台成功 = 0;
+    本平台失败 = 0;
+    if (生成检查器) { clearInterval(生成检查器); 生成检查器 = null; }
+    正在生成图片 = true;
 
     var 核心 = 描述框 ? 描述框.value.trim() : "";
     写出安全英文();
