@@ -1142,7 +1142,10 @@
       var 项 = 对话历史[i] || {};
       var 角色 = 项.role === "user" ? "用户" : "助手";
       var 标 = 项.channel ? '<div class="对话通道标">' + 转义对话文(通道显示名(项.channel)) + "</div>" : "";
-      html += '<div class="对话气泡 ' + 角色 + '">' + 转义对话文(项.text) + 标 + "</div>";
+      var 生图 = 项.role === "assistant" && 项.text
+        ? '<button type="button" class="对话生图钮" onclick="按对话生成图片(' + i + ')">根据回复生成图片</button>'
+        : "";
+      html += '<div class="对话气泡 ' + 角色 + '">' + 转义对话文(项.text) + 标 + 生图 + "</div>";
     }
     区.innerHTML = html;
     区.scrollTop = 区.scrollHeight;
@@ -1162,9 +1165,43 @@
       标.textContent = 通道显示名(通道);
       泡.appendChild(标);
     }
+    if (角色 !== "user" && 文 && !临时) 添加对话生图钮(泡, 文);
     区.appendChild(泡);
     区.scrollTop = 区.scrollHeight;
     return 泡;
+  }
+
+  function 添加对话生图钮(泡, 文) {
+    if (!泡 || !文 || 泡.querySelector(".对话生图钮")) return;
+    var 按钮 = document.createElement("button");
+    按钮.type = "button";
+    按钮.className = "对话生图钮";
+    按钮.textContent = "根据回复生成图片";
+    按钮.addEventListener("click", function () { 按对话生成图片(文); });
+    泡.appendChild(按钮);
+  }
+
+  async function 按对话生成图片(索引或文字) {
+    var 文 = typeof 索引或文字 === "number"
+      ? ((对话历史[索引或文字] || {}).text || "")
+      : String(索引或文字 || "");
+    文 = 文.replace(/\s+/g, " ").trim().slice(0, 1200);
+    if (!文) return;
+    var 核心 = document.getElementById("角色描述");
+    var 中文 = document.getElementById("中文译文");
+    var 英文 = document.getElementById("英文描述");
+    if (核心) 核心.value = 文;
+    if (中文) 中文.value = 文;
+    if (英文) 英文.value = "";
+    刷新画面说明();
+    工具提示("已把 AI 回复填入画面描述，正在准备生成图片…");
+    try {
+      if (含中文(文)) {
+        var 译 = await 调用开源翻译(文.slice(0, 800), "en");
+        if (译 && 英文) 英文.value = 去掉方括号(String(译));
+      }
+    } catch (e) {}
+    await 开始生成();
   }
 
   function 对话通道已改() {
@@ -1511,6 +1548,7 @@
         var 标 = 泡.querySelector(".对话通道标");
         泡.textContent = 译;
         if (标) 泡.appendChild(标);
+        添加对话生图钮(泡, 译);
       }
       滚动写入记忆("", 译);
     }).catch(function () {});
@@ -3644,6 +3682,23 @@
     margin-top: 4px;
     font-size: 10px;
     opacity: 0.72;
+  }
+
+  .对话生图钮 {
+    display: block;
+    margin-top: 8px;
+    padding: 6px 9px;
+    color: var(--绿色);
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    border: 1px solid rgba(59, 111, 245, 0.25);
+    border-radius: 8px;
+    background: rgba(59, 111, 245, 0.08);
+  }
+
+  .对话生图钮:hover {
+    background: rgba(59, 111, 245, 0.15);
   }
 
   .对话输入行 {
