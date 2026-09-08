@@ -325,9 +325,8 @@ test('auto race skips rate-limited engines quickly and surfaces 限流 tip', asy
 });
 
 
-test('new workshop defaults to in-app perchance as the primary route', async () => {
-  const f = await fixture();
-  const box = f.w.document.getElementById('出图引擎');
-  assert.equal(box.value, 'perchance');
-  assert.equal(f.w.当前引擎(), 'perchance');
+test('workshop source defaults to in-app perchance as the primary route', () => {
+  assert.match(html, /<option value="perchance" selected>/);
+  assert.match(html, /var 用户选定平台 = "perchance";/);
+  assert.match(client, /window\\.__sushiPreferredProvider \\|\\| 'perchance'/);
 });
