@@ -1172,7 +1172,8 @@
       var 生图 = 项.role === "assistant" && 项.text
         ? '<button type="button" class="对话生图钮" onclick="按对话生成图片(' + i + ')">根据回复生成图片</button>'
         : "";
-      html += '<div class="对话气泡 ' + 角色 + '">' + 转义对话文(项.text) + 标 + 生图 + "</div>";
+      var 展示文 = 项.role === "assistant" ? 折叠重复回复(项.text) : 项.text;
+      html += '<div class="对话气泡 ' + 角色 + '">' + 转义对话文(展示文) + 标 + 生图 + "</div>";
     }
     区.innerHTML = html;
     区.scrollTop = 区.scrollHeight;
@@ -1387,13 +1388,63 @@
     return "turbo";
   }
 
+  function 折叠重复回复(文) {
+    var s = String(文 || "").replace(/\r\n/g, "\n").trim();
+    if (!s) return s;
+    var guard = 0;
+    for (guard = 0; guard < 6; guard++) {
+      var changed = false;
+      if (s.length >= 12) {
+        var half = Math.floor(s.length / 2);
+        var a = s.slice(0, half).trim();
+        var b = s.slice(half).trim();
+        if (a.length >= 6 && a === b) { s = a; changed = true; }
+      }
+      if (!changed && s.length >= 18) {
+        var third = Math.floor(s.length / 3);
+        var a2 = s.slice(0, third).trim();
+        var b2 = s.slice(third, third * 2).trim();
+        var c2 = s.slice(third * 2).trim();
+        if (a2.length >= 6 && a2 === b2 && b2 === c2) { s = a2; changed = true; }
+      }
+      if (!changed) break;
+    }
+    var lines = s.split("\n");
+    var lineOut = [];
+    var prevLineKey = null;
+    var i = 0;
+    for (i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var key = line.trim().toLowerCase().replace(/\s+/g, " ");
+      if (!key) { lineOut.push(line); continue; }
+      if (key === prevLineKey) continue;
+      lineOut.push(line);
+      prevLineKey = key;
+    }
+    s = lineOut.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    var pieces = s.match(/[^。！？.!?]+[。！？.!?]*|\n+/g);
+    if (!pieces) return s;
+    var out = [];
+    var prevKey = null;
+    for (i = 0; i < pieces.length; i++) {
+      var piece = pieces[i];
+      if (/^\n+$/.test(piece)) { out.push(piece); continue; }
+      var k = piece.trim().toLowerCase().replace(/\s+/g, " ");
+      if (!k) { out.push(piece); continue; }
+      if (k === prevKey) continue;
+      out.push(piece);
+      prevKey = k;
+    }
+    return out.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   function 可用对话文(文) {
     文 = String(文 || "").trim();
     if (文.length < 1) return "";
     var 头 = 文.slice(0, 280);
     if (/payment required|queue full|deprecation_notice|invalid api key/i.test(头)) return "";
     if (文.charAt(0) === "{" && /"error"/i.test(头)) return "";
-    return 文;
+    return 折叠重复回复(文);
   }
 
   async function 问花粉(问句, 模型) {
@@ -1576,6 +1627,7 @@
     }
     if (等待 && 等待.parentNode) 等待.parentNode.removeChild(等待);
     if (!回复) 回复 = "没问到：" + (原因 || "请稍后再试。");
+    else 回复 = 折叠重复回复(回复);
     var 用通道 = 对话末通道 || (本轮通道 === "auto" ? "" : 本轮通道);
     if (选择通道 !== "auto") 对话抢出通道 = 选择通道;
     else 对话抢出通道 = "";
@@ -4430,6 +4482,43 @@
       max-height: 86dvh;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  /* Desktop/web: enlarge gallery / result panel without hurting mobile */
+  @media (min-width: 901px) {
+    .工作区 {
+      grid-template-columns: minmax(280px, 28vw) minmax(0, 1fr);
+    }
+
+    .结果区 {
+      padding: 22px 28px 28px;
+    }
+
+    .状态提示 {
+      min-height: 48vh;
+    }
+
+    .画廊 {
+      min-height: 52vh;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    }
+
+    .画廊 img,
+    .画廊 iframe {
+      min-height: 420px;
+      object-fit: contain;
+      background: #FFFFFF;
+    }
+
+    .对话列表 {
+      max-height: 420px;
+      min-height: 180px;
+    }
+
+    .画面说明 {
+      min-height: 180px;
     }
   }
 </style>

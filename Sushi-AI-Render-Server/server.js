@@ -17,7 +17,7 @@ const {
   migratePostgres,
   persistenceFromMode,
 } = require('./lib/db-postgres');
-const { normalizeChatPayload } = require('./lib/chat-response');
+const { normalizeChatPayload, collapseRepeatedText } = require('./lib/chat-response');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -1214,7 +1214,7 @@ async function chatViaHordeText(messages, signal) {
     }
     const text = statusJson && statusJson.generations && statusJson.generations[0] && statusJson.generations[0].text;
     if (statusJson && statusJson.done && text) {
-      const cleaned = String(text).replace(/^[\s\S]*### Assistant:\s*/m, '').trim();
+      const cleaned = collapseRepeatedText(String(text).replace(/^[\s\S]*### Assistant:\s*/m, '').trim());
       if (cleaned.length < 1) throw Object.assign(new Error('Horde 返回空回复'), { status: 502 });
       return openaiStyleChat(cleaned, 'horde');
     }

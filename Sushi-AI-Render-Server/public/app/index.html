@@ -83,6 +83,13 @@
     .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
     .tpl-btn { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 10px; width: 100%; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text); }
     .core { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    @media (min-width: 901px) {
+      .chat-shell { max-width: 920px; margin: 0 auto; width: 100%; padding: 0 20px 96px; }
+      .bubble { max-width: 78%; font-size: 16px; padding: 14px 16px; }
+      .gen-wrap { padding: 0 8px 96px; }
+      .gen-wrap iframe { min-height: calc(100dvh - 140px); }
+      .content.gen-wrap { max-width: none; }
+    }
   </style>
 </head>
 <body>
@@ -399,7 +406,7 @@
         var item = chatHistory[i] || {};
         var cls = item.role === 'user' ? 'user' : 'bot';
         var meta = item.channel ? '<span class="meta">' + escapeHtml(item.channel) + '</span>' : '';
-        html += '<div class="bubble ' + cls + '">' + escapeHtml(item.text) + meta + '</div>';
+        html += '<div class="bubble ' + cls + '">' + escapeHtml(item.role === 'assistant' ? collapseRepeatedText(item.text) : item.text) + meta + '</div>';
       }
       box.innerHTML = html;
       box.scrollTop = box.scrollHeight;
@@ -450,6 +457,55 @@
       msgs.push({ role: 'user', content: String(question || '').slice(0, 800) });
       return msgs;
     }
+    function collapseRepeatedText(raw) {
+      var s = String(raw == null ? '' : raw).replace(/\r\n/g, '\n').trim();
+      if (!s) return s;
+      var guard = 0;
+      for (guard = 0; guard < 6; guard++) {
+        var changed = false;
+        if (s.length >= 12) {
+          var half = Math.floor(s.length / 2);
+          var a = s.slice(0, half).trim();
+          var b = s.slice(half).trim();
+          if (a.length >= 6 && a === b) { s = a; changed = true; }
+        }
+        if (!changed && s.length >= 18) {
+          var third = Math.floor(s.length / 3);
+          var a2 = s.slice(0, third).trim();
+          var b2 = s.slice(third, third * 2).trim();
+          var c2 = s.slice(third * 2).trim();
+          if (a2.length >= 6 && a2 === b2 && b2 === c2) { s = a2; changed = true; }
+        }
+        if (!changed) break;
+      }
+      var lines = s.split('\n');
+      var lineOut = [];
+      var prevLineKey = null;
+      var i = 0;
+      for (i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        var key = line.trim().toLowerCase().replace(/\s+/g, ' ');
+        if (!key) { lineOut.push(line); continue; }
+        if (key === prevLineKey) continue;
+        lineOut.push(line);
+        prevLineKey = key;
+      }
+      s = lineOut.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      var pieces = s.match(/[^。！？.!?]+[。！？.!?]*|\n+/g);
+      if (!pieces) return s;
+      var out = [];
+      var prevKey = null;
+      for (i = 0; i < pieces.length; i++) {
+        var piece = pieces[i];
+        if (/^\n+$/.test(piece)) { out.push(piece); continue; }
+        var k = piece.trim().toLowerCase().replace(/\s+/g, ' ');
+        if (!k) { out.push(piece); continue; }
+        if (k === prevKey) continue;
+        out.push(piece);
+        prevKey = k;
+      }
+      return out.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
     async function askModel(model, messages) {
       // Align with workshop (#14): 20s / Horde 38s; short replies length>=1 OK.
       var timeoutMs = model === 'horde' ? 38000 : 20000;
@@ -466,10 +522,10 @@
         else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
         throw new Error(msg);
       }
-      // Server already normalizeChatPayload; accept any non-empty short reply.
+      // Server already normalizeChatPayload; client still collapses repeats for cached / edge paths.
       var content = data && data.choices && data.choices[0] && data.choices[0].message
         ? data.choices[0].message.content : '';
-      content = String(content || '').trim();
+      content = collapseRepeatedText(content);
       if (content.length < 1) throw new Error('空回复');
       if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
       return content;
