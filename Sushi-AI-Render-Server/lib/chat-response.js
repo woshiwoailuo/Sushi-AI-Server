@@ -18,6 +18,76 @@ function chatError(message) {
   return Object.assign(new Error(message), { status: 502 });
 }
 
+/** Collapse consecutive duplicate sentences / lines / whole-string repeats. Keep short replies intact. */
+function collapseRepeatedText(raw) {
+  let text = String(raw == null ? '' : raw).replace(/\r\n/g, '\n').trim();
+  if (!text) return text;
+
+  // Whole-string doubled / tripled (e.g. "你好。你好。" or three identical blocks).
+  for (let guard = 0; guard < 6; guard += 1) {
+    let changed = false;
+    if (text.length >= 12) {
+      const half = Math.floor(text.length / 2);
+      const a = text.slice(0, half).trim();
+      const b = text.slice(half).trim();
+      if (a.length >= 6 && a === b) {
+        text = a;
+        changed = true;
+      }
+    }
+    if (!changed && text.length >= 18) {
+      const third = Math.floor(text.length / 3);
+      const a = text.slice(0, third).trim();
+      const b = text.slice(third, third * 2).trim();
+      const c = text.slice(third * 2).trim();
+      if (a.length >= 6 && a === b && b === c) {
+        text = a;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+
+  // Consecutive duplicate lines (ignore blank lines between equals).
+  const lines = text.split('\n');
+  const lineOut = [];
+  let prevLineKey = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const key = line.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!key) {
+      lineOut.push(line);
+      continue;
+    }
+    if (key === prevLineKey) continue;
+    lineOut.push(line);
+    prevLineKey = key;
+  }
+  text = lineOut.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+  // Consecutive duplicate sentences (Chinese / Latin punctuation).
+  const pieces = text.match(/[^。！？.!?]+[。！？.!?]*|\n+/g);
+  if (!pieces) return text;
+  const out = [];
+  let prevKey = null;
+  for (let i = 0; i < pieces.length; i += 1) {
+    const piece = pieces[i];
+    if (/^\n+$/.test(piece)) {
+      out.push(piece);
+      continue;
+    }
+    const key = piece.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!key) {
+      out.push(piece);
+      continue;
+    }
+    if (key === prevKey) continue;
+    out.push(piece);
+    prevKey = key;
+  }
+  return out.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function normalizeChatPayload(raw, model) {
   const text = String(raw == null ? '' : raw).trim();
   if (!text) throw chatError('上游返回空回复');
@@ -40,6 +110,7 @@ function normalizeChatPayload(raw, model) {
 }
 
 function openaiStyleChat(content, model) {
+  const cleaned = collapseRepeatedText(content);
   return {
     id: 'sushi-chat-' + Date.now(),
     object: 'chat.completion',
@@ -47,10 +118,10 @@ function openaiStyleChat(content, model) {
     model: model || 'openai',
     choices: [{
       index: 0,
-      message: { role: 'assistant', content: String(content).trim() },
+      message: { role: 'assistant', content: String(cleaned || '').trim() },
       finish_reason: 'stop',
     }],
   };
 }
 
-module.exports = { contentText, normalizeChatPayload };
+module.exports = { contentText, collapseRepeatedText, normalizeChatPayload };
