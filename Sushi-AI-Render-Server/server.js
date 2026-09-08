@@ -28,7 +28,7 @@ function loadSmtpPass() {
 
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.163.com';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_USER = process.env.SMTP_USER || 'sjdwukai2@163.com';
+const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = loadSmtpPass();
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
 const SMTP_SECURE = process.env.SMTP_SECURE
@@ -44,9 +44,9 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGIN || '')
   .map((value) => value.trim())
   .filter(Boolean);
 // Vercel 的运行目录只读，临时数据必须写入 /tmp；本地/Render 继续使用持久目录。
-const DATA_DIR = process.env.VERCEL
+const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL
   ? path.join('/tmp', 'sushi-data')
-  : path.join(__dirname, 'data');
+  : path.join(__dirname, 'data'));
 const DB_PATH = path.join(DATA_DIR, 'app.db');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const APK_DIR = path.join(DATA_DIR, 'apk');
@@ -60,6 +60,16 @@ let sqlJsSaveTimer = null;
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function persistenceStatus() {
+  const isVercel = Boolean(process.env.VERCEL);
+  const external = String(process.env.SUSHI_DB_PERSISTENCE || '').toLowerCase() === 'external';
+  return {
+    durable: !isVercel || external,
+    mode: dbMode,
+    provider: external ? 'external' : (isVercel ? 'vercel-tmp' : 'local-disk'),
+  };
 }
 
 function todayPrefix() {
@@ -138,7 +148,12 @@ async function openDatabase() {
   const raw = fileBuf ? new SQL.Database(fileBuf) : new SQL.Database();
   db = new SqlJsAdapter(raw);
   dbMode = 'sql.js';
-  if (!process.env.VERCEL) sqlJsSaveTimer = setInterval(persistSqlJs, 2000);
+  if (!process.env.VERCEL) {
+    sqlJsSaveTimer = setInterval(persistSqlJs, 2000);
+    // Do not keep test runners or graceful shutdowns alive just for a
+    // best-effort SQLite flush.
+    if (typeof sqlJsSaveTimer.unref === 'function') sqlJsSaveTimer.unref();
+  }
 }
 
 function exec(sql) {
@@ -734,6 +749,16 @@ app.get('/api/app/download', (req, res) => {
   res.sendFile(path.resolve(row.apk_path));
 });
 
+app.get('/api/health', (req, res) => {
+  const persistence = persistenceStatus();
+  res.status(200).json({
+    ok: true,
+    db: persistence,
+    mail: smtpConfigured(),
+    warning: persistence.durable ? undefined : 'Vercel 临时盘不会持久保存会员数据，请配置外部数据库',
+  });
+});
+
 
 app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
   const id = Number(req.params.id);
@@ -1304,11 +1329,15 @@ async function initialize() {
 
 async function main() {
   await initialize();
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log('[sushi-club] listening on http://0.0.0.0:' + PORT);
-    console.log('[sushi-club] db mode:', dbMode);
-    console.log('[sushi-club] JWT_SECRET is', process.env.JWT_SECRET ? 'from env' : 'default sushi-dev-secret (override in production)');
-    console.log('[sushi-club] SMTP is', smtpConfigured() ? 'configured' : 'missing (codes stored, email skipped)');
+  return new Promise((resolve, reject) => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log('[sushi-club] listening on http://0.0.0.0:' + PORT);
+      console.log('[sushi-club] db mode:', dbMode);
+      console.log('[sushi-club] JWT_SECRET is', process.env.JWT_SECRET ? 'from env' : 'default sushi-dev-secret (override in production)');
+      console.log('[sushi-club] SMTP is', smtpConfigured() ? 'configured' : 'missing (codes stored, email skipped)');
+      resolve(server);
+    });
+    server.once('error', reject);
   });
 }
 
@@ -1325,7 +1354,7 @@ if (require.main === module) {
   });
 } else {
   let ready = null;
-  module.exports = async function vercelHandler(req, res) {
+  const vercelHandler = async function vercelHandler(req, res) {
     if (!ready) ready = initialize();
     try {
       await ready;
@@ -1339,4 +1368,9 @@ if (require.main === module) {
     }
     return app(req, res);
   };
+  // Keep the HTTP function as the default export while retaining the local
+  // server entrypoint used by tests and start.js.
+  vercelHandler.main = main;
+  vercelHandler.app = app;
+  module.exports = vercelHandler;
 }
