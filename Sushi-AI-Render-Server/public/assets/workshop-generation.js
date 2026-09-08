@@ -342,11 +342,11 @@
     return { url: done.image.url, engine: 'horde', job: done };
   }
 
-  var FREE_RACE_ENGINES = ['turbo', 'flux', 'flux-realism', 'sana', 'horde'];
+  var FREE_RACE_ENGINES = ['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'];
 
   function normalizeEngineName(raw) {
     var name = String(raw || '').trim().toLowerCase();
-    if (name === '官方') return 'perchance';
+    if (name === '官方' || name === 'perch') return 'perchance';
     if (name === 'flux-real' || name === 'flux_realism') return 'flux-realism';
     if (name === 'zimage' || name === 'sdxl' || name === 'krea2' || name === 'liblib') return 'flux';
     if (name === 'anishort') return 'sana';
@@ -356,21 +356,84 @@
   function engineLabel(name) {
     var map = {
       auto: '自动抢出', turbo: 'Turbo', horde: 'Horde', flux: 'Flux',
-      'flux-realism': 'Flux写实', sana: 'Sana', perchance: 'Perchance'
+      'flux-realism': 'Flux写实', sana: 'Sana', perchance: 'Perch / Perchance'
     };
     return map[name] || name;
+  }
+
+  function nodeImageUrl(node) {
+    if (!node) return '';
+    if (node.tagName === 'IMG' && node.src) return node.src;
+    if (node.tagName === 'CANVAS' && typeof node.toDataURL === 'function') {
+      try { return node.toDataURL('image/png'); } catch (e) { return ''; }
+    }
+    if (node.tagName === 'IFRAME') {
+      try {
+        var doc = node.contentDocument || (node.contentWindow && node.contentWindow.document);
+        if (!doc) return '';
+        var img = doc.querySelector('img');
+        return img && img.src ? img.src : '';
+      } catch (e) { return ''; }
+    }
+    return '';
+  }
+
+  async function generatePerchance(run, prompt, index) {
+    // In-app Perchance/Perch only — never open perchance.org.
+    if (typeof window.update !== 'function') throw new Error('Perchance 组件未加载');
+    var gallery = $('官方画廊');
+    var trigger = $('执行生成');
+    if (!gallery || !trigger) throw new Error('Perchance 界面未就绪');
+    var engBox = $('英文描述');
+    var safeBox = $('安全英文');
+    var prevEng = engBox ? engBox.value : '';
+    var prevSafe = safeBox ? safeBox.value : '';
+    if (engBox) engBox.value = prompt;
+    if (safeBox) safeBox.value = prompt;
+    gallery.hidden = false;
+    var before = gallery.querySelectorAll('iframe, img, canvas').length;
+    trigger.value = String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000)) + '-p' + String(index || 0);
+    try {
+      trigger.dispatchEvent(new Event('input', { bubbles: true }));
+      trigger.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (e) {}
+    try { window.update(gallery); } catch (error) { throw new Error('Perchance 未能启动'); }
+    var deadline = Date.now() + 45000;
+    try {
+      while (Date.now() < deadline) {
+        ensureActive(run);
+        var nodes = gallery.querySelectorAll('iframe, img, canvas');
+        if (nodes.length > before) {
+          var i = nodes.length - 1;
+          for (; i >= before; i -= 1) {
+            var url = nodeImageUrl(nodes[i]);
+            if (url && String(url).length > 32) return { url: url, engine: 'perchance' };
+          }
+        }
+        await pause(run, 600);
+      }
+      throw new Error('Perchance 出图超时');
+    } finally {
+      if (engBox) engBox.value = prevEng;
+      if (safeBox) safeBox.value = prevSafe;
+    }
   }
 
   async function generateOne(run, prompt, index) {
     var engine = resolveEngine();
     if (engine === 'horde') return generateHorde(run, prompt, index);
+    if (engine === 'perchance') {
+      // Explicit Perch/Perchance: try in-app plugin first, then fall back to full free race.
+      try { return await generatePerchance(run, prompt, index); }
+      catch (e) { /* continue into shared race below */ }
+    }
     if (engine !== 'auto' && engine !== 'perchance') return generatePollinations(run, prompt, index, engine);
 
     // auto / perchance(in-app): race ALL free platforms together; first success wins.
     // Perchance stays a manual selectable option; generation never window.open's perchance.org.
     status(
-      (engine === 'perchance' ? 'Perchance 应用内 · 第 ' : '自动抢出 · 第 ') + (run.completed + 1) + '/' + run.total + ' 张',
-      'Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得。',
+      (engine === 'perchance' ? 'Perch / Perchance 应用内 · 第 ' : '自动抢出 · 第 ') + (run.completed + 1) + '/' + run.total + ' 张',
+      'Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得。',
       true
     );
     var winner = null;
@@ -398,6 +461,9 @@
           if (winner) throw new Error('lost-race');
           return claim({ url: done.image.url, engine: 'horde', job: done });
         })();
+      }
+      if (eng === 'perchance') {
+        return generatePerchance(run, prompt, index).then(claim);
       }
       return generatePollinations(run, prompt, index, eng).then(claim);
     });
@@ -436,8 +502,12 @@
         }
       }
       ensureActive(run);
-      if ($('说明标题')) $('说明标题').textContent = run.description || '恢复上次任务';
-      if ($('说明英文')) $('说明英文').textContent = run.payload.prompt || '';
+      if ($('说明标题')) {
+        $('说明标题').textContent = (randomPair && randomPair.displayChinese) || run.description || '恢复上次任务';
+      }
+      if ($('说明英文')) {
+        $('说明英文').textContent = (randomPair && randomPair.displayEnglish) || run.payload.prompt || '';
+      }
       while (run.completed < run.total) {
         ensureActive(run);
         if (restored) {
@@ -506,11 +576,33 @@
     if (active || $('随机按钮').disabled) return Promise.resolve();
     var providerBox = $('出图引擎');
     if (providerBox) { providerBox.disabled = false; providerBox.removeAttribute('disabled'); }
-    var pair = window.本地随机一对();
-    randomPair = { chinese: pair[0], english: pair[1] };
-    $('角色描述').value = pair[0]; $('中文译文').value = pair[0]; $('英文描述').value = pair[1];
+    var item = typeof window.本地随机一项 === 'function' ? window.本地随机一项() : null;
+    if (!item && typeof window.本地随机一对 === 'function') {
+      var pair = window.本地随机一对();
+      item = {
+        中文: pair[0],
+        英文: pair[1],
+        核心: pair.核心 || pair[0],
+        详英: pair.详英 || pair[1]
+      };
+    }
+    if (!item) return Promise.resolve();
+    var simpleZh = item.中文 || '';
+    var simpleEn = item.英文 || '';
+    var core = item.核心 || simpleZh;
+    var richEn = item.详英 || simpleEn;
+    randomPair = {
+      chinese: core,
+      english: richEn,
+      displayChinese: simpleZh,
+      displayEnglish: simpleEn
+    };
+    $('角色描述').value = core;
+    $('中文译文').value = simpleZh;
+    $('英文描述').value = simpleEn;
     lastEdited = '角色描述';
-    window.刷新画面说明();
+    if (typeof window.刷新画面说明 === 'function') window.刷新画面说明();
+    if ($('安全英文')) $('安全英文').value = richEn;
     return window.开始生成();
   };
 
@@ -533,8 +625,8 @@
     else if (engine === 'flux') tip.textContent = 'Flux · 通用高质量免费通道';
     else if (engine === 'flux-realism') tip.textContent = 'Flux写实 · 人像优先免费通道';
     else if (engine === 'sana') tip.textContent = 'Sana · 中文友好免费通道';
-    else if (engine === 'perchance') tip.textContent = 'Perchance · 应用内生成（不跳转官网）';
-    else tip.textContent = '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得';
+    else if (engine === 'perchance') tip.textContent = 'Perch / Perchance · 应用内生成（不跳转官网）';
+    else tip.textContent = '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得';
   };
 
   async function init() {
@@ -556,7 +648,7 @@
         if (engineSelect.querySelector('option[value="' + id + '"]')) return;
         var opt = document.createElement('option');
         opt.value = id;
-        opt.textContent = id === 'perchance' ? 'Perchance · 应用内生成' : engineLabel(id);
+        opt.textContent = id === 'perchance' ? 'Perch / Perchance · 应用内生成' : engineLabel(id);
         engineSelect.appendChild(opt);
       });
       // Normalize flux-real alias option if patch injected it.

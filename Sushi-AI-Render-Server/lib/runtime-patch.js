@@ -90,13 +90,13 @@ function patchWorkshop(source) {
   }
   function selected(){ var box=el('出图引擎'); return box ? box.value : 'auto'; }
   function tipFor(name){
-    if(name==='auto') return '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得';
+    if(name==='auto') return '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得';
     if(name==='turbo') return 'Turbo · Pollinations 极速免费通道';
     if(name==='horde') return 'AI Horde · 免费共享算力，繁忙时需要排队';
     if(name==='flux') return 'Flux · 通用高质量免费通道';
     if(name==='flux-realism' || name==='flux-real') return 'Flux写实 · 人像优先免费通道';
     if(name==='sana') return 'Sana · 中文友好免费通道';
-    if(name==='perchance') return 'Perchance · 应用内生成（不跳转官网）';
+    if(name==='perchance') return 'Perch / Perchance · 应用内生成（不跳转官网）';
     return (labels[name]||name) + ' · 应用内免费通道';
   }
   function updateTip(){ var tip=el('平台提示'); if(tip) tip.textContent=tipFor(selected()); }
@@ -105,7 +105,7 @@ function patchWorkshop(source) {
     box.__sushiV3=true;
     // Ensure Perchance stays selectable for in-app generation (still block perchance.org jumps).
     if(!box.querySelector('option[value="perchance"]')){
-      var po=document.createElement('option'); po.value='perchance'; po.textContent='Perchance · 应用内生成'; box.appendChild(po);
+      var po=document.createElement('option'); po.value='perchance'; po.textContent='Perch / Perchance · 应用内生成'; box.appendChild(po);
     }
     try {
       var saved=localStorage.getItem('角色生成器_默认平台');

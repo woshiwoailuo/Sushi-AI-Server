@@ -77,14 +77,14 @@ function patchWorkshop(source) {
     var tip=byId('平台提示');
     if(!tip) return;
     var messages={
-      auto:'自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得',
+      auto:'自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得',
       turbo:'Turbo · Pollinations 极速免费通道',
       horde:'AI Horde · 免费共享算力，繁忙时需要排队',
       flux:'Flux · 通用高质量免费通道',
       'flux-realism':'Flux写实 · 人像优先免费通道',
       'flux-real':'Flux写实 · 人像优先免费通道',
       sana:'Sana · 中文友好免费通道',
-      perchance:'Perchance · 应用内生成（不跳转官网）'
+      perchance:'Perch / Perchance · 应用内生成（不跳转官网）'
     };
     tip.textContent=messages[name]||messages.auto;
   }
@@ -92,7 +92,7 @@ function patchWorkshop(source) {
     var box=byId('出图引擎');
     if(!box) return;
     if(!box.querySelector('option[value="perchance"]')){
-      var po=document.createElement('option'); po.value='perchance'; po.textContent='Perchance · 应用内生成'; box.appendChild(po);
+      var po=document.createElement('option'); po.value='perchance'; po.textContent='Perch / Perchance · 应用内生成'; box.appendChild(po);
     }
     var fluxReal=box.querySelector('option[value="flux-real"]');
     if(fluxReal) fluxReal.value='flux-realism';
