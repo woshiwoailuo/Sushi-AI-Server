@@ -65,7 +65,7 @@ test('the actual workshop initializes without Perchance runtime and generates on
   const first = f.w.开始生成();
   await f.w.开始生成();
   await first;
-  assert.equal(f.calls.filter(c => c.method === 'POST').length, 1);
+  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 1);
   assert.match(f.text(), /已生成 1 张/);
   assert.equal(f.w.document.querySelectorAll('#状态提示 .加载动画').length, 0);
   assert.equal(f.w.document.getElementById('生成按钮').disabled, false);
@@ -106,8 +106,8 @@ test('poll failures retry the same task, then cancel and clear the spinner', asy
     throw new Error('network offline');
   });
   await f.w.开始生成();
-  assert.equal(f.calls.filter(c => c.method === 'POST').length, 1);
-  assert.equal(f.calls.filter(c => c.method === 'DELETE').length, 1);
+  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 1);
+  assert.equal(f.calls.filter(c => c.method === 'DELETE' && String(c.url).includes('/api/images')).length, 1);
   assert.match(f.text(), /network offline/);
   assert.equal(f.w.document.querySelector('#状态提示 .加载动画'), null);
 });
@@ -118,7 +118,7 @@ test('the current Chinese prompt is translated before submission, never replaced
   f.w.document.getElementById('英文描述').value = 'A stale unrelated scene';
   f.w.调用开源翻译 = async source => { assert.equal(source, '窗边的小猫'); return 'A small cat by the window'; };
   await f.w.开始生成();
-  const payload = JSON.parse(f.calls.find(c => c.method === 'POST').body);
+  const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.equal(payload.prompt, 'A small cat by the window');
 });
 
@@ -129,8 +129,8 @@ test('failed translation preserves the current text, and legacy perchance select
   // Force horde-only so unit test does not hit live Pollinations.
   f.w.document.getElementById('出图引擎').value = 'horde';
   await f.w.开始生成();
-  assert.equal(JSON.parse(f.calls.find(c => c.method === 'POST').body).prompt, '窗边的小猫');
-  const posts = f.calls.filter(c => c.method === 'POST').length;
+  assert.equal(JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body).prompt, '窗边的小猫');
+  const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length;
   // Legacy perchance value must remap to in-app race/auto — never window.open / official link.
   f.w.document.getElementById('出图引擎').value = 'perchance';
   const opened = [];
@@ -138,7 +138,7 @@ test('failed translation preserves the current text, and legacy perchance select
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must not open perchance.org');
   assert.equal(f.w.document.querySelectorAll('#状态提示 a[href*="perchance.org"]').length, 0);
-  assert.ok(f.calls.filter(c => c.method === 'POST').length >= posts);
+  assert.ok(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length >= posts);
   assert.doesNotMatch(f.text(), /在 Perchance 官网生成/);
 });
 
@@ -171,13 +171,17 @@ test('failed image downloads show a reload action and do not silently create ano
   await f.w.开始生成();
   assert.match(f.text(), /未能加载/);
   assert.equal(f.w.document.querySelector('#图像输出 button').textContent, '重新加载图片');
-  assert.equal(f.calls.filter(c => c.method === 'POST').length, 1);
+  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 1);
   assert.equal(f.w.document.querySelector('#状态提示 .加载动画'), null);
 });
 
 test('a quota error in a batch preserves the earlier successful image', async t => {
   let submissions = 0;
-  const f = await setup(t, (url, options) => options.method === 'POST' && ++submissions > 1 ? response({ error: '今日额度已用尽' }, 402) : response(options.method === 'POST' ? job() : job('done')));
+  const f = await setup(t, (url, options) => {
+    const isImagePost = options.method === 'POST' && String(url).includes('/api/images');
+    if (isImagePost && ++submissions > 1) return response({ error: '今日额度已用尽' }, 402);
+    return response(options.method === 'POST' ? job() : job('done'));
+  });
   f.w.document.getElementById('生成数量').value = '3';
   await f.w.开始生成();
   assert.match(f.text(), /已生成 1 张，后续未完成/);
