@@ -346,7 +346,7 @@
 
   function normalizeEngineName(raw) {
     var name = String(raw || '').trim().toLowerCase();
-    if (name === 'perchance' || name === '官方') return 'auto';
+    if (name === '官方') return 'perchance';
     if (name === 'flux-real' || name === 'flux_realism') return 'flux-realism';
     if (name === 'zimage' || name === 'sdxl' || name === 'krea2' || name === 'liblib') return 'flux';
     if (name === 'anishort') return 'sana';
@@ -356,7 +356,7 @@
   function engineLabel(name) {
     var map = {
       auto: '自动抢出', turbo: 'Turbo', horde: 'Horde', flux: 'Flux',
-      'flux-realism': 'Flux写实', sana: 'Sana'
+      'flux-realism': 'Flux写实', sana: 'Sana', perchance: 'Perchance'
     };
     return map[name] || name;
   }
@@ -364,10 +364,15 @@
   async function generateOne(run, prompt, index) {
     var engine = resolveEngine();
     if (engine === 'horde') return generateHorde(run, prompt, index);
-    if (engine !== 'auto') return generatePollinations(run, prompt, index, engine);
+    if (engine !== 'auto' && engine !== 'perchance') return generatePollinations(run, prompt, index, engine);
 
-    // auto: race ALL free platforms together; first success wins.
-    status('自动抢出 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', 'Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得。', true);
+    // auto / perchance(in-app): race ALL free platforms together; first success wins.
+    // Perchance stays a manual selectable option; generation never window.open's perchance.org.
+    status(
+      (engine === 'perchance' ? 'Perchance 应用内 · 第 ' : '自动抢出 · 第 ') + (run.completed + 1) + '/' + run.total + ' 张',
+      'Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得。',
+      true
+    );
     var winner = null;
     var hordeJobId = null;
 
@@ -416,7 +421,9 @@
   function resolveEngine() {
     var raw = normalizeEngineName(value('出图引擎') || window.__sushiPreferredProvider || 'auto');
     if (raw === 'turbo' || raw === 'horde' || raw === 'flux' || raw === 'flux-realism' || raw === 'sana') return raw;
-    // auto / unknown / legacy redirect stub → full free race
+    // perchance: keep as selectable in-app path (free race under the hood; never open perchance.org)
+    if (raw === 'perchance') return 'perchance';
+    // auto / unknown → full free race
     return 'auto';
   }
 
@@ -466,11 +473,9 @@
 
   window.开始生成 = function () {
     if (active || $('生成按钮').disabled) return Promise.resolve();
-    // Never open Perchance official site — remapped to in-app free race.
+    // Never open Perchance official site — keep selection, generate in-app.
     var providerBox = $('出图引擎');
     if (providerBox) { providerBox.disabled = false; providerBox.removeAttribute('disabled'); }
-    var engineBox = $('出图引擎');
-    if (engineBox && engineBox.value === 'perchance') engineBox.value = 'auto';
 
     var description = lastEdited === '英文描述' ? value('英文描述') : value('角色描述');
     if (!description) description = value('角色描述') || value('英文描述');
@@ -528,6 +533,7 @@
     else if (engine === 'flux') tip.textContent = 'Flux · 通用高质量免费通道';
     else if (engine === 'flux-realism') tip.textContent = 'Flux写实 · 人像优先免费通道';
     else if (engine === 'sana') tip.textContent = 'Sana · 中文友好免费通道';
+    else if (engine === 'perchance') tip.textContent = 'Perchance · 应用内生成（不跳转官网）';
     else tip.textContent = '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得';
   };
 
@@ -541,18 +547,16 @@
     });
     var engineSelect = $('出图引擎');
     if (engineSelect) {
-      // Drop legacy official-redirect option if still present in raw HTML before patches.
-      var perchanceOpt = engineSelect.querySelector('option[value="perchance"]');
-      if (perchanceOpt) perchanceOpt.remove();
       if (!engineSelect.querySelector('option[value="auto"]')) {
         var autoOpt = document.createElement('option');
         autoOpt.value = 'auto'; autoOpt.textContent = '自动抢出 · 全平台';
         engineSelect.insertBefore(autoOpt, engineSelect.firstChild);
       }
-      ['turbo','horde','flux','flux-realism','sana'].forEach(function (id) {
+      ['turbo','horde','flux','flux-realism','sana','perchance'].forEach(function (id) {
         if (engineSelect.querySelector('option[value="' + id + '"]')) return;
         var opt = document.createElement('option');
-        opt.value = id; opt.textContent = engineLabel(id);
+        opt.value = id;
+        opt.textContent = id === 'perchance' ? 'Perchance · 应用内生成' : engineLabel(id);
         engineSelect.appendChild(opt);
       });
       // Normalize flux-real alias option if patch injected it.
@@ -560,10 +564,10 @@
       if (fluxReal) fluxReal.value = 'flux-realism';
       engineSelect.disabled = false;
       engineSelect.removeAttribute('disabled');
-      if (!engineSelect.value || engineSelect.value === 'perchance') engineSelect.value = 'auto';
+      if (!engineSelect.value) engineSelect.value = 'auto';
       engineSelect.addEventListener('change', function () {
-        if (engineSelect.value === 'perchance') engineSelect.value = 'auto';
         if (engineSelect.value === 'flux-real') engineSelect.value = 'flux-realism';
+        // Keep explicit perchance selection; generation stays in-app and never opens perchance.org.
         window.__sushiPreferredProvider = engineSelect.value;
         try { localStorage.setItem('角色生成器_默认平台', engineSelect.value); } catch (e) {}
         window.设平台提示(window.当前引擎());

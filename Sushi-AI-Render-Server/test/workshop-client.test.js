@@ -65,6 +65,7 @@ async function setup(t, handler, imageFails = false) {
 
 test('the actual workshop initializes without Perchance runtime and generates only once on double click', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.ok(f.w.document.querySelector('#出图引擎 option[value="perchance"]'), 'perchance remains selectable');
   const first = f.w.开始生成();
   await f.w.开始生成();
   await first;
@@ -125,7 +126,7 @@ test('the current Chinese prompt is translated before submission, never replaced
   assert.equal(payload.prompt, 'A small cat by the window');
 });
 
-test('failed translation preserves the current text, and legacy perchance selection stays in-app (no official redirect)', async t => {
+test('failed translation preserves the current text, and perchance stays selectable in-app (no official redirect)', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('角色描述').value = '窗边的小猫';
   f.w.调用开源翻译 = async () => { throw new Error('translation offline'); };
@@ -134,14 +135,26 @@ test('failed translation preserves the current text, and legacy perchance select
   await f.w.开始生成();
   assert.equal(JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body).prompt, '窗边的小猫');
   const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length;
-  // Legacy perchance value must remap to in-app race/auto — never window.open / official link.
-  f.w.document.getElementById('出图引擎').value = 'perchance';
+  // Perchance must remain selectable and generate in-app — never window.open / official link.
+  const box = f.w.document.getElementById('出图引擎');
+  assert.ok(box.querySelector('option[value="perchance"]'), 'perchance option must exist');
+  box.value = 'perchance';
   const opened = [];
   f.w.open = (url) => { opened.push(url); return null; };
+  const realFetch = f.w.fetch;
+  f.w.fetch = async (url, options = {}) => {
+    const href = String(url);
+    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
+      const bytes = Buffer.alloc(3200, 7);
+      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
+    }
+    return realFetch(url, options);
+  };
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must not open perchance.org');
+  assert.equal(box.value, 'perchance', 'explicit perchance selection must be kept');
   assert.equal(f.w.document.querySelectorAll('#状态提示 a[href*="perchance.org"]').length, 0);
-  assert.ok(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length >= posts);
+  assert.ok(f.w.document.querySelector('#图像输出 img') || f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length >= posts);
   assert.doesNotMatch(f.text(), /在 Perchance 官网生成/);
 });
 

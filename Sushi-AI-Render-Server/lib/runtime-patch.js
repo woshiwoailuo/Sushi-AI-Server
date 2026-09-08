@@ -11,10 +11,10 @@ function patchWorkshop(source) {
     /function 规范化出图平台\(值, 用户选过\) \{[\s\S]*?\n  \}/,
     'function 规范化出图平台(值, 用户选过) {\n' +
       '    值 = String(值 || "").trim();\n' +
-      '    var 可用 = ["auto","turbo","horde","flux","flux-real","zimage","sdxl","krea2","liblib","anishort"];\n' +
-      '    if (值 === "perchance" || 值 === "官方") return "auto";\n' +
+      '    if (值 === "官方") 值 = "perchance";\n' +
+      '    var 可用 = ["auto","turbo","horde","flux","flux-real","flux-realism","sana","zimage","sdxl","krea2","liblib","anishort","perchance"];\n' +
       '    if (用户选过 && 可用.indexOf(值) >= 0) return 值;\n' +
-      '    return "auto";\n' +
+      '    return 可用.indexOf(值) >= 0 ? 值 : "auto";\n' +
       '  }'
   );
 
@@ -26,6 +26,7 @@ function patchWorkshop(source) {
       '            <option value="flux">Flux · 通用高质量</option>\n' +
       '            <option value="flux-realism">Flux写实 · 人像优先</option>\n' +
       '            <option value="sana">Sana · 中文友好</option>\n' +
+      '            <option value="perchance">Perchance · 应用内生成</option>\n' +
       '          </select>';
   html = html.replace(/<select id="出图引擎" name="出图引擎">[\s\S]*?<\/select>/, providerOptions);
 
@@ -38,6 +39,7 @@ function patchWorkshop(source) {
       '              <option value="flux">Flux</option>\n' +
       '              <option value="flux-realism">Flux写实</option>\n' +
       '              <option value="sana">Sana</option>\n' +
+      '              <option value="perchance">Perchance · 应用内</option>\n' +
       '            </select>'
   );
 
@@ -70,10 +72,10 @@ function patchWorkshop(source) {
 <script id="sushi-provider-pack-v3">
 (function () {
   'use strict';
-  var priority = ['auto','turbo','horde','flux','flux-realism','sana'];
+  var priority = ['auto','turbo','horde','flux','flux-realism','sana','perchance'];
   var labels = {
     auto:'自动抢出', turbo:'Turbo', horde:'Horde', flux:'Flux', 'flux-realism':'Flux写实', sana:'Sana',
-    'flux-real':'Flux写实'
+    'flux-real':'Flux写实', perchance:'Perchance'
   };
   function el(id){ return document.getElementById(id); }
   function isPerchanceUrl(value) {
@@ -94,22 +96,24 @@ function patchWorkshop(source) {
     if(name==='flux') return 'Flux · 通用高质量免费通道';
     if(name==='flux-realism' || name==='flux-real') return 'Flux写实 · 人像优先免费通道';
     if(name==='sana') return 'Sana · 中文友好免费通道';
+    if(name==='perchance') return 'Perchance · 应用内生成（不跳转官网）';
     return (labels[name]||name) + ' · 应用内免费通道';
   }
   function updateTip(){ var tip=el('平台提示'); if(tip) tip.textContent=tipFor(selected()); }
   function installProviderSelect(){
     var box=el('出图引擎'); if(!box || box.__sushiV3) return;
     box.__sushiV3=true;
-    // Remove any leftover official-redirect option.
-    box.querySelectorAll('option[value="perchance"]').forEach(function(opt){ opt.remove(); });
+    // Ensure Perchance stays selectable for in-app generation (still block perchance.org jumps).
+    if(!box.querySelector('option[value="perchance"]')){
+      var po=document.createElement('option'); po.value='perchance'; po.textContent='Perchance · 应用内生成'; box.appendChild(po);
+    }
     try {
       var saved=localStorage.getItem('角色生成器_默认平台');
-      if(saved==='perchance' || saved==='官方') saved='auto';
+      if(saved==='官方') saved='perchance';
       if(priority.indexOf(saved)>=0) box.value=saved; else box.value='auto';
     } catch(e){ box.value='auto'; }
     box.disabled=false; box.removeAttribute('disabled');
     box.addEventListener('change',function(){
-      if(box.value==='perchance') box.value='auto';
       if(box.value==='flux-real') box.value='flux-realism';
       try { localStorage.setItem('角色生成器_默认平台',box.value); } catch(e){}
       window.__sushiPreferredProvider=box.value; updateTip();
@@ -123,11 +127,10 @@ function patchWorkshop(source) {
     window.开始生成=function(){
       var box=el('出图引擎');
       if(box){ box.disabled=false; box.removeAttribute('disabled'); }
-      if(box && box.value==='perchance') box.value='auto';
       if(box && box.value==='flux-real') box.value='flux-realism';
       var chosen=box ? box.value : 'auto';
       window.__sushiPreferredProvider=chosen;
-      // Keep the user's selected free engine; only remap removed stub names.
+      // Keep the user's selected free engine / Perchance in-app; only remap removed stub names.
       if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='zimage'||chosen==='sdxl'){
         if(box) box.value = chosen==='anishort' ? 'sana' : 'flux';
       }

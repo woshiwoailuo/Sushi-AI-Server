@@ -14,7 +14,7 @@ function patchGenerationScript(source) {
   js = js.replace(/function openOfficial\s*\([\s\S]*?\n  \}/g, 'function openOfficial() { /* disabled: in-app free race only */ }');
   js = js.replace(
     /if\s*\(\s*window\.当前引擎\(\)\s*===\s*'perchance'\s*\)\s*\{\s*openOfficial\(\);\s*return Promise\.resolve\(\);\s*\}/g,
-    "if (window.当前引擎() === 'perchance') { var _pb = $('出图引擎'); if (_pb) _pb.value = 'auto'; }"
+    "if (window.当前引擎() === 'perchance') { /* keep in-app perchance; never openOfficial */ }"
   );
   js = js.replace(/https:\/\/perchance\.org\/ai-text-to-image-generator/g, '#');
   return js;

@@ -1084,9 +1084,11 @@ app.post('/api/workshop/unlock', authMiddleware, (req, res) => {
 });
 
 const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
-const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek']);
+const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde']);
 const DEEPSEEK_API_KEY = String(process.env.DEEPSEEK_API_KEY || '').trim();
 const DEEPSEEK_MODEL = String(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim();
+const HORDE_TEXT_API_KEY = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
+const HORDE_TEXT_CLIENT = 'sushi-club:1.1.21:https://aihorde.net';
 
 function workshopImageError(res, status, error) {
   res.status(status).json({ error });
@@ -1095,11 +1097,94 @@ function workshopImageError(res, status, error) {
 function normalizeChatModel(raw) {
   const model = String(raw || 'openai').trim().toLowerCase();
   if (model === 'deepseek') return 'deepseek';
+  if (model === 'horde' || model === 'aihorde' || model === 'ai-horde') return 'horde';
   // Pollinations legacy ids: turbo is gone; openai-fast often 402s while alias "openai" still works anonymously.
   if (model === 'turbo' || model === 'openai-fast' || model === 'fast' || model === 'openai' || model === 'gpt-oss') {
     return 'openai';
   }
   return model;
+}
+
+function messagesToHordePrompt(messages) {
+  const parts = [];
+  for (const item of messages) {
+    if (!item || !item.content) continue;
+    const role = String(item.role || 'user').toLowerCase();
+    const content = String(item.content).trim();
+    if (!content) continue;
+    if (role === 'system') parts.push('### System:\n' + content);
+    else if (role === 'assistant') parts.push('### Assistant:\n' + content);
+    else parts.push('### Instruction:\n' + content);
+  }
+  parts.push('### Assistant:\n');
+  return parts.join('\n\n').slice(0, 6000);
+}
+
+function openaiStyleChat(content, model) {
+  return {
+    id: 'sushi-horde-' + Date.now(),
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: model || 'horde',
+    choices: [{
+      index: 0,
+      message: { role: 'assistant', content: String(content || '').trim() },
+      finish_reason: 'stop',
+    }],
+  };
+}
+
+async function chatViaHordeText(messages, signal) {
+  const prompt = messagesToHordePrompt(messages);
+  if (!prompt.trim()) throw Object.assign(new Error('对话内容不能为空'), { status: 400 });
+  const accepted = await fetch('https://aihorde.net/api/v2/generate/text/async', {
+    method: 'POST',
+    signal,
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: HORDE_TEXT_API_KEY,
+      'Client-Agent': HORDE_TEXT_CLIENT,
+    },
+    body: JSON.stringify({
+      prompt,
+      params: {
+        max_length: 220,
+        max_context_length: 2048,
+        temperature: 0.7,
+      },
+      nsfw: false,
+    }),
+  });
+  const acceptedJson = await accepted.json().catch(() => ({}));
+  if (!accepted.ok || !acceptedJson.id) {
+    const detail = String((acceptedJson && (acceptedJson.message || acceptedJson.error)) || '').slice(0, 120);
+    throw Object.assign(
+      new Error(detail ? ('Horde 未受理：' + detail) : 'Horde 对话通道繁忙，请稍后重试'),
+      { status: accepted.status === 429 ? 429 : 502 }
+    );
+  }
+  for (let i = 0; i < 24; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (signal && signal.aborted) throw Object.assign(new Error('对话服务器超时'), { status: 504, name: 'AbortError' });
+    const status = await fetch('https://aihorde.net/api/v2/generate/text/status/' + encodeURIComponent(acceptedJson.id), {
+      signal,
+      headers: {
+        apikey: HORDE_TEXT_API_KEY,
+        'Client-Agent': HORDE_TEXT_CLIENT,
+      },
+    });
+    const statusJson = await status.json().catch(() => ({}));
+    if (statusJson && statusJson.faulted) {
+      throw Object.assign(new Error('Horde 对话生成失败'), { status: 502 });
+    }
+    const text = statusJson && statusJson.generations && statusJson.generations[0] && statusJson.generations[0].text;
+    if (statusJson && statusJson.done && text) {
+      const cleaned = String(text).replace(/^[\s\S]*### Assistant:\s*/m, '').trim();
+      if (cleaned.length < 2) throw Object.assign(new Error('Horde 返回空回复'), { status: 502 });
+      return openaiStyleChat(cleaned, 'horde');
+    }
+  }
+  throw Object.assign(new Error('Horde 对话排队超时，请稍后重试'), { status: 504 });
 }
 
 function normalizeImageModel(raw) {
@@ -1114,34 +1199,40 @@ app.post('/api/workshop/chat', async (req, res) => {
   const access = getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
   const requested = String((req.body && req.body.model) || 'openai');
-  if (!CHAT_MODELS.has(requested) && requested !== 'openai') {
+  if (!CHAT_MODELS.has(requested) && requested !== 'openai' && requested !== 'horde') {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const model = normalizeChatModel(requested);
-  if (model !== 'deepseek' && model !== 'openai') {
+  if (model !== 'deepseek' && model !== 'openai' && model !== 'horde') {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-48) : [];
   if (!messages.length) return workshopImageError(res, 400, '对话内容不能为空');
   if (model === 'deepseek' && !DEEPSEEK_API_KEY) {
-    return workshopImageError(res, 503, 'DeepSeek 尚未配置，请在环境变量添加 DEEPSEEK_API_KEY');
+    return workshopImageError(res, 503, 'DeepSeek 尚未配置，请改用其他对话通道或稍后重试');
   }
-  const endpoint = model === 'deepseek'
-    ? 'https://api.deepseek.com/chat/completions'
-    : 'https://text.pollinations.ai/openai';
-  const upstreamModel = model === 'deepseek' ? DEEPSEEK_MODEL : 'openai';
-  const requestBody = model === 'deepseek'
-    ? {
-        model: upstreamModel,
-        messages,
-        max_tokens: 800,
-        temperature: 0.7,
-        thinking: { type: 'disabled' },
-      }
-    : { model: upstreamModel, messages };
+
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 45_000);
+  const timer = setTimeout(() => controller.abort(), model === 'horde' ? 35_000 : 18_000);
   try {
+    if (model === 'horde') {
+      const payload = await chatViaHordeText(messages, controller.signal);
+      return res.status(200).json(payload);
+    }
+
+    const endpoint = model === 'deepseek'
+      ? 'https://api.deepseek.com/chat/completions'
+      : 'https://text.pollinations.ai/openai';
+    const upstreamModel = model === 'deepseek' ? DEEPSEEK_MODEL : 'openai';
+    const requestBody = model === 'deepseek'
+      ? {
+          model: upstreamModel,
+          messages,
+          max_tokens: 800,
+          temperature: 0.7,
+          thinking: { type: 'disabled' },
+        }
+      : { model: upstreamModel, messages };
     let upstream = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
@@ -1154,9 +1245,9 @@ app.post('/api/workshop/chat', async (req, res) => {
       body: JSON.stringify(requestBody),
     });
     let body = await upstream.text();
-    // One silent retry for transient Pollinations queue / payment flaps.
-    if (model === 'openai' && (upstream.status === 402 || upstream.status === 429 || upstream.status >= 500)) {
-      await new Promise((r) => setTimeout(r, 700));
+    // One short retry for transient Pollinations flaps (avoid long hangs on hard 402).
+    if (model === 'openai' && (upstream.status === 429 || upstream.status >= 500)) {
+      await new Promise((r) => setTimeout(r, 500));
       upstream = await fetch(endpoint, {
         method: 'POST',
         signal: controller.signal,
@@ -1177,15 +1268,20 @@ app.post('/api/workshop/chat', async (req, res) => {
       } catch (error) {
         detail = String(body || '').replace(/\s+/g, ' ').slice(0, 160);
       }
-      const label = model === 'deepseek' ? 'DeepSeek' : '对话通道';
-      const status = upstream.status === 401 || upstream.status === 402 || upstream.status === 429
-        ? upstream.status
-        : 502;
-      return workshopImageError(res, status, `${label}返回 ${upstream.status}${detail ? '：' + detail : ''}`);
+      if (upstream.status === 402) {
+        return workshopImageError(res, 402, '快速对话通道暂时需要付费额度，请改用 Horde 或其他通道');
+      }
+      if (upstream.status === 429) {
+        return workshopImageError(res, 429, (model === 'deepseek' ? 'DeepSeek' : '快速对话') + '通道繁忙，请稍后重试');
+      }
+      const label = model === 'deepseek' ? 'DeepSeek' : '快速对话';
+      const status = upstream.status === 401 ? 401 : 502;
+      return workshopImageError(res, status, `${label}暂时不可用${detail ? '：' + detail : ''}，请改用其他通道`);
     }
     res.status(200).type('application/json').send(body || '{}');
   } catch (error) {
-    return workshopImageError(res, 504, error && error.name === 'AbortError' ? '对话服务器超时' : '对话服务器连接失败');
+    if (error && error.status) return workshopImageError(res, error.status, error.message || '对话失败');
+    return workshopImageError(res, 504, error && error.name === 'AbortError' ? '对话服务器超时，请稍后重试' : '对话服务器连接失败');
   } finally {
     clearTimeout(timer);
   }

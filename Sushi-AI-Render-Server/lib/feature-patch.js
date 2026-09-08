@@ -83,19 +83,23 @@ function patchWorkshop(source) {
       flux:'Flux · 通用高质量免费通道',
       'flux-realism':'Flux写实 · 人像优先免费通道',
       'flux-real':'Flux写实 · 人像优先免费通道',
-      sana:'Sana · 中文友好免费通道'
+      sana:'Sana · 中文友好免费通道',
+      perchance:'Perchance · 应用内生成（不跳转官网）'
     };
     tip.textContent=messages[name]||messages.auto;
   }
   function forceDefaultProvider(){
     var box=byId('出图引擎');
     if(!box) return;
-    box.querySelectorAll('option[value="perchance"]').forEach(function(opt){ opt.remove(); });
+    if(!box.querySelector('option[value="perchance"]')){
+      var po=document.createElement('option'); po.value='perchance'; po.textContent='Perchance · 应用内生成'; box.appendChild(po);
+    }
     var fluxReal=box.querySelector('option[value="flux-real"]');
     if(fluxReal) fluxReal.value='flux-realism';
     var saved='';
     try { saved=localStorage.getItem('角色生成器_默认平台')||''; } catch(e) {}
-    if(saved==='perchance' || saved==='官方' || !saved) saved='auto';
+    if(saved==='官方') saved='perchance';
+    if(!saved) saved='auto';
     if(saved==='flux-real') saved='flux-realism';
     if(!box.querySelector('option[value="'+saved+'"]')) saved='auto';
     box.value=saved;
@@ -164,7 +168,6 @@ function patchWorkshop(source) {
     if(typeof original!=='function') return;
     window.开始生成=function(){
       var box=byId('出图引擎');
-      if(box && box.value==='perchance') box.value='auto';
       var chosen=box?box.value:'auto';
       if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='zimage'||chosen==='sdxl'){
         if(box) box.value = chosen==='anishort' ? 'sana' : 'flux';

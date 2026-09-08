@@ -451,11 +451,20 @@
       return msgs;
     }
     async function askModel(model, messages) {
-      var data = await api('/api/workshop/chat', {
-        method: 'POST',
-        body: JSON.stringify({ model: model, messages: messages }),
-        timeoutMs: 45000
-      });
+      var timeoutMs = model === 'horde' ? 32000 : 14000;
+      try {
+        var data = await api('/api/workshop/chat', {
+          method: 'POST',
+          body: JSON.stringify({ model: model, messages: messages }),
+          timeoutMs: timeoutMs
+        });
+      } catch (err) {
+        var msg = (err && err.message) || '通道失败';
+        if (err && err.status === 402) msg = '快速对话通道暂时不可用（需付费额度）';
+        else if (err && err.status === 503 && /DeepSeek/i.test(msg)) msg = 'DeepSeek 未配置';
+        else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
+        throw new Error(msg);
+      }
       var content = data && data.choices && data.choices[0] && data.choices[0].message
         ? data.choices[0].message.content : '';
       content = String(content || '').trim();
@@ -465,9 +474,9 @@
     }
     async function raceChat(question) {
       var messages = buildMessages(question);
-      // openai：当前匿名可用别名；deepseek：若已配置则参与抢答。旧 turbo / openai-fast 由服务端归一化为 openai。
-      var models = ['openai', 'deepseek'];
-      var labels = { openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话' };
+      // openai / deepseek / horde：多通道抢答；Horde 走同源 JWT 代理，避免官网 402 后整页挂死。
+      var models = ['openai', 'deepseek', 'horde'];
+      var labels = { openai: '快速对话', deepseek: 'DeepSeek', horde: 'Horde', turbo: '快速对话', 'openai-fast': '快速对话' };
       return await new Promise(function (resolve, reject) {
         var left = models.length;
         var failed = 0;
