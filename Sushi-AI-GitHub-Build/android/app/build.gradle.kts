@@ -3,19 +3,16 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val previewBuild = providers.gradleProperty("preview").orNull == "true"
-
 android {
     namespace = "org.sushi.club"
     compileSdk = 34
     defaultConfig {
-        applicationId = if (previewBuild) "org.sushi.club.preview" else "org.sushi.club"
+        applicationId = "org.sushi.club"
         minSdk = 24
         targetSdk = 34
-        versionCode = 18
-        versionName = if (previewBuild) "1.1.16-preview" else "1.1.16"
-        manifestPlaceholders["sushiAppLabel"] = if (previewBuild) "苏轼AI 测试版" else "@string/app_name"
-        buildConfigField("String", "DEFAULT_BASE_URL", "\"https://sushi-ai-server.onrender.com\"")
+        versionCode = 14
+        versionName = "1.1.12"
+        buildConfigField("String", "DEFAULT_BASE_URL", "\"https://sushi-ai-server.vercel.app\"")
     }
     buildFeatures {
         viewBinding = true
