@@ -266,7 +266,7 @@ function smtpConfigured() {
 async function sendVerifyEmail(to, code) {
   if (!smtpConfigured()) {
     console.warn('[mail] SMTP_HOST/SMTP_USER/SMTP_PASS missing, skip send (code stored)');
-    return;
+    return false;
   }
   const transporter = nodemailer.createTransport({
     host: SMTP_HOST,
@@ -288,6 +288,7 @@ async function sendVerifyEmail(to, code) {
     text,
     html,
   });
+  return true;
 }
 
 function genSixDigit() {
@@ -306,17 +307,20 @@ function resendTooSoon(email) {
   return t && Date.now() - t < 60000;
 }
 
-function storeVerifyCode(email) {
+async function storeVerifyCode(email) {
   const code = genSixDigit();
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   db.prepare(
     'INSERT INTO email_codes (email, code, expires_at, created_at) VALUES (?, ?, ?, ?)'
   ).run(email, code, expires, nowIso());
   persistSqlJs();
-  sendVerifyEmail(email, code).catch((err) => {
-    console.warn('[mail] send failed:', err.message);
-  });
-  return code;
+  let mail_sent = false;
+  try {
+    mail_sent = !!(await sendVerifyEmail(email, code));
+  } catch (err) {
+    console.warn('[mail] send failed:', err && err.message ? err.message : err);
+  }
+  return { code, mail_sent };
 }
 
 function seedAdmin() {
@@ -458,7 +462,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.post('/api/auth/register', rateLimit('register', 5, 15 * 60_000), (req, res) => {
+app.post('/api/auth/register', rateLimit('register', 5, 15 * 60_000), async (req, res) => {
   const email = String((req.body && req.body.email) || '')
     .trim()
     .toLowerCase();
@@ -475,8 +479,17 @@ app.post('/api/auth/register', rateLimit('register', 5, 15 * 60_000), (req, res)
        VALUES (?, ?, ?, 'user', 'free', NULL, 10, 0, 0, ?)`
   ).run(email, hash, display_name, nowIso());
   persistSqlJs();
-  storeVerifyCode(email);
-  res.json({ ok: true, need_verify: true, email });
+  const { mail_sent } = await storeVerifyCode(email);
+  if (mail_sent) {
+    return res.json({ ok: true, need_verify: true, email, mail_sent: true });
+  }
+  return res.json({
+    ok: true,
+    need_verify: true,
+    email,
+    mail_sent: false,
+    error: '验证码邮件发送失败，请稍后重试或联系馆主通过验证',
+  });
 });
 
 app.post('/api/auth/verify', (req, res) => {
@@ -504,7 +517,7 @@ app.post('/api/auth/verify', (req, res) => {
   res.json({ token, user: publicUser(updated) });
 });
 
-app.post('/api/auth/resend', rateLimit('resend', 5, 15 * 60_000), (req, res) => {
+app.post('/api/auth/resend', rateLimit('resend', 5, 15 * 60_000), async (req, res) => {
   const email = String((req.body && req.body.email) || '')
     .trim()
     .toLowerCase();
@@ -513,7 +526,16 @@ app.post('/api/auth/resend', rateLimit('resend', 5, 15 * 60_000), (req, res) => 
     if (resendTooSoon(email)) {
       return res.status(429).json({ error: '请 60 秒后再试' });
     }
-    storeVerifyCode(email);
+    const { mail_sent } = await storeVerifyCode(email);
+    if (!mail_sent) {
+      return res.json({
+        ok: true,
+        need_verify: true,
+        mail_sent: false,
+        error: '验证码邮件发送失败，请稍后重试或联系馆主通过验证',
+      });
+    }
+    return res.json({ ok: true, mail_sent: true });
   }
   res.json({ ok: true });
 });
