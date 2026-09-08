@@ -551,7 +551,7 @@
   }
 
   function resolveEngine() {
-    var raw = normalizeEngineName(value('出图引擎') || window.__sushiPreferredProvider || 'auto');
+    var raw = normalizeEngineName(value('出图引擎') || window.__sushiPreferredProvider || 'perchance');
     if (raw === 'turbo' || raw === 'horde' || raw === 'flux' || raw === 'flux-realism' || raw === 'sana') return raw;
     // perchance: keep as selectable in-app path (free race under the hood; never open perchance.org)
     if (raw === 'perchance') return 'perchance';
@@ -729,7 +729,7 @@
       if (fluxReal) fluxReal.value = 'flux-realism';
       engineSelect.disabled = false;
       engineSelect.removeAttribute('disabled');
-      if (!engineSelect.value) engineSelect.value = 'auto';
+      if (!engineSelect.value) engineSelect.value = 'perchance';
       engineSelect.addEventListener('change', function () {
         if (engineSelect.value === 'flux-real') engineSelect.value = 'flux-realism';
         // Keep explicit perchance selection; generation stays in-app and never opens perchance.org.

@@ -323,3 +323,10 @@ test('auto race skips rate-limited engines quickly and surfaces 限流 tip', asy
   assert.match(src, /出图通道限流/);
   assert.doesNotMatch(src, /window\.open\([^)]*perchance\.org/);
 });
+
+
+test('workshop source defaults to in-app perchance as the primary route', () => {
+  assert.match(html, /<option value="perchance" selected>/);
+  assert.match(html, /var 用户选定平台 = "perchance";/);
+  assert.match(client, /window\\.__sushiPreferredProvider \\|\\| 'perchance'/);
+});
