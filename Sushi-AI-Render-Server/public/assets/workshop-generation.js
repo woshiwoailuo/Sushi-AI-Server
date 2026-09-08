@@ -4,7 +4,8 @@
   var active = null;
   var lastEdited = '角色描述';
   var randomPair = null;
-  var lockedImageProvider = (window.__sushiImageProviderLock || '');
+  var lockedImageProvider = '';
+  window.__sushiImageProviderLock = '';
   var $ = function (id) { return document.getElementById(id); };
   var value = function (id) { return ($(id) && $(id).value || '').trim(); };
 
@@ -33,19 +34,15 @@
   }
 
   function lockImageProvider(name) {
+    // Remember last successful engine for tips only — never lock/disable the picker.
     name = String(name || '').trim();
     if (!name || name === 'auto') return;
-    if (!lockedImageProvider) {
-      lockedImageProvider = name;
-      window.__sushiImageProviderLock = name;
-    }
+    window.__sushiLastEngine = name;
     var box = $('出图引擎');
     if (box) {
-      if (lockedImageProvider === 'horde') box.value = 'horde';
-      else if (lockedImageProvider === 'turbo') box.value = 'turbo';
-      else box.value = 'auto';
-      box.disabled = true;
-      box.title = '本次会话已锁定生图平台：' + lockedImageProvider;
+      box.disabled = false;
+      box.removeAttribute('disabled');
+      box.title = '可随时切换生图平台；上次成功：' + name;
     }
   }
 
@@ -236,11 +233,22 @@
     run.job = await api('/' + encodeURIComponent(run.job.id), { method: 'DELETE', timeoutMs: 30000 });
   }
 
+  function workshopTicket() {
+    try { return new URLSearchParams(location.search).get('k') || ''; } catch (e) { return ''; }
+  }
+
+  function pollinationsProxyUrl(model, prompt, width, height, seed) {
+    return '/api/workshop/image'
+      + '?k=' + encodeURIComponent(workshopTicket())
+      + '&model=' + encodeURIComponent(model || 'turbo')
+      + '&prompt=' + encodeURIComponent(String(prompt || 'photo').slice(0, 1400))
+      + '&width=' + (width || 512)
+      + '&height=' + (height || 512)
+      + '&seed=' + seed;
+  }
+
   function turboUrl(prompt, width, height, seed) {
-    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(String(prompt || 'photo').slice(0, 1400)) +
-      '?model=turbo&width=' + (width || 512) +
-      '&height=' + (height || 512) +
-      '&nologo=true&enhance=false&safe=false&seed=' + seed;
+    return pollinationsProxyUrl('turbo', prompt, width, height, seed);
   }
 
   function loadImageUrl(run, url, timeoutMs) {
@@ -283,32 +291,45 @@
     });
   }
 
-  async function generateTurbo(run, prompt, index) {
+  async function generatePollinations(run, prompt, index, model) {
+    model = normalizeEngineName(model || 'turbo');
     var seedBase = run.payload.seed !== '' && run.payload.seed != null
       ? Number(run.payload.seed)
       : Math.floor(Math.random() * 2147483646);
     if (!Number.isFinite(seedBase)) seedBase = Math.floor(Math.random() * 2147483646);
     var seed = seedBase + (index || 0) * 97;
-    var url = turboUrl(prompt, run.payload.width, run.payload.height, seed);
-    status('正在用 Turbo 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', 'Pollinations 免费极速通道。', true);
-    // Prefer fetch so we can surface HTTP errors; fall back to <img> load.
-    try {
-      var response = await fetch(url, { method: 'GET', credentials: 'omit', cache: 'no-store', signal: run.controller.signal });
-      if (!response.ok) throw new Error('Turbo HTTP ' + response.status);
-      var blob = await response.blob();
-      if (!blob || !blob.type || blob.type.indexOf('image/') !== 0) throw new Error('Turbo 未返回图片');
-      var dataUrl = await new Promise(function (resolve, reject) {
-        var reader = new FileReader();
-        reader.onload = function () { resolve(reader.result); };
-        reader.onerror = function () { reject(new Error('Turbo 读图失败')); };
-        reader.readAsDataURL(blob);
-      });
-      return { url: dataUrl, engine: 'turbo' };
-    } catch (error) {
-      if (run.cancelled || (error && error.name === 'AbortError')) throw new Error('已取消生成');
-      await loadImageUrl(run, url, 40000);
-      return { url: url, engine: 'turbo' };
+    var label = engineLabel(model);
+    status('正在用 ' + label + ' 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '同源代理出图，失败会自动换种子重试。', true);
+    var lastError = null;
+    for (var attempt = 0; attempt < 3; attempt += 1) {
+      ensureActive(run);
+      var url = pollinationsProxyUrl(model, prompt, run.payload.width, run.payload.height, seed + attempt * 131);
+      try {
+        var response = await fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: run.controller.signal });
+        if (!response.ok) throw new Error(label + ' HTTP ' + response.status);
+        var blob = await response.blob();
+        if (!blob || !blob.size || blob.size < 2500) throw new Error(label + ' 图片无效');
+        if (blob.type && blob.type.indexOf('image/') !== 0 && blob.type.indexOf('application/octet-stream') !== 0) {
+          throw new Error(label + ' 未返回图片');
+        }
+        var dataUrl = await new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(reader.result); };
+          reader.onerror = function () { reject(new Error(label + ' 读图失败')); };
+          reader.readAsDataURL(blob);
+        });
+        return { url: dataUrl, engine: model };
+      } catch (error) {
+        if (run.cancelled || (error && error.name === 'AbortError')) throw new Error('已取消生成');
+        lastError = error;
+        await pause(run, 400 + attempt * 350);
+      }
     }
+    throw lastError || new Error(label + ' 出图失败');
+  }
+
+  async function generateTurbo(run, prompt, index) {
+    return generatePollinations(run, prompt, index, 'turbo');
   }
 
   async function generateHorde(run, prompt, index) {
@@ -321,54 +342,71 @@
     return { url: done.image.url, engine: 'horde', job: done };
   }
 
+  var FREE_RACE_ENGINES = ['turbo', 'flux', 'flux-realism', 'sana', 'horde'];
+
+  function normalizeEngineName(raw) {
+    var name = String(raw || '').trim().toLowerCase();
+    if (name === 'perchance' || name === '官方') return 'auto';
+    if (name === 'flux-real' || name === 'flux_realism') return 'flux-realism';
+    if (name === 'zimage' || name === 'sdxl' || name === 'krea2' || name === 'liblib') return 'flux';
+    if (name === 'anishort') return 'sana';
+    return name || 'auto';
+  }
+
+  function engineLabel(name) {
+    var map = {
+      auto: '自动抢出', turbo: 'Turbo', horde: 'Horde', flux: 'Flux',
+      'flux-realism': 'Flux写实', sana: 'Sana'
+    };
+    return map[name] || name;
+  }
+
   async function generateOne(run, prompt, index) {
     var engine = resolveEngine();
-    if (engine === 'turbo') return generateTurbo(run, prompt, index);
     if (engine === 'horde') return generateHorde(run, prompt, index);
+    if (engine !== 'auto') return generatePollinations(run, prompt, index, engine);
 
-    // auto: race Turbo + Horde; first success wins; cancel the other.
-    status('自动抢出 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', 'Turbo 与 Horde 同时开跑，先到先得。', true);
+    // auto: race ALL free platforms together; first success wins.
+    status('自动抢出 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', 'Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得。', true);
     var winner = null;
-    var turboCtrl = { cancelled: false };
     var hordeJobId = null;
 
-    var turboPromise = generateTurbo(run, prompt, index).then(function (result) {
+    function claim(result) {
       if (winner) throw new Error('lost-race');
       winner = result;
-      turboCtrl.cancelled = true;
       return result;
-    }).catch(function (error) {
-      if (winner || (error && error.message === 'lost-race')) throw error;
-      throw error;
+    }
+
+    var tasks = FREE_RACE_ENGINES.map(function (eng) {
+      if (eng === 'horde') {
+        return (async function () {
+          var payload = Object.assign({}, run.payload, { prompt: prompt });
+          if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
+          var job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: run.controller.signal });
+          hordeJobId = job.id;
+          run.job = job;
+          if (winner) {
+            try { await api('/' + encodeURIComponent(job.id), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
+            throw new Error('lost-race');
+          }
+          var done = await poll(run, job);
+          if (winner) throw new Error('lost-race');
+          return claim({ url: done.image.url, engine: 'horde', job: done });
+        })();
+      }
+      return generatePollinations(run, prompt, index, eng).then(claim);
     });
 
-    var hordePromise = (async function () {
-      var payload = Object.assign({}, run.payload, { prompt: prompt });
-      if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
-      var job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: run.controller.signal });
-      hordeJobId = job.id;
-      run.job = job;
-      if (winner) {
-        try { await api('/' + encodeURIComponent(job.id), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
-        throw new Error('lost-race');
-      }
-      var done = await poll(run, job);
-      if (winner) throw new Error('lost-race');
-      winner = { url: done.image.url, engine: 'horde', job: done };
-      return winner;
-    })();
-
     try {
-      return await Promise.any([turboPromise, hordePromise]);
+      return await Promise.any(tasks);
     } catch (error) {
-      // Promise.any AggregateError — both failed
-      var msg = '自动抢出失败：Turbo 与 Horde 均未成功';
+      var msg = '自动抢出失败：各平台均未成功';
       if (error && error.errors && error.errors.length) {
         msg = error.errors.map(function (e) { return e && e.message; }).filter(Boolean).join('；') || msg;
       }
       throw new Error(msg);
     } finally {
-      if (winner && winner.engine === 'turbo' && hordeJobId) {
+      if (winner && winner.engine !== 'horde' && hordeJobId) {
         try { await api('/' + encodeURIComponent(hordeJobId), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
         run.job = null;
       }
@@ -376,11 +414,9 @@
   }
 
   function resolveEngine() {
-    if (lockedImageProvider === 'turbo' || lockedImageProvider === 'horde') return lockedImageProvider;
-    var raw = value('出图引擎');
-    if (raw === 'turbo') return 'turbo';
-    if (raw === 'horde') return 'horde';
-    // auto / perchance (legacy redirect stub) / unknown → free race
+    var raw = normalizeEngineName(value('出图引擎') || window.__sushiPreferredProvider || 'auto');
+    if (raw === 'turbo' || raw === 'horde' || raw === 'flux' || raw === 'flux-realism' || raw === 'sana') return raw;
+    // auto / unknown / legacy redirect stub → full free race
     return 'auto';
   }
 
@@ -430,15 +466,9 @@
 
   window.开始生成 = function () {
     if (active || $('生成按钮').disabled) return Promise.resolve();
-    if (lockedImageProvider) {
-      var providerBox = $('出图引擎');
-      if (providerBox) {
-        if (lockedImageProvider === 'horde') providerBox.value = 'horde';
-        else if (lockedImageProvider === 'turbo') providerBox.value = 'turbo';
-        providerBox.disabled = true;
-      }
-    }
     // Never open Perchance official site — remapped to in-app free race.
+    var providerBox = $('出图引擎');
+    if (providerBox) { providerBox.disabled = false; providerBox.removeAttribute('disabled'); }
     var engineBox = $('出图引擎');
     if (engineBox && engineBox.value === 'perchance') engineBox.value = 'auto';
 
@@ -469,14 +499,8 @@
 
   window.开始随机生成 = function () {
     if (active || $('随机按钮').disabled) return Promise.resolve();
-    if (lockedImageProvider) {
-      var providerBox = $('出图引擎');
-      if (providerBox) {
-        if (lockedImageProvider === 'horde') providerBox.value = 'horde';
-        else if (lockedImageProvider === 'turbo') providerBox.value = 'turbo';
-        providerBox.disabled = true;
-      }
-    }
+    var providerBox = $('出图引擎');
+    if (providerBox) { providerBox.disabled = false; providerBox.removeAttribute('disabled'); }
     var pair = window.本地随机一对();
     randomPair = { chinese: pair[0], english: pair[1] };
     $('角色描述').value = pair[0]; $('中文译文').value = pair[0]; $('英文描述').value = pair[1];
@@ -498,9 +522,13 @@
   window.设平台提示 = function (engine) {
     var tip = $('平台提示');
     if (!tip) return;
+    engine = normalizeEngineName(engine);
     if (engine === 'turbo') tip.textContent = 'Turbo · Pollinations 极速免费通道';
     else if (engine === 'horde') tip.textContent = 'AI Horde · 免费共享算力，繁忙时需要排队';
-    else tip.textContent = '自动抢出 · Turbo + Horde 同时开跑，先到先得';
+    else if (engine === 'flux') tip.textContent = 'Flux · 通用高质量免费通道';
+    else if (engine === 'flux-realism') tip.textContent = 'Flux写实 · 人像优先免费通道';
+    else if (engine === 'sana') tip.textContent = 'Sana · 中文友好免费通道';
+    else tip.textContent = '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得';
   };
 
   async function init() {
@@ -518,12 +546,26 @@
       if (perchanceOpt) perchanceOpt.remove();
       if (!engineSelect.querySelector('option[value="auto"]')) {
         var autoOpt = document.createElement('option');
-        autoOpt.value = 'auto'; autoOpt.textContent = '自动抢出 · Turbo+Horde';
+        autoOpt.value = 'auto'; autoOpt.textContent = '自动抢出 · 全平台';
         engineSelect.insertBefore(autoOpt, engineSelect.firstChild);
       }
+      ['turbo','horde','flux','flux-realism','sana'].forEach(function (id) {
+        if (engineSelect.querySelector('option[value="' + id + '"]')) return;
+        var opt = document.createElement('option');
+        opt.value = id; opt.textContent = engineLabel(id);
+        engineSelect.appendChild(opt);
+      });
+      // Normalize flux-real alias option if patch injected it.
+      var fluxReal = engineSelect.querySelector('option[value="flux-real"]');
+      if (fluxReal) fluxReal.value = 'flux-realism';
+      engineSelect.disabled = false;
+      engineSelect.removeAttribute('disabled');
       if (!engineSelect.value || engineSelect.value === 'perchance') engineSelect.value = 'auto';
       engineSelect.addEventListener('change', function () {
         if (engineSelect.value === 'perchance') engineSelect.value = 'auto';
+        if (engineSelect.value === 'flux-real') engineSelect.value = 'flux-realism';
+        window.__sushiPreferredProvider = engineSelect.value;
+        try { localStorage.setItem('角色生成器_默认平台', engineSelect.value); } catch (e) {}
         window.设平台提示(window.当前引擎());
       });
     }
@@ -540,7 +582,7 @@
         run.promise = execute(run, true);
         return;
       }
-      status('生图服务已就绪', '可以开始生成图片（自动抢出：Turbo + Horde）。', false);
+      status('生图服务已就绪', '可以开始生成图片（自动抢出：全平台）。', false);
     } catch (error) {
       status('暂时无法准备生图', error.message + ' 可稍后直接再次点击生成。', false);
     }

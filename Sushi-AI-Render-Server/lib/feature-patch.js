@@ -77,12 +77,13 @@ function patchWorkshop(source) {
     var tip=byId('平台提示');
     if(!tip) return;
     var messages={
-      auto:'自动抢出 · Turbo + Horde 同时开跑，先到先得',
+      auto:'自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得',
       turbo:'Turbo · Pollinations 极速免费通道',
       horde:'AI Horde · 免费共享算力，繁忙时需要排队',
-      krea2:'Krea 2 · 高质量写实；服务器未配置 KREA_API_TOKEN 时自动使用免费备用通道',
-      anishort:'AniShort · AI短剧/角色创作入口；无公开第三方API时自动使用免费备用通道',
-      liblib:'LiblibAI · 模型与 LoRA 丰富；服务器未配置 LiblibAI API 凭证时自动使用免费备用通道'
+      flux:'Flux · 通用高质量免费通道',
+      'flux-realism':'Flux写实 · 人像优先免费通道',
+      'flux-real':'Flux写实 · 人像优先免费通道',
+      sana:'Sana · 中文友好免费通道'
     };
     tip.textContent=messages[name]||messages.auto;
   }
@@ -90,29 +91,27 @@ function patchWorkshop(source) {
     var box=byId('出图引擎');
     if(!box) return;
     box.querySelectorAll('option[value="perchance"]').forEach(function(opt){ opt.remove(); });
-    if(!window.__sushiImageProviderLock){
-      var saved='';
-      try { saved=localStorage.getItem('角色生成器_默认平台')||''; } catch(e) {}
-      if(saved==='perchance' || saved==='官方' || !saved) saved='auto';
-      if(!box.querySelector('option[value="'+saved+'"]')) saved='auto';
-      box.value=saved;
-      box.disabled=false;
-    }
+    var fluxReal=box.querySelector('option[value="flux-real"]');
+    if(fluxReal) fluxReal.value='flux-realism';
+    var saved='';
+    try { saved=localStorage.getItem('角色生成器_默认平台')||''; } catch(e) {}
+    if(saved==='perchance' || saved==='官方' || !saved) saved='auto';
+    if(saved==='flux-real') saved='flux-realism';
+    if(!box.querySelector('option[value="'+saved+'"]')) saved='auto';
+    box.value=saved;
+    box.disabled=false;
+    box.removeAttribute('disabled');
+    window.__sushiImageProviderLock='';
     try { localStorage.setItem('角色生成器_默认平台', box.value || 'auto'); } catch(e) {}
     providerChanged(box.value || 'auto');
   }
   function lockProvider(name){
-    name=String(name||'').trim()||'horde';
-    if(window.__sushiImageProviderLock) return;
-    window.__sushiImageProviderLock=name;
+    // Do not lock the platform picker — users must be able to switch anytime.
+    name=String(name||'').trim();
+    if(!name || name==='auto') return;
+    window.__sushiLastEngine=name;
     var box=byId('出图引擎');
-    if(box){
-      if(name==='horde' || name==='turbo') box.value=name;
-      else box.value='auto';
-      box.disabled=true;
-      box.title='本次会话已锁定：'+name;
-    }
-    var tip=byId('平台提示'); if(tip) tip.textContent='本次会话实际生图通道：'+name+' · 普通与随机生成共用';
+    if(box){ box.disabled=false; box.removeAttribute('disabled'); box.title='可随时切换生图平台；上次成功：'+name; }
   }
   function watchImages(){
     var area=byId('图像输出'); if(!area || area.__sushiWatching) return;
@@ -167,12 +166,9 @@ function patchWorkshop(source) {
       var box=byId('出图引擎');
       if(box && box.value==='perchance') box.value='auto';
       var chosen=box?box.value:'auto';
-      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'){
-        if(box) box.value='auto';
-        providerChanged(chosen);
-        var p=Promise.resolve(original.apply(this,arguments));
-        p.finally(function(){ if(box && !window.__sushiImageProviderLock){ box.value=chosen; providerChanged(chosen); } });
-        return p;
+      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='zimage'||chosen==='sdxl'){
+        if(box) box.value = chosen==='anishort' ? 'sana' : 'flux';
+        providerChanged(box.value);
       }
       return original.apply(this,arguments);
     };

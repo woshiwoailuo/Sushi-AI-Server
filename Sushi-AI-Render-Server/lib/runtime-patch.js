@@ -20,32 +20,24 @@ function patchWorkshop(source) {
 
   const providerOptions =
       '<select id="出图引擎" name="出图引擎">\n' +
-      '            <option value="auto" selected>自动抢出 · Turbo+Horde</option>\n' +
+      '            <option value="auto" selected>自动抢出 · 全平台</option>\n' +
       '            <option value="turbo">Turbo · 极速</option>\n' +
       '            <option value="horde">Horde · 免费共享算力</option>\n' +
       '            <option value="flux">Flux · 通用高质量</option>\n' +
-      '            <option value="flux-real">Flux 写实 · 人像优先</option>\n' +
-      '            <option value="zimage">Z-Image · 中文友好</option>\n' +
-      '            <option value="sdxl">SDXL · 稳定通用</option>\n' +
-      '            <option value="krea2">Krea 2 · 高质量写实</option>\n' +
-      '            <option value="liblib">LiblibAI · 模型/LoRA</option>\n' +
-      '            <option value="anishort">AniShort · 角色/短剧</option>\n' +
+      '            <option value="flux-realism">Flux写实 · 人像优先</option>\n' +
+      '            <option value="sana">Sana · 中文友好</option>\n' +
       '          </select>';
   html = html.replace(/<select id="出图引擎" name="出图引擎">[\s\S]*?<\/select>/, providerOptions);
 
   html = html.replace(
     /<select id="管理默认平台"[\s\S]*?<\/select>/,
     '<select id="管理默认平台" onchange="保存默认平台(this.value, true)">\n' +
-      '              <option value="auto" selected>自动抢出 · Turbo+Horde</option>\n' +
+      '              <option value="auto" selected>自动抢出 · 全平台</option>\n' +
       '              <option value="turbo">Turbo</option>\n' +
       '              <option value="horde">Horde</option>\n' +
       '              <option value="flux">Flux</option>\n' +
-      '              <option value="flux-real">Flux 写实</option>\n' +
-      '              <option value="zimage">Z-Image</option>\n' +
-      '              <option value="sdxl">SDXL</option>\n' +
-      '              <option value="krea2">Krea 2</option>\n' +
-      '              <option value="liblib">LiblibAI</option>\n' +
-      '              <option value="anishort">AniShort</option>\n' +
+      '              <option value="flux-realism">Flux写实</option>\n' +
+      '              <option value="sana">Sana</option>\n' +
       '            </select>'
   );
 
@@ -54,7 +46,7 @@ function patchWorkshop(source) {
     '<select id="AI通道" disabled aria-label="自动抢答已锁定">\n' +
       '            <option value="auto" selected>自动抢答 · 已锁定</option>\n' +
       '          </select>\n' +
-      '          <small class="说明文字">Turbo + Fast + Horde 同时抢答，采用最先成功的回复。</small>'
+      '          <small class="说明文字">多通道同时抢答，采用最先成功的回复。</small>'
   );
 
   html = html.replace(
@@ -78,10 +70,10 @@ function patchWorkshop(source) {
 <script id="sushi-provider-pack-v3">
 (function () {
   'use strict';
-  var priority = ['auto','turbo','horde','krea2','liblib','anishort','flux-real','flux','zimage','sdxl'];
+  var priority = ['auto','turbo','horde','flux','flux-realism','sana'];
   var labels = {
-    auto:'自动抢出', turbo:'Turbo', horde:'Horde', flux:'Flux', 'flux-real':'Flux 写实', zimage:'Z-Image', sdxl:'SDXL',
-    krea2:'Krea 2', liblib:'LiblibAI', anishort:'AniShort'
+    auto:'自动抢出', turbo:'Turbo', horde:'Horde', flux:'Flux', 'flux-realism':'Flux写实', sana:'Sana',
+    'flux-real':'Flux写实'
   };
   function el(id){ return document.getElementById(id); }
   function isPerchanceUrl(value) {
@@ -96,13 +88,13 @@ function patchWorkshop(source) {
   }
   function selected(){ var box=el('出图引擎'); return box ? box.value : 'auto'; }
   function tipFor(name){
-    if(name==='auto') return '自动抢出 · Turbo + Horde 同时开跑，先到先得';
+    if(name==='auto') return '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde 全平台同时开跑，先到先得';
     if(name==='turbo') return 'Turbo · Pollinations 极速免费通道';
     if(name==='horde') return 'AI Horde · 免费共享算力，繁忙时需要排队';
-    if(name==='krea2') return 'Krea 2 · 配置官方 API 后直连；未配置时自动免费兜底';
-    if(name==='liblib') return 'LiblibAI · 配置开放平台凭证后直连；未配置时自动免费兜底';
-    if(name==='anishort') return 'AniShort · 当前无公开第三方生图 API，自动免费兜底';
-    return (labels[name]||name) + ' · 当前兼容模式，自动使用可用免费通道';
+    if(name==='flux') return 'Flux · 通用高质量免费通道';
+    if(name==='flux-realism' || name==='flux-real') return 'Flux写实 · 人像优先免费通道';
+    if(name==='sana') return 'Sana · 中文友好免费通道';
+    return (labels[name]||name) + ' · 应用内免费通道';
   }
   function updateTip(){ var tip=el('平台提示'); if(tip) tip.textContent=tipFor(selected()); }
   function installProviderSelect(){
@@ -115,8 +107,10 @@ function patchWorkshop(source) {
       if(saved==='perchance' || saved==='官方') saved='auto';
       if(priority.indexOf(saved)>=0) box.value=saved; else box.value='auto';
     } catch(e){ box.value='auto'; }
+    box.disabled=false; box.removeAttribute('disabled');
     box.addEventListener('change',function(){
       if(box.value==='perchance') box.value='auto';
+      if(box.value==='flux-real') box.value='flux-realism';
       try { localStorage.setItem('角色生成器_默认平台',box.value); } catch(e){}
       window.__sushiPreferredProvider=box.value; updateTip();
     });
@@ -128,16 +122,14 @@ function patchWorkshop(source) {
     var original=window.开始生成;
     window.开始生成=function(){
       var box=el('出图引擎');
+      if(box){ box.disabled=false; box.removeAttribute('disabled'); }
       if(box && box.value==='perchance') box.value='auto';
+      if(box && box.value==='flux-real') box.value='flux-realism';
       var chosen=box ? box.value : 'auto';
       window.__sushiPreferredProvider=chosen;
-      // Paid/stub providers without credentials fall back to free race for this run.
-      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='flux'||chosen==='flux-real'||chosen==='zimage'||chosen==='sdxl'){
-        if(box) box.value='auto';
-        var result;
-        try { result=original.apply(this,arguments); }
-        finally { if(box && !window.__sushiImageProviderLock){ box.value=chosen; try{localStorage.setItem('角色生成器_默认平台',chosen);}catch(e){} updateTip(); } }
-        return result;
+      // Keep the user's selected free engine; only remap removed stub names.
+      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='zimage'||chosen==='sdxl'){
+        if(box) box.value = chosen==='anishort' ? 'sana' : 'flux';
       }
       return original.apply(this,arguments);
     };

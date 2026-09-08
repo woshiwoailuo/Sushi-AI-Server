@@ -71,7 +71,7 @@
           生图平台
           <select id="出图引擎" name="出图引擎">
             <option value="auto" selected>
-              自动抢出 · Turbo+Horde
+              自动抢出 · 全平台
             </option>
             <option value="turbo">
               Turbo · 极速
@@ -79,14 +79,14 @@
             <option value="horde">
               Horde · 免费共享算力
             </option>
-            <option value="flux-realism">
-              Flux写实 · 备用更像真人
-            </option>
             <option value="flux">
-              Flux · 备用
+              Flux · 通用高质量
+            </option>
+            <option value="flux-realism">
+              Flux写实 · 人像优先
             </option>
             <option value="sana">
-              Sana · 备用
+              Sana · 中文友好
             </option>
           </select>
         </label>
@@ -118,7 +118,7 @@
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
-              <option value="auto" selected>自动抢出 · Turbo+Horde</option>
+              <option value="auto" selected>自动抢出 · 全平台</option>
               <option value="turbo">Turbo</option>
               <option value="horde">Horde</option>
               <option value="flux">Flux</option>
@@ -474,7 +474,7 @@
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">生图平台：自动抢出 · Turbo + Horde 先到先得</p>
+      <p id="平台提示" class="平台提示">生图平台：自动抢出 · 全平台先到先得</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -508,7 +508,7 @@
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["auto", "turbo", "horde", "flux-realism", "flux", "sana"];
+  var 引擎顺序 = ["auto", "turbo", "flux", "flux-realism", "sana", "horde"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -1485,10 +1485,11 @@
     var 指定 = 模型 || "";
     if (指定 === "deepseek") return 问花粉(问句, "deepseek");
     if (指定 === "horde") return 问群体模型(问句);
-    if (指定 === "fast" || 指定 === "openai-fast" || 指定 === "openai") return 问花粉(问句, "openai-fast");
-    if (指定 && 指定 !== "auto") return 问花粉(问句, "turbo");
+    if (指定 === "fast" || 指定 === "openai-fast" || 指定 === "openai" || 指定 === "turbo") return 问花粉(问句, "openai");
+    if (指定 && 指定 !== "auto") return 问花粉(问句, "openai");
     var 赛道 = [
-      问花粉(问句, "turbo"),
+      问花粉(问句, "openai"),
+      问花粉(问句, "deepseek"),
       问群体模型(问句)
     ];
     return new Promise(function (成功, 失败) {
@@ -3162,11 +3163,15 @@
       本轮胜出 = "";
       设平台提示("auto");
       var 行 = document.getElementById("平台提示");
-      if (行) 行.textContent = "生图平台：自动抢出 · Turbo + Horde 先到先得";
+      if (行) 行.textContent = "生图平台：自动抢出 · 全平台先到先得";
       var 输出区 = document.getElementById("图像输出");
       if (输出区) 输出区.style.visibility = "";
       计划张数 = 抢出目标张数 || 1;
+      // 全平台抢出：Pollinations 各模型 + Horde 同时探测，先到先得。
       用写实引擎出图("turbo");
+      用写实引擎追加("flux");
+      用写实引擎追加("flux-realism");
+      用写实引擎追加("sana");
       用群体出图探测();
     } else {
       本轮抢出 = false;
@@ -3174,7 +3179,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.20" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.21" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
