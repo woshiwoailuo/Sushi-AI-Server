@@ -88,6 +88,9 @@
             <option value="sana">
               Sana · 中文友好
             </option>
+            <option value="perchance">
+              Perchance · 应用内生成
+            </option>
           </select>
         </label>
         <input id="备用引擎" type="hidden" value="turbo">
@@ -124,6 +127,7 @@
               <option value="flux">Flux</option>
               <option value="flux-realism">Flux写实</option>
               <option value="sana">Sana</option>
+              <option value="perchance">Perchance · 应用内</option>
             </select>
           </label>
           <label class="换背景行">
@@ -619,7 +623,7 @@
     载入图生图平台();
     var 平台框 = document.getElementById("出图引擎");
     if (平台框) {
-      if (!平台框.value || 平台框.value === "perchance") 平台框.value = "auto";
+      if (!平台框.value) 平台框.value = "auto";
       用户选定平台 = 平台框.value || "auto";
       平台框.addEventListener("change", function () {
         用户选定平台 = 平台框.value || "perchance";
@@ -733,8 +737,8 @@
   }
   function 规范化出图平台(值, 用户选过) {
     值 = String(值 || "").trim();
-    var 可用 = ["auto", "turbo", "horde", "flux", "flux-realism", "sana"];
-    if (值 === "perchance" || 值 === "官方") return "auto";
+    if (值 === "官方") 值 = "perchance";
+    var 可用 = ["auto", "turbo", "horde", "flux", "flux-realism", "sana", "perchance"];
     if (用户选过 && 可用.indexOf(值) >= 0) return 值;
     if (!用户选过 && (!值 || 值 === "auto")) return "auto";
     return 可用.indexOf(值) >= 0 ? 值 : "auto";
@@ -1439,6 +1443,30 @@
   }
 
   async function 问群体模型(问句) {
+    // Prefer same-origin JWT/ticket proxy so WebView CORS and 402 races stay reliable.
+    try {
+      var resp = await 限时拉取("/api/workshop/chat", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          k: 工坊票据(),
+          model: "horde",
+          messages: [{ role: "user", content: String(问句 || "").slice(0, 1200) }]
+        })
+      }, 32000);
+      var 文本 = (await resp.text() || "").trim();
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var data = JSON.parse(文本);
+      var 内容 = data && data.choices && data.choices[0] && data.choices[0].message
+        ? data.choices[0].message.content : "";
+      内容 = 可用对话文(内容);
+      if (!内容) throw new Error("空回复");
+      对话末通道 = "horde";
+      return 内容;
+    } catch (e) {
+      // Fallback: direct Horde text API if proxy unavailable.
+    }
     var 参 = new Object();
     参.max_length = 220;
     参.max_context_length = 2048;
@@ -1447,28 +1475,28 @@
     体.prompt = 组装群体提示(问句);
     体.params = 参;
     体.nsfw = true;
-    var resp = await 限时拉取("https://aihorde.net/api/v2/generate/text/async", {
+    var resp2 = await 限时拉取("https://aihorde.net/api/v2/generate/text/async", {
       method: "POST",
       mode: "cors",
       credentials: "omit",
       headers: {
         "Content-Type": "application/json",
         "apikey": "0000000000",
-        "Client-Agent": "woshisushi:1.0:perchance.org"
+        "Client-Agent": "woshisushi:1.0:sushi-ai"
       },
       body: JSON.stringify(体)
     }, 8000);
-    var data = JSON.parse(await resp.text());
-    if (!resp.ok || !data || !data.id) throw new Error("Horde 未受理");
+    var data2 = JSON.parse(await resp2.text());
+    if (!resp2.ok || !data2 || !data2.id) throw new Error("Horde 未受理");
     var n = 0;
     for (n = 0; n < 12; n++) {
       await new Promise(function (r) { setTimeout(r, 1000); });
-      var st = await 限时拉取("https://aihorde.net/api/v2/generate/text/status/" + data.id, {
+      var st = await 限时拉取("https://aihorde.net/api/v2/generate/text/status/" + data2.id, {
         mode: "cors",
         credentials: "omit",
         headers: {
           "apikey": "0000000000",
-          "Client-Agent": "woshisushi:1.0:perchance.org"
+          "Client-Agent": "woshisushi:1.0:sushi-ai"
         }
       }, 6000);
       var j = JSON.parse(await st.text());
@@ -2382,7 +2410,7 @@
   function 当前引擎() {
     var 框 = document.getElementById("出图引擎");
     var 值 = (框 && 框.value) || 用户选定平台 || "auto";
-    if (值 === "perchance" || 值 === "官方") 值 = "auto";
+    if (值 === "官方") 值 = "perchance";
     if (有参考图()) return "horde";
     return 值 || "auto";
   }
@@ -2566,7 +2594,7 @@
       "flux-realism": "Flux写实",
       sana: "Sana",
       horde: "群体计算",
-      perchance: "Perchance 官方"
+      perchance: "Perchance · 应用内"
     };
     return 真[值] || 值;
   }
@@ -3017,11 +3045,13 @@
   }
 
   function 用官方插件出图(竞速) {
-    // Perchance 官方跳转已禁用：一律改应用内 Turbo+Horde 抢出
-    设平台提示("auto");
-    用写实引擎出图("turbo");
-    用群体出图探测();
-    return;
+    // 应用内 Perchance：有嵌入插件则走官方画廊；否则回落到应用内免费通道（绝不 window.open 官网）
+    if (typeof update !== "function") {
+      设平台提示("perchance");
+      用写实引擎出图("turbo");
+      用群体出图探测();
+      return;
+    }
     上次官方张数 = 0;
     var 输出区 = document.getElementById("官方画廊") || document.getElementById("图像输出");
     var 备用区 = document.getElementById("图像输出");
@@ -3107,7 +3137,8 @@
     var 框 = document.getElementById("出图引擎");
     if (框) 框.value = 引擎;
     设平台提示(引擎);
-    if (引擎 === "perchance" || 引擎 === "auto") { 用写实引擎出图("turbo"); 用群体出图探测(); }
+    if (引擎 === "auto") { 用写实引擎出图("turbo"); 用群体出图探测(); }
+    else if (引擎 === "perchance") { 用官方插件出图(false); }
     else if (引擎 === "horde") 用群体出图();
     else 用写实引擎出图(引擎);
   }
@@ -3158,7 +3189,7 @@
       用图生图出图();
       return;
     }
-    if (本轮抢出 || 选引擎 === "auto" || 选引擎 === "perchance") {
+    if (本轮抢出 || 选引擎 === "auto") {
       抢出已定 = false;
       本轮胜出 = "";
       设平台提示("auto");
@@ -3173,13 +3204,17 @@
       用写实引擎追加("flux-realism");
       用写实引擎追加("sana");
       用群体出图探测();
+    } else if (选引擎 === "perchance") {
+      本轮抢出 = false;
+      设平台提示("perchance");
+      用官方插件出图(false);
     } else {
       本轮抢出 = false;
-      按指定引擎出图(选引擎 === "perchance" ? "turbo" : (选引擎 || "turbo"));
+      按指定引擎出图(选引擎 || "turbo");
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.21" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.22" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
