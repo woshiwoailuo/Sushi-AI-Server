@@ -2731,7 +2731,7 @@
       图.alt = "生成结果 " + 本号;
       图.setAttribute("data-engine", 模型);
       图._根号 = 0;
-      图._直连尝试 = false;
+      图._代理尝试 = false;
       图.onload = function () {
         if (当前出图令牌 !== 出图令牌) return;
         if (本轮胜出 && 本轮胜出 !== 模型) return;
@@ -2745,9 +2745,9 @@
       };
       图.onerror = function () {
         if (当前出图令牌 !== 出图令牌) return;
-        if (!图._直连尝试) {
-          图._直连尝试 = true;
-          图.src = 构建直连写实图址(英文, 基础种子 + 本号 * 97, 模型);
+        if (!图._代理尝试) {
+          图._代理尝试 = true;
+          图.src = 构建写实图址(英文, 基础种子 + 本号 * 97, 模型, 0);
           return;
         }
         图._根号 += 1;
@@ -2764,7 +2764,7 @@
       };
       图.referrerPolicy = "no-referrer";
       图.decoding = "async";
-      图.src = 构建写实图址(英文, 基础种子 + 本号 * 97, 模型, 0);
+      图.src = 构建直连写实图址(英文, 基础种子 + 本号 * 97, 模型);
       输出区.appendChild(图);
       setTimeout(function () {
         if (!图.complete || !图.naturalWidth) 图.dispatchEvent(new Event("error"));
@@ -2796,7 +2796,7 @@
     图.onerror = function () {};
     var 尺寸 = 解析尺寸();
     var 提示 = encodeURIComponent((写实提示(英文) || "photo").slice(0, 400));
-    图.src = 写实根址[0] + "?k=" + encodeURIComponent(工坊票据()) + "&prompt=" + 提示 + "&model=" + encodeURIComponent(模型) + "&width=256&height=256&seed=" + 基础种子 + "&nologo=true&enhance=false&safe=false";
+    图.src = "https://image.pollinations.ai/prompt/" + 提示 + "?model=" + encodeURIComponent(模型) + "&width=256&height=256&seed=" + 基础种子 + "&nologo=true&enhance=false&safe=false";
     隐.appendChild(图);
   }
 
