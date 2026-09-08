@@ -10,8 +10,8 @@ android {
         applicationId = "org.sushi.club"
         minSdk = 24
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.1.12"
+        versionCode = 24
+        versionName = "1.1.24"
         buildConfigField("String", "DEFAULT_BASE_URL", "\"https://sushi-ai-server.vercel.app\"")
     }
     buildFeatures {
