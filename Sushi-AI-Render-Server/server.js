@@ -17,6 +17,7 @@ const {
   migratePostgres,
   persistenceFromMode,
 } = require('./lib/db-postgres');
+const { normalizeChatPayload } = require('./lib/chat-response');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -1312,7 +1313,8 @@ app.post('/api/workshop/chat', async (req, res) => {
       const status = upstream.status === 401 ? 401 : 502;
       return workshopImageError(res, status, `${label}暂时不可用${detail ? '：' + detail : ''}，请改用其他通道`);
     }
-    res.status(200).type('application/json').send(body || '{}');
+    const normalized = normalizeChatPayload(body, model);
+    res.status(200).json(normalized);
   } catch (error) {
     if (error && error.status) return workshopImageError(res, error.status, error.message || '对话失败');
     return workshopImageError(res, 504, error && error.name === 'AbortError' ? '对话服务器超时，请稍后重试' : '对话服务器连接失败');
