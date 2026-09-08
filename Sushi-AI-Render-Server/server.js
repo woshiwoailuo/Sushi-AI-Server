@@ -1407,6 +1407,39 @@ app.get('/api/workshop/image', async (req, res) => {
   }
 });
 
+app.post('/api/workshop/horde-image', async (req, res) => {
+  const access = getWorkshopAccess(req, String((req.body && req.body.k) || ''));
+  if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
+  const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
+  if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
+  const width = Math.min(768, Math.max(512, Number(req.body.width) || 512));
+  const height = Math.min(768, Math.max(512, Number(req.body.height) || 512));
+  const seed = Number.isFinite(Number(req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 55_000);
+  try {
+    const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
+      method: 'POST', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', apikey: '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
+      body: JSON.stringify({ prompt, nsfw: false, censor_nsfw: true, params: { n: 1, width, height, steps: 15, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
+    });
+    const acceptedJson = await accepted.json().catch(() => ({}));
+    if (!accepted.ok || !acceptedJson.id) return workshopImageError(res, accepted.status === 429 ? 429 : 502, 'Horde 生图服务器未受理请求');
+    for (let i = 0; i < 48; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (controller.signal.aborted) break;
+      const status = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(acceptedJson.id), { signal: controller.signal, headers: { apikey: '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' } });
+      const statusJson = await status.json().catch(() => ({}));
+      if (statusJson && statusJson.faulted) return workshopImageError(res, 502, 'Horde 生图服务器生成失败');
+      const image = statusJson && statusJson.generations && statusJson.generations[0] && statusJson.generations[0].img;
+      if (image) { res.set('Cache-Control', 'no-store'); return res.json({ url: image, provider: 'aihorde' }); }
+    }
+    return workshopImageError(res, 504, 'Horde 生图服务器排队超时');
+  } catch (error) {
+    return workshopImageError(res, 504, error && error.name === 'AbortError' ? 'Horde 生图服务器超时' : 'Horde 生图服务器连接失败');
+  } finally { clearTimeout(timer); }
+});
+
 function decodeImageDataUrl(value) {
   const raw = String(value || '').trim();
   const match = raw.match(/^data:image\/[a-z0-9.+-]+;base64,([a-z0-9+/=\s]+)$/i);
