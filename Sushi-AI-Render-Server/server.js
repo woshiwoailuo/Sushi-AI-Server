@@ -114,7 +114,7 @@ function persistSqlJs() {
 }
 
 async function openDatabase() {
-  if (!process.env.VERCEL && process.env.SUSHI_DB_MODE !== 'sql.js') {
+  if (process.env.SUSHI_DB_MODE !== 'sql.js') {
     try {
       const Database = require('better-sqlite3');
       db = new Database(DB_PATH);
