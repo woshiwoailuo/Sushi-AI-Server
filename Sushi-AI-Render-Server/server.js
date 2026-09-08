@@ -114,17 +114,23 @@ function persistSqlJs() {
 }
 
 async function openDatabase() {
-  try {
-    const Database = require('better-sqlite3');
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    dbMode = 'better-sqlite3';
-    return;
-  } catch (err) {
-    console.warn('[db] better-sqlite3 unavailable, falling back to sql.js:', err.message);
+  if (!process.env.VERCEL && process.env.SUSHI_DB_MODE !== 'sql.js') {
+    try {
+      const Database = require('better-sqlite3');
+      db = new Database(DB_PATH);
+      db.pragma('journal_mode = WAL');
+      dbMode = 'better-sqlite3';
+      return;
+    } catch (err) {
+      console.warn('[db] better-sqlite3 unavailable, falling back to sql.js:', err.message);
+    }
   }
   const initSqlJs = require('sql.js');
-  const SQL = await initSqlJs();
+  const SQL = await initSqlJs({
+    locateFile(file) {
+      return path.join(path.dirname(require.resolve('sql.js')), file);
+    },
+  });
   let fileBuf = null;
   if (fs.existsSync(DB_PATH)) {
     fileBuf = fs.readFileSync(DB_PATH);
@@ -132,7 +138,7 @@ async function openDatabase() {
   const raw = fileBuf ? new SQL.Database(fileBuf) : new SQL.Database();
   db = new SqlJsAdapter(raw);
   dbMode = 'sql.js';
-  sqlJsSaveTimer = setInterval(persistSqlJs, 2000);
+  if (!process.env.VERCEL) sqlJsSaveTimer = setInterval(persistSqlJs, 2000);
 }
 
 function exec(sql) {
