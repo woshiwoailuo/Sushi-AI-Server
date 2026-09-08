@@ -137,15 +137,17 @@ function createImageService(options = {}) {
     return job;
   }
 
-  function finish(job, state, error) {
+  async function finish(job, state, error) {
     if (terminal(job)) return;
     job.state = state;
     job.finishedAt = now();
     job.error = error || null;
     if (active.get(job.userId) === job.id) active.delete(job.userId);
-    if (state === 'done' && job.reservation !== null) commit(job.reservation, job.userId);
+    if (state === 'done' && job.reservation !== null) {
+      await Promise.resolve(commit(job.reservation, job.userId));
+    }
     if (state !== 'done' && job.reservation !== null) {
-      refund(job.reservation, job.userId);
+      await Promise.resolve(refund(job.reservation, job.userId));
       job.reservation = null;
     }
   }
@@ -162,7 +164,12 @@ function createImageService(options = {}) {
       for (const [id, job] of jobs) if (terminal(job)) jobs.delete(id);
       if (jobs.size >= 100) throw new ImageError('当前生成任务较多，请稍后重试', 503, 'SERVER_BUSY');
     }
-    const reservation = reserve(userId);
+    // Only await when reserve is thenable so sync fixtures keep registering
+    // the job in the same turn (cancel-during-submit race).
+    let reservation = reserve(userId);
+    if (reservation && typeof reservation.then === 'function') {
+      reservation = await reservation;
+    }
     const job = {
       id: randomUUID(), userId, state: 'submitting', reservation,
       expiresAt: now() + maxWaitMs, queuePosition: null, waitTimeSeconds: null,
@@ -181,7 +188,7 @@ function createImageService(options = {}) {
       job.state = 'queued';
       return snapshot(job);
     } catch (error) {
-      if (!terminal(job)) finish(job, 'failed', error.message);
+      if (!terminal(job)) await finish(job, 'failed', error.message);
       throw error;
     }
   }
@@ -202,13 +209,13 @@ function createImageService(options = {}) {
         const image = Array.isArray(result.generations) && result.generations.find((item) => item && item.img && !item.censored);
         if (!image) throw new ImageError('任务结束但没有可显示的图片，请修改描述后重试');
         job.image = { url: imageSource(image.img), seed: String(image.seed ?? ''), model: String(image.model || '') };
-        finish(job, 'done');
+        await finish(job, 'done');
       }
       return snapshot(job);
     } catch (error) {
       if (terminal(job)) return snapshot(job);
       if (error.code === 'UPSTREAM_UNREACHABLE' || error.upstreamStatus === 429 || error.upstreamStatus >= 500) throw error;
-      finish(job, 'failed', error.message);
+      await finish(job, 'failed', error.message);
       void removeUpstream(job);
       return snapshot(job);
     }
@@ -217,7 +224,7 @@ function createImageService(options = {}) {
   async function get(userId, id) {
     const job = ownJob(userId, id);
     if (!terminal(job) && now() >= job.expiresAt) {
-      finish(job, 'failed', '免费队列等待已超过 10 分钟，请稍后重试');
+      await finish(job, 'failed', '免费队列等待已超过 10 分钟，请稍后重试');
       job.controller.abort();
       void removeUpstream(job);
     }
@@ -229,7 +236,7 @@ function createImageService(options = {}) {
   async function cancel(userId, id) {
     const job = ownJob(userId, id);
     if (!terminal(job)) {
-      finish(job, 'cancelled', '已取消生成');
+      await finish(job, 'cancelled', '已取消生成');
       job.controller.abort();
       await removeUpstream(job);
     }

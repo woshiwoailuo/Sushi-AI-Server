@@ -12,6 +12,11 @@ const nodemailer = require('nodemailer');
 const multer = require('multer');
 const { ImageError, createImageService } = require('./lib/image-service');
 const workshopLoaderHtml = require('./lib/workshop-loader');
+const {
+  openPostgres,
+  migratePostgres,
+  persistenceFromMode,
+} = require('./lib/db-postgres');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -65,13 +70,7 @@ function nowIso() {
 }
 
 function persistenceStatus() {
-  const isVercel = Boolean(process.env.VERCEL);
-  const external = String(process.env.SUSHI_DB_PERSISTENCE || '').toLowerCase() === 'external';
-  return {
-    durable: !isVercel || external,
-    mode: dbMode,
-    provider: external ? 'external' : (isVercel ? 'vercel-tmp' : 'local-disk'),
-  };
+  return persistenceFromMode(dbMode, process.env);
 }
 
 function todayPrefix() {
@@ -119,6 +118,26 @@ class SqlJsAdapter {
   }
 }
 
+/** Wrap sync SQLite adapters so callers can always `await db.prepare(...).get/run/all`. */
+function wrapDbAsync(inner) {
+  return {
+    get database() {
+      return inner.database;
+    },
+    exec(sql) {
+      return Promise.resolve(inner.exec(sql));
+    },
+    prepare(sql) {
+      const stmt = inner.prepare(sql);
+      return {
+        run: (...params) => Promise.resolve(stmt.run(...params)),
+        get: (...params) => Promise.resolve(stmt.get(...params)),
+        all: (...params) => Promise.resolve(stmt.all(...params)),
+      };
+    },
+  };
+}
+
 function persistSqlJs() {
   if (dbMode !== 'sql.js') return;
   const data = db.database.export();
@@ -126,17 +145,27 @@ function persistSqlJs() {
 }
 
 async function openDatabase() {
+  const databaseUrl = String(process.env.DATABASE_URL || '').trim();
+  if (databaseUrl) {
+    db = await openPostgres(databaseUrl);
+    dbMode = 'postgres';
+    console.log('[db] using Postgres via DATABASE_URL');
+    return;
+  }
+
   if (process.env.SUSHI_DB_MODE !== 'sql.js') {
     try {
       const Database = require('better-sqlite3');
-      db = new Database(DB_PATH);
-      db.pragma('journal_mode = WAL');
+      const raw = new Database(DB_PATH);
+      raw.pragma('journal_mode = WAL');
+      db = wrapDbAsync(raw);
       dbMode = 'better-sqlite3';
       return;
     } catch (err) {
       console.warn('[db] better-sqlite3 unavailable, falling back to sql.js:', err.message);
     }
   }
+
   const initSqlJs = require('sql.js');
   const SQL = await initSqlJs({
     locateFile(file) {
@@ -148,7 +177,7 @@ async function openDatabase() {
     fileBuf = fs.readFileSync(DB_PATH);
   }
   const raw = fileBuf ? new SQL.Database(fileBuf) : new SQL.Database();
-  db = new SqlJsAdapter(raw);
+  db = wrapDbAsync(new SqlJsAdapter(raw));
   dbMode = 'sql.js';
   if (!process.env.VERCEL) {
     sqlJsSaveTimer = setInterval(persistSqlJs, 2000);
@@ -158,13 +187,16 @@ async function openDatabase() {
   }
 }
 
-function exec(sql) {
-  if (dbMode === 'sql.js') db.exec(sql);
-  else db.exec(sql);
+async function exec(sql) {
+  await db.exec(sql);
 }
 
-function migrate() {
-  exec(`
+async function migrate() {
+  if (dbMode === 'postgres') {
+    await migratePostgres(db);
+    return;
+  }
+  await exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE,
@@ -205,27 +237,27 @@ function migrate() {
     CREATE INDEX IF NOT EXISTS idx_email_codes_email ON email_codes(email);
   `);
   try {
-    const cols = db.prepare('PRAGMA table_info(users)').all();
+    const cols = await db.prepare('PRAGMA table_info(users)').all();
     const names = new Set((cols || []).map((c) => c.name));
     if (!names.has('email_verified')) {
-      exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
+      await exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
     }
     if (!names.has('last_login_at')) {
-      exec('ALTER TABLE users ADD COLUMN last_login_at TEXT');
+      await exec('ALTER TABLE users ADD COLUMN last_login_at TEXT');
     }
     if (!names.has('last_ip')) {
-      exec('ALTER TABLE users ADD COLUMN last_ip TEXT');
+      await exec('ALTER TABLE users ADD COLUMN last_ip TEXT');
     }
   } catch (err) {
     try {
-      exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
+      await exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
     } catch (err2) {
       /* column already exists */
     }
-    try { exec('ALTER TABLE users ADD COLUMN last_login_at TEXT'); } catch (e) {}
-    try { exec('ALTER TABLE users ADD COLUMN last_ip TEXT'); } catch (e) {}
+    try { await exec('ALTER TABLE users ADD COLUMN last_login_at TEXT'); } catch (e) {}
+    try { await exec('ALTER TABLE users ADD COLUMN last_ip TEXT'); } catch (e) {}
   }
-  exec(`
+  await exec(`
     CREATE TABLE IF NOT EXISTS app_releases (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       version_code INTEGER NOT NULL,
@@ -250,8 +282,8 @@ function clientIp(req) {
   return (req.ip || (req.socket && req.socket.remoteAddress) || '').toString();
 }
 
-function recordLogin(userId, req) {
-  db.prepare('UPDATE users SET last_login_at = ?, last_ip = ? WHERE id = ?').run(
+async function recordLogin(userId, req) {
+  await db.prepare('UPDATE users SET last_login_at = ?, last_ip = ? WHERE id = ?').run(
     nowIso(),
     clientIp(req),
     userId
@@ -295,22 +327,21 @@ function genSixDigit() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
 
-function lastCodeCreatedAt(email) {
-  const row = db
-    .prepare('SELECT created_at FROM email_codes WHERE email = ? ORDER BY id DESC LIMIT 1')
+async function lastCodeCreatedAt(email) {
+  const row = await db.prepare('SELECT created_at FROM email_codes WHERE email = ? ORDER BY id DESC LIMIT 1')
     .get(email);
   return row && row.created_at ? Date.parse(row.created_at) : 0;
 }
 
-function resendTooSoon(email) {
-  const t = lastCodeCreatedAt(email);
+async function resendTooSoon(email) {
+  const t = await lastCodeCreatedAt(email);
   return t && Date.now() - t < 60000;
 }
 
 async function storeVerifyCode(email) {
   const code = genSixDigit();
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  db.prepare(
+  await db.prepare(
     'INSERT INTO email_codes (email, code, expires_at, created_at) VALUES (?, ?, ?, ?)'
   ).run(email, code, expires, nowIso());
   persistSqlJs();
@@ -323,15 +354,15 @@ async function storeVerifyCode(email) {
   return { code, mail_sent };
 }
 
-function seedAdmin() {
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
+async function seedAdmin() {
+  const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
   if (existing) {
-    db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run(ADMIN_EMAIL);
+    await db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run(ADMIN_EMAIL);
     persistSqlJs();
     return;
   }
   const hash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
-  db.prepare(
+  await db.prepare(
     `INSERT INTO users (email, password_hash, display_name, role, plan, vip_until, gen_quota_daily, banned, email_verified, created_at)
      VALUES (?, ?, ?, 'admin', 'vip', ?, 9999, 0, 1, ?)`
   ).run(ADMIN_EMAIL, hash, '管理员', new Date(Date.now() + 365 * 86400000).toISOString(), nowIso());
@@ -373,11 +404,11 @@ function extractToken(req) {
   return null;
 }
 
-function userFromToken(token) {
+async function userFromToken(token) {
   if (!token) return null;
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.uid);
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(payload.uid);
     return user || null;
   } catch {
     return null;
@@ -406,26 +437,29 @@ function publicUser(row) {
   };
 }
 
-function usedToday(userId) {
+async function usedToday(userId) {
   const prefix = todayPrefix();
-  const row = db
-    .prepare('SELECT COUNT(*) AS c FROM gen_logs WHERE user_id = ? AND created_at LIKE ?')
+  const row = await db.prepare('SELECT COUNT(*) AS c FROM gen_logs WHERE user_id = ? AND created_at LIKE ?')
     .get(userId, prefix + '%');
   return Number(row && row.c ? row.c : 0);
 }
 
-function remainingQuota(user) {
-  const used = usedToday(user.id);
+async function remainingQuota(user) {
+  const used = await usedToday(user.id);
   return Math.max(0, Number(user.gen_quota_daily) - used);
 }
 
-function authMiddleware(req, res, next) {
-  const token = extractToken(req);
-  if (!token) return res.status(401).json({ error: '未登录' });
-  const user = userFromToken(token);
-  if (!user) return res.status(401).json({ error: '登录已过期' });
-  req.user = user;
-  next();
+async function authMiddleware(req, res, next) {
+  try {
+    const token = extractToken(req);
+    if (!token) return res.status(401).json({ error: '未登录' });
+    const user = await userFromToken(token);
+    if (!user) return res.status(401).json({ error: '登录已过期' });
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 function adminMiddleware(req, res, next) {
@@ -435,8 +469,8 @@ function adminMiddleware(req, res, next) {
   next();
 }
 
-function audit(adminId, action, targetUserId, note) {
-  db.prepare(
+async function audit(adminId, action, targetUserId, note) {
+  await db.prepare(
     'INSERT INTO audit_logs (admin_id, action, target_user_id, note, created_at) VALUES (?, ?, ?, ?, ?)'
   ).run(adminId, action, targetUserId || null, note || '', nowIso());
   persistSqlJs();
@@ -471,10 +505,10 @@ app.post('/api/auth/register', rateLimit('register', 5, 15 * 60_000), async (req
   if (!email || !email.includes('@')) return res.status(400).json({ error: '邮箱格式不正确' });
   if (password.length < 6) return res.status(400).json({ error: '密码至少 6 位' });
   if (!display_name) return res.status(400).json({ error: '请填写显示名' });
-  const dup = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  const dup = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (dup) return res.status(409).json({ error: '该邮箱已注册' });
   const hash = bcrypt.hashSync(password, 10);
-  db.prepare(
+  await db.prepare(
     `INSERT INTO users (email, password_hash, display_name, role, plan, vip_until, gen_quota_daily, banned, email_verified, created_at)
        VALUES (?, ?, ?, 'user', 'free', NULL, 10, 0, 0, ?)`
   ).run(email, hash, display_name, nowIso());
@@ -492,26 +526,25 @@ app.post('/api/auth/register', rateLimit('register', 5, 15 * 60_000), async (req
   });
 });
 
-app.post('/api/auth/verify', (req, res) => {
+app.post('/api/auth/verify', async (req, res) => {
   const email = String((req.body && req.body.email) || '')
     .trim()
     .toLowerCase();
   const code = String((req.body && req.body.code) || '').trim();
   if (!email || !code) return res.status(400).json({ error: '请填写邮箱和验证码' });
-  const row = db
-    .prepare('SELECT * FROM email_codes WHERE email = ? AND code = ? ORDER BY id DESC LIMIT 1')
+  const row = await db.prepare('SELECT * FROM email_codes WHERE email = ? AND code = ? ORDER BY id DESC LIMIT 1')
     .get(email, code);
   if (!row) return res.status(400).json({ error: '验证码错误' });
   if (new Date(row.expires_at).getTime() < Date.now()) {
     return res.status(400).json({ error: '验证码已过期' });
   }
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (!user) return res.status(400).json({ error: '验证码错误' });
-  db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(user.id);
-  db.prepare('DELETE FROM email_codes WHERE email = ?').run(email);
+  await db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(user.id);
+  await db.prepare('DELETE FROM email_codes WHERE email = ?').run(email);
   persistSqlJs();
-  recordLogin(user.id, req);
-  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+  await recordLogin(user.id, req);
+  const updated = await db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
   const token = signToken(updated);
   setAuthCookie(res, token);
   res.json({ token, user: publicUser(updated) });
@@ -521,9 +554,9 @@ app.post('/api/auth/resend', rateLimit('resend', 5, 15 * 60_000), async (req, re
   const email = String((req.body && req.body.email) || '')
     .trim()
     .toLowerCase();
-  const user = email ? db.prepare('SELECT * FROM users WHERE email = ?').get(email) : null;
+  const user = email ? await db.prepare('SELECT * FROM users WHERE email = ?').get(email) : null;
   if (user && !user.email_verified) {
-    if (resendTooSoon(email)) {
+    if (await resendTooSoon(email)) {
       return res.status(429).json({ error: '请 60 秒后再试' });
     }
     const { mail_sent } = await storeVerifyCode(email);
@@ -540,12 +573,12 @@ app.post('/api/auth/resend', rateLimit('resend', 5, 15 * 60_000), async (req, re
   res.json({ ok: true });
 });
 
-app.post('/api/auth/login', rateLimit('login', 12, 15 * 60_000), (req, res) => {
+app.post('/api/auth/login', rateLimit('login', 12, 15 * 60_000), async (req, res) => {
   const email = String((req.body && req.body.email) || '')
     .trim()
     .toLowerCase();
   const password = String((req.body && req.body.password) || '');
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: '邮箱或密码错误' });
   }
@@ -553,32 +586,32 @@ app.post('/api/auth/login', rateLimit('login', 12, 15 * 60_000), (req, res) => {
   if (!user.email_verified) {
     return res.status(403).json({ error: '请先验证邮箱', need_verify: true });
   }
-  recordLogin(user.id, req);
-  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+  await recordLogin(user.id, req);
+  const updated = await db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
   const token = signToken(updated);
   setAuthCookie(res, token);
   res.json({ token, user: publicUser(updated) });
 });
 
-app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({ user: publicUser(req.user), remaining: remainingQuota(req.user) });
+app.get('/api/me', authMiddleware, async (req, res) => {
+  res.json({ user: publicUser(req.user), remaining: await remainingQuota(req.user) });
 });
 
-app.post('/api/me/password', authMiddleware, (req, res) => {
+app.post('/api/me/password', authMiddleware, async (req, res) => {
   const current = String((req.body && req.body.current_password) || '');
   const next = String((req.body && req.body.new_password) || '');
   if (!bcrypt.compareSync(current, req.user.password_hash)) {
     return res.status(400).json({ error: '当前密码不正确' });
   }
   if (next.length < 6) return res.status(400).json({ error: '新密码至少 6 位' });
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(next, 10), req.user.id);
+  await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(next, 10), req.user.id);
   persistSqlJs();
   res.json({ ok: true });
 });
 
-app.get('/api/me/quota', authMiddleware, (req, res) => {
-  const used = usedToday(req.user.id);
-  const remaining = remainingQuota(req.user);
+app.get('/api/me/quota', authMiddleware, async (req, res) => {
+  const used = await usedToday(req.user.id);
+  const remaining = await remainingQuota(req.user);
   res.json({
     remaining,
     used,
@@ -592,22 +625,22 @@ app.get('/api/me/quota', authMiddleware, (req, res) => {
 const images = createImageService({
   apiKey: process.env.HORDE_API_KEY || '0000000000',
   model: process.env.HORDE_MODEL || '',
-  reserve(userId) {
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  async reserve(userId) {
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
     if (!user || user.banned) throw new ImageError('账号不可用', 403, 'ACCOUNT_DISABLED');
     if (!user.email_verified) throw new ImageError('请先验证邮箱', 403, 'VERIFY_EMAIL');
-    if (remainingQuota(user) <= 0) throw new ImageError('今日额度已用尽', 402, 'QUOTA_EMPTY');
-    const result = db.prepare('INSERT INTO gen_logs (user_id, created_at, kind) VALUES (?, ?, ?)')
+    if ((await remainingQuota(user)) <= 0) throw new ImageError('今日额度已用尽', 402, 'QUOTA_EMPTY');
+    const result = await db.prepare('INSERT INTO gen_logs (user_id, created_at, kind) VALUES (?, ?, ?)')
       .run(userId, nowIso(), 'image_pending');
     persistSqlJs();
     return Number(result.lastInsertRowid);
   },
-  refund(id, userId) {
-    db.prepare("DELETE FROM gen_logs WHERE id = ? AND user_id = ? AND kind = 'image_pending'").run(id, userId);
+  async refund(id, userId) {
+    await db.prepare("DELETE FROM gen_logs WHERE id = ? AND user_id = ? AND kind = 'image_pending'").run(id, userId);
     persistSqlJs();
   },
-  commit(id, userId) {
-    db.prepare("UPDATE gen_logs SET kind = 'image' WHERE id = ? AND user_id = ? AND kind = 'image_pending'").run(id, userId);
+  async commit(id, userId) {
+    await db.prepare("UPDATE gen_logs SET kind = 'image' WHERE id = ? AND user_id = ? AND kind = 'image_pending'").run(id, userId);
     persistSqlJs();
   },
 });
@@ -645,11 +678,11 @@ app.get('/assets/workshop-generation.js', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'assets', 'workshop-generation.js'));
 });
 
-app.post('/api/gen/check', authMiddleware, (req, res) => {
+app.post('/api/gen/check', authMiddleware, async (req, res) => {
   if (req.user.banned) return res.status(403).json({ error: '账号已被封禁' });
-  const remaining = remainingQuota(req.user);
+  const remaining = await remainingQuota(req.user);
   if (remaining <= 0) return res.status(402).json({ error: '今日额度已用尽', remaining: 0 });
-  db.prepare('INSERT INTO gen_logs (user_id, created_at, kind) VALUES (?, ?, ?)').run(
+  await db.prepare('INSERT INTO gen_logs (user_id, created_at, kind) VALUES (?, ?, ?)').run(
     req.user.id,
     nowIso(),
     'image'
@@ -658,12 +691,11 @@ app.post('/api/gen/check', authMiddleware, (req, res) => {
   res.json({ ok: true, remaining: remaining - 1 });
 });
 
-app.get('/api/admin/stats', authMiddleware, adminMiddleware, (req, res) => {
-  const users = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
-  const vip = db.prepare("SELECT COUNT(*) AS c FROM users WHERE plan = 'vip'").get().c;
-  const banned = db.prepare('SELECT COUNT(*) AS c FROM users WHERE banned = 1').get().c;
-  const gensToday = db
-    .prepare('SELECT COUNT(*) AS c FROM gen_logs WHERE created_at LIKE ?')
+app.get('/api/admin/stats', authMiddleware, adminMiddleware, async (req, res) => {
+  const users = await db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+  const vip = await db.prepare("SELECT COUNT(*) AS c FROM users WHERE plan = 'vip'").get().c;
+  const banned = await db.prepare('SELECT COUNT(*) AS c FROM users WHERE banned = 1').get().c;
+  const gensToday = await db.prepare('SELECT COUNT(*) AS c FROM gen_logs WHERE created_at LIKE ?')
     .get(todayPrefix() + '%').c;
   res.json({
     users: Number(users),
@@ -673,7 +705,7 @@ app.get('/api/admin/stats', authMiddleware, adminMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
+app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
   const q = String(req.query.q || '').trim();
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const filter = String(req.query.filter || 'all');
@@ -688,9 +720,8 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   if (filter === 'vip') where += " AND plan = 'vip'";
   if (filter === 'banned') where += ' AND banned = 1';
   if (filter === 'free') where += " AND plan = 'free'";
-  const total = db.prepare('SELECT COUNT(*) AS c FROM users WHERE ' + where).get(...params).c;
-  const rows = db
-    .prepare(
+  const total = await db.prepare('SELECT COUNT(*) AS c FROM users WHERE ' + where).get(...params).c;
+  const rows = await db.prepare(
       'SELECT * FROM users WHERE ' + where + ' ORDER BY id DESC LIMIT ? OFFSET ?'
     )
     .all(...params, limit, offset);
@@ -703,15 +734,13 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
 });
 
 
-app.get('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+app.get('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
-  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const target = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!target) return res.status(404).json({ error: '用户不存在' });
-  const gen_logs = db
-    .prepare('SELECT * FROM gen_logs WHERE user_id = ? ORDER BY id DESC LIMIT 50')
+  const gen_logs = await db.prepare('SELECT * FROM gen_logs WHERE user_id = ? ORDER BY id DESC LIMIT 50')
     .all(id);
-  const audit_logs = db
-    .prepare(
+  const audit_logs = await db.prepare(
       `SELECT a.*, u.email AS admin_email, t.email AS target_email
        FROM audit_logs a
        LEFT JOIN users u ON u.id = a.admin_id
@@ -722,7 +751,7 @@ app.get('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
     .all(id, id);
   res.json({
     user: publicUser(target),
-    remaining: remainingQuota(target),
+    remaining: await remainingQuota(target),
     gen_logs,
     audit_logs,
     email_verified: !!target.email_verified,
@@ -747,8 +776,8 @@ const apkUpload = multer({
   },
 });
 
-function latestRelease() {
-  return db.prepare('SELECT * FROM app_releases ORDER BY version_code DESC, id DESC LIMIT 1').get();
+async function latestRelease() {
+  return await db.prepare('SELECT * FROM app_releases ORDER BY version_code DESC, id DESC LIMIT 1').get();
 }
 
 function releasePublic(row) {
@@ -764,7 +793,7 @@ function releasePublic(row) {
 }
 
 app.post('/api/admin/app/release', authMiddleware, adminMiddleware, (req, res) => {
-  apkUpload.single('file')(req, res, (err) => {
+  apkUpload.single('file')(req, res, async (err) => {
     if (err) {
       const msg = err.code === 'LIMIT_FILE_SIZE' ? 'APK 不能超过 80MB' : err.message || '上传失败';
       return res.status(400).json({ error: msg });
@@ -786,19 +815,19 @@ app.post('/api/admin/app/release', authMiddleware, adminMiddleware, (req, res) =
     const dest = path.join(APK_DIR, destName);
     fs.renameSync(req.file.path, dest);
     const size_bytes = fs.statSync(dest).size;
-    db.prepare(
+    await db.prepare(
       `INSERT INTO app_releases (version_code, version_name, notes, force_update, apk_path, size_bytes, created_at, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(version_code, version_name, notes, force, dest, size_bytes, nowIso(), req.user.id);
     persistSqlJs();
-    audit(req.user.id, 'app_release', null, version_name + ' (' + version_code + ')');
-    const row = db.prepare('SELECT * FROM app_releases ORDER BY id DESC LIMIT 1').get();
+    await audit(req.user.id, 'app_release', null, version_name + ' (' + version_code + ')');
+    const row = await db.prepare('SELECT * FROM app_releases ORDER BY id DESC LIMIT 1').get();
     res.json({ ok: true, release: row });
   });
 });
 
-app.get('/api/admin/app/releases', authMiddleware, adminMiddleware, (req, res) => {
-  const rows = db.prepare('SELECT * FROM app_releases ORDER BY id DESC LIMIT 100').all();
+app.get('/api/admin/app/releases', authMiddleware, adminMiddleware, async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM app_releases ORDER BY id DESC LIMIT 100').all();
   res.json({
     releases: rows.map((r) => ({
       id: r.id,
@@ -813,12 +842,12 @@ app.get('/api/admin/app/releases', authMiddleware, adminMiddleware, (req, res) =
   });
 });
 
-app.get('/api/app/version', (req, res) => {
-  res.json(releasePublic(latestRelease()));
+app.get('/api/app/version', async (req, res) => {
+  res.json(releasePublic(await latestRelease()));
 });
 
-app.get('/api/app/download', (req, res) => {
-  const row = latestRelease();
+app.get('/api/app/download', async (req, res) => {
+  const row = await latestRelease();
   if (!row || !row.apk_path || !fs.existsSync(row.apk_path)) {
     return res.status(404).json({ error: '暂无安装包' });
   }
@@ -833,18 +862,24 @@ app.get('/api/app/download', (req, res) => {
 
 app.get('/api/health', (req, res) => {
   const persistence = persistenceStatus();
+  let warning;
+  if (!persistence.durable) {
+    warning = 'Vercel 临时盘不会持久保存会员数据，请配置 DATABASE_URL（Neon/Postgres）';
+  } else if (persistence.persistence_flag_ignored) {
+    warning = '已设置 SUSHI_DB_PERSISTENCE=external 但未启用 Postgres；请配置 DATABASE_URL';
+  }
   res.status(200).json({
     ok: true,
     db: persistence,
     mail: smtpConfigured(),
-    warning: persistence.durable ? undefined : 'Vercel 临时盘不会持久保存会员数据，请配置外部数据库',
+    warning,
   });
 });
 
 
-app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
-  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const target = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!target) return res.status(404).json({ error: '用户不存在' });
   const body = req.body || {};
   const fields = [];
@@ -859,46 +894,45 @@ app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
   }
   if (!fields.length) return res.status(400).json({ error: '没有可更新的字段' });
   values.push(id);
-  db.prepare('UPDATE users SET ' + fields.join(', ') + ' WHERE id = ?').run(...values);
+  await db.prepare('UPDATE users SET ' + fields.join(', ') + ' WHERE id = ?').run(...values);
   persistSqlJs();
-  audit(req.user.id, 'patch_user', id, JSON.stringify(body));
-  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  await audit(req.user.id, 'patch_user', id, JSON.stringify(body));
+  const updated = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   res.json({ user: publicUser(updated) });
 });
 
-app.post('/api/admin/users/:id/verify', authMiddleware, adminMiddleware, (req, res) => {
+app.post('/api/admin/users/:id/verify', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
-  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const target = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!target) return res.status(404).json({ error: '用户不存在' });
-  db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(id);
+  await db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(id);
   persistSqlJs();
-  audit(req.user.id, 'verify_user', id, 'manual');
-  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  await audit(req.user.id, 'verify_user', id, 'manual');
+  const updated = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   res.json({ user: publicUser(updated) });
 });
 
-app.post('/api/admin/users/:id/grant-vip', authMiddleware, adminMiddleware, (req, res) => {
+app.post('/api/admin/users/:id/grant-vip', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
   const days = Math.max(1, Number((req.body && req.body.days) || 30));
-  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const target = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!target) return res.status(404).json({ error: '用户不存在' });
   const base = target.vip_until && new Date(target.vip_until) > new Date()
     ? new Date(target.vip_until)
     : new Date();
   const until = new Date(base.getTime() + days * 86400000).toISOString();
-  db.prepare("UPDATE users SET plan = 'vip', vip_until = ?, gen_quota_daily = 9999 WHERE id = ?").run(
+  await db.prepare("UPDATE users SET plan = 'vip', vip_until = ?, gen_quota_daily = 9999 WHERE id = ?").run(
     until,
     id
   );
   persistSqlJs();
-  audit(req.user.id, 'grant_vip', id, days + ' days');
-  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  await audit(req.user.id, 'grant_vip', id, days + ' days');
+  const updated = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   res.json({ user: publicUser(updated) });
 });
 
-app.get('/api/admin/logs', authMiddleware, adminMiddleware, (req, res) => {
-  const rows = db
-    .prepare(
+app.get('/api/admin/logs', authMiddleware, adminMiddleware, async (req, res) => {
+  const rows = await db.prepare(
       `SELECT a.*, u.email AS admin_email, t.email AS target_email
        FROM audit_logs a
        LEFT JOIN users u ON u.id = a.admin_id
@@ -1051,7 +1085,7 @@ app.get('/api/workshop/blob', (req, res) => {
   res.json({ iv: ticket.iv, ct: ticket.ciphertext, tag: ticket.tag });
 });
 
-app.post('/api/workshop/session', (req, res) => {
+app.post('/api/workshop/session', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const ticket = getLiveTicket(String((req.body && req.body.ticket) || ''));
   const key = String((req.body && req.body.key) || '');
@@ -1065,7 +1099,7 @@ app.post('/api/workshop/session', (req, res) => {
   } catch (e) {
     return res.status(401).json({ error: '进入凭证已过期，请返回后重新进入' });
   }
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(ticket.userId);
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(ticket.userId);
   if (!user || user.banned) return res.status(403).json({ error: '账号不可用' });
   if (!user.email_verified) return res.status(403).json({ error: '请先验证邮箱' });
   setAuthCookie(res, signToken(user));
@@ -1464,9 +1498,9 @@ app.use((req, res) => {
 
 async function initialize() {
   await openDatabase();
-  migrate();
-  seedAdmin();
-  try { db.prepare("DELETE FROM gen_logs WHERE kind = 'image_pending'").run(); } catch (e) {}
+  await migrate();
+  await seedAdmin();
+  try { await db.prepare("DELETE FROM gen_logs WHERE kind = 'image_pending'").run(); } catch (e) {}
   persistSqlJs();
 }
 
