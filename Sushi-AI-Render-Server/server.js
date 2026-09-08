@@ -1215,7 +1215,7 @@ async function chatViaHordeText(messages, signal) {
     const text = statusJson && statusJson.generations && statusJson.generations[0] && statusJson.generations[0].text;
     if (statusJson && statusJson.done && text) {
       const cleaned = String(text).replace(/^[\s\S]*### Assistant:\s*/m, '').trim();
-      if (cleaned.length < 2) throw Object.assign(new Error('Horde 返回空回复'), { status: 502 });
+      if (cleaned.length < 1) throw Object.assign(new Error('Horde 返回空回复'), { status: 502 });
       return openaiStyleChat(cleaned, 'horde');
     }
   }

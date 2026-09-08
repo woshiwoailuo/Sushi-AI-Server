@@ -290,3 +290,36 @@ test('perch/perchance is selectable and included in the free race list', async t
   assert.equal(box.value, 'perchance');
 });
 
+
+test('auto race skips rate-limited engines quickly and surfaces 限流 tip', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('出图引擎').value = 'auto';
+  const hits = [];
+  const realFetch = f.w.fetch;
+  f.w.fetch = async (url, options = {}) => {
+    const href = String(url);
+    if (href.includes('/api/workshop/image')) {
+      hits.push(href);
+      const model = new URL(href, 'https://app.example').searchParams.get('model');
+      if (model === 'turbo' || model === 'flux') {
+        return { ok: false, status: 429, blob: async () => new f.w.Blob([]) };
+      }
+      const bytes = Buffer.alloc(3200, 11);
+      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
+    }
+    return realFetch(url, options);
+  };
+  await f.w.开始生成();
+  assert.ok(f.w.document.querySelector('#图像输出 img'), 'another engine should win the race');
+  const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
+  assert.ok(!['turbo', 'flux'].includes(engine), 'winner should not be rate-limited engine, got ' + engine);
+  // turbo/flux should not be hammered with 3 retries each after 429
+  const turboHits = hits.filter(h => h.includes('model=turbo')).length;
+  const fluxHits = hits.filter(h => h.includes('model=flux&') || h.includes('model=flux"') || /model=flux(?:&|$)/.test(h)).length;
+  assert.ok(turboHits <= 1, 'turbo should fail fast on 429, hits=' + turboHits);
+  assert.ok(fluxHits <= 1, 'flux should fail fast on 429, hits=' + fluxHits);
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
+  assert.match(src, /ENGINE_COOLDOWN_MS/);
+  assert.match(src, /出图通道限流/);
+  assert.doesNotMatch(src, /window\.open\([^)]*perchance\.org/);
+});
