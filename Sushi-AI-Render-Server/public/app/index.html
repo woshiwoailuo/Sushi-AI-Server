@@ -460,24 +460,30 @@
         ? data.choices[0].message.content : '';
       content = String(content || '').trim();
       if (content.length < 2) throw new Error('空回复');
-      if (/payment required|invalid api key|queue full/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
+      if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
       return content;
     }
     async function raceChat(question) {
       var messages = buildMessages(question);
-      var models = ['turbo', 'openai-fast'];
+      // openai：当前匿名可用别名；deepseek：若已配置则参与抢答。旧 turbo / openai-fast 由服务端归一化为 openai。
+      var models = ['openai', 'deepseek'];
+      var labels = { openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话' };
       return await new Promise(function (resolve, reject) {
         var left = models.length;
         var failed = 0;
         var settled = false;
+        var lastErr = '';
         models.forEach(function (model) {
           askModel(model, messages).then(function (text) {
             if (settled) return;
             settled = true;
-            resolve({ text: text, channel: model === 'openai-fast' ? '快速模型' : 'Turbo' });
-          }).catch(function () {
+            resolve({ text: text, channel: labels[model] || model });
+          }).catch(function (err) {
+            lastErr = (err && err.message) || lastErr;
             failed += 1;
-            if (!settled && failed >= left) reject(new Error('各路对话暂时不可用，请稍后重试'));
+            if (!settled && failed >= left) {
+              reject(new Error(lastErr && /未登录|401/.test(lastErr) ? '请先登录后再对话' : (lastErr || '各路对话暂时不可用，请稍后重试')));
+            }
           });
         });
       });

@@ -629,7 +629,7 @@ function imageRoute(handler) {
 }
 
 app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
-  res.json({ provider: 'horde', free: true, maxWaitSeconds: 600, race: ['turbo', 'horde'] });
+  res.json({ provider: 'horde', free: true, maxWaitSeconds: 600, race: ['turbo', 'flux', 'flux-realism', 'sana', 'horde'] });
 });
 app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
 app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {
@@ -1084,7 +1084,7 @@ app.post('/api/workshop/unlock', authMiddleware, (req, res) => {
 });
 
 const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
-const CHAT_MODELS = new Set(['turbo', 'openai-fast', 'deepseek']);
+const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek']);
 const DEEPSEEK_API_KEY = String(process.env.DEEPSEEK_API_KEY || '').trim();
 const DEEPSEEK_MODEL = String(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim();
 
@@ -1092,52 +1092,96 @@ function workshopImageError(res, status, error) {
   res.status(status).json({ error });
 }
 
+function normalizeChatModel(raw) {
+  const model = String(raw || 'openai').trim().toLowerCase();
+  if (model === 'deepseek') return 'deepseek';
+  // Pollinations legacy ids: turbo is gone; openai-fast often 402s while alias "openai" still works anonymously.
+  if (model === 'turbo' || model === 'openai-fast' || model === 'fast' || model === 'openai' || model === 'gpt-oss') {
+    return 'openai';
+  }
+  return model;
+}
+
+function normalizeImageModel(raw) {
+  const model = String(raw || 'turbo').trim().toLowerCase();
+  if (model === 'flux-real' || model === 'flux_realism') return 'flux-realism';
+  if (model === 'zimage' || model === 'sdxl' || model === 'krea2' || model === 'liblib') return 'flux';
+  if (model === 'anishort') return 'sana';
+  return model;
+}
+
 app.post('/api/workshop/chat', async (req, res) => {
   const access = getWorkshopAccess(req, String((req.body && req.body.k) || ''));
-  if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
-  const model = String((req.body && req.body.model) || 'turbo');
-  if (!CHAT_MODELS.has(model)) return workshopImageError(res, 400, '不支持的对话模型');
+  if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
+  const requested = String((req.body && req.body.model) || 'openai');
+  if (!CHAT_MODELS.has(requested) && requested !== 'openai') {
+    return workshopImageError(res, 400, '不支持的对话模型');
+  }
+  const model = normalizeChatModel(requested);
+  if (model !== 'deepseek' && model !== 'openai') {
+    return workshopImageError(res, 400, '不支持的对话模型');
+  }
   const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-48) : [];
   if (!messages.length) return workshopImageError(res, 400, '对话内容不能为空');
   if (model === 'deepseek' && !DEEPSEEK_API_KEY) {
-    return workshopImageError(res, 503, 'DeepSeek 尚未配置，请在 Render Environment 添加 DEEPSEEK_API_KEY');
+    return workshopImageError(res, 503, 'DeepSeek 尚未配置，请在环境变量添加 DEEPSEEK_API_KEY');
   }
   const endpoint = model === 'deepseek'
     ? 'https://api.deepseek.com/chat/completions'
     : 'https://text.pollinations.ai/openai';
+  const upstreamModel = model === 'deepseek' ? DEEPSEEK_MODEL : 'openai';
   const requestBody = model === 'deepseek'
     ? {
-        model: DEEPSEEK_MODEL,
+        model: upstreamModel,
         messages,
         max_tokens: 800,
         temperature: 0.7,
         thinking: { type: 'disabled' },
       }
-    : { model, messages };
+    : { model: upstreamModel, messages };
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60_000);
+  const timer = setTimeout(() => controller.abort(), 45_000);
   try {
-    const upstream = await fetch(endpoint, {
+    let upstream = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        Referer: 'https://sushi-ai-server.vercel.app/',
         ...(model === 'deepseek' ? { Authorization: 'Bearer ' + DEEPSEEK_API_KEY } : {}),
       },
       body: JSON.stringify(requestBody),
     });
-    const body = await upstream.text();
+    let body = await upstream.text();
+    // One silent retry for transient Pollinations queue / payment flaps.
+    if (model === 'openai' && (upstream.status === 402 || upstream.status === 429 || upstream.status >= 500)) {
+      await new Promise((r) => setTimeout(r, 700));
+      upstream = await fetch(endpoint, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Referer: 'https://sushi-ai-server.vercel.app/',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      body = await upstream.text();
+    }
     if (!upstream.ok) {
       let detail = '';
       try {
         const parsed = JSON.parse(body);
-        detail = String(parsed && parsed.error && (parsed.error.message || parsed.error.type) || '').slice(0, 160);
+        detail = String((parsed && (parsed.error && (parsed.error.message || parsed.error.type) || parsed.error)) || '').slice(0, 160);
       } catch (error) {
         detail = String(body || '').replace(/\s+/g, ' ').slice(0, 160);
       }
-      const status = upstream.status === 401 || upstream.status === 402 ? upstream.status : 502;
-      return workshopImageError(res, status, `DeepSeek 返回 ${upstream.status}${detail ? '：' + detail : ''}`);
+      const label = model === 'deepseek' ? 'DeepSeek' : '对话通道';
+      const status = upstream.status === 401 || upstream.status === 402 || upstream.status === 429
+        ? upstream.status
+        : 502;
+      return workshopImageError(res, status, `${label}返回 ${upstream.status}${detail ? '：' + detail : ''}`);
     }
     res.status(200).type('application/json').send(body || '{}');
   } catch (error) {
@@ -1152,9 +1196,9 @@ app.post('/api/workshop/chat', async (req, res) => {
 // from talking to an arbitrary URL supplied by page input.
 app.get('/api/workshop/image', async (req, res) => {
   const access = getWorkshopAccess(req, String((req.query && req.query.k) || ''));
-  if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
+  if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
 
-  const model = String(req.query.model || 'turbo');
+  const model = normalizeImageModel(req.query.model || 'turbo');
   if (!IMAGE_MODELS.has(model)) return workshopImageError(res, 400, '不支持的生图模型');
 
   const prompt = String(req.query.prompt || '').trim().slice(0, 1600);
@@ -1162,42 +1206,69 @@ app.get('/api/workshop/image', async (req, res) => {
 
   const width = Math.min(1024, Math.max(256, Number(req.query.width) || 768));
   const height = Math.min(1024, Math.max(256, Number(req.query.height) || 768));
-  const seed = Number.isFinite(Number(req.query.seed)) ? Math.trunc(Number(req.query.seed)) : Math.floor(Math.random() * 2147483646);
-  const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
-  upstream.searchParams.set('model', model);
-  upstream.searchParams.set('width', String(width));
-  upstream.searchParams.set('height', String(height));
-  upstream.searchParams.set('seed', String(seed));
-  upstream.searchParams.set('nologo', 'true');
-  upstream.searchParams.set('enhance', 'false');
-  upstream.searchParams.set('safe', 'false');
+  let seed = Number.isFinite(Number(req.query.seed)) ? Math.trunc(Number(req.query.seed)) : Math.floor(Math.random() * 2147483646);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 90_000);
-  try {
+  const tryOnce = async (attempt) => {
+    const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
+    upstream.searchParams.set('model', model);
+    upstream.searchParams.set('width', String(width));
+    upstream.searchParams.set('height', String(height));
+    upstream.searchParams.set('seed', String(seed + attempt * 97));
+    upstream.searchParams.set('nologo', 'true');
+    upstream.searchParams.set('enhance', 'false');
+    upstream.searchParams.set('safe', 'false');
     const upstreamResponse = await fetch(upstream, {
       signal: controller.signal,
-      headers: { Accept: 'image/*' },
+      headers: {
+        Accept: 'image/*',
+        Referer: 'https://sushi-ai-server.vercel.app/',
+      },
     });
     if (!upstreamResponse.ok || !upstreamResponse.body) {
-      return workshopImageError(res, 502, `上游生图服务返回 ${upstreamResponse.status}`);
+      const err = new Error(`上游生图服务返回 ${upstreamResponse.status}`);
+      err.status = upstreamResponse.status;
+      throw err;
     }
-    res.status(200);
-    res.set('Content-Type', upstreamResponse.headers.get('content-type') || 'image/jpeg');
-    res.set('Cache-Control', 'no-store');
-    res.set('X-Sushi-Image-Proxy', 'pollinations');
-    const reader = upstreamResponse.body.getReader();
-    const pump = async () => {
-      while (true) {
-        const part = await reader.read();
-        if (part.done) break;
-        res.write(Buffer.from(part.value));
+    const contentType = String(upstreamResponse.headers.get('content-type') || '');
+    if (contentType && !contentType.includes('image/')) {
+      const err = new Error('上游未返回图片');
+      err.status = 502;
+      throw err;
+    }
+    const buf = Buffer.from(await upstreamResponse.arrayBuffer());
+    // Reject tiny / queue-placeholder payloads that look successful but are unusable.
+    if (!buf.length || buf.length < 2500) {
+      const err = new Error('上游图片过小或无效');
+      err.status = 502;
+      throw err;
+    }
+    return { buf, contentType: contentType || 'image/jpeg' };
+  };
+  try {
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const got = await tryOnce(attempt);
+        res.status(200);
+        res.set('Content-Type', got.contentType);
+        res.set('Cache-Control', 'no-store');
+        res.set('X-Sushi-Image-Proxy', 'pollinations');
+        res.set('X-Sushi-Image-Model', model);
+        return res.end(got.buf);
+      } catch (error) {
+        lastError = error;
+        if (error && error.name === 'AbortError') break;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 450 + attempt * 350));
       }
-      res.end();
-    };
-    await pump();
+    }
+    if (lastError && lastError.name === 'AbortError') {
+      return workshopImageError(res, 504, '备用生图服务超时');
+    }
+    return workshopImageError(res, (lastError && lastError.status) || 502, (lastError && lastError.message) || '备用生图失败');
   } catch (error) {
-    if (!res.headersSent) workshopImageError(res, 504, '备用生图服务超时');
+    if (!res.headersSent) workshopImageError(res, 504, error && error.name === 'AbortError' ? '备用生图服务超时' : '备用生图服务连接失败');
     else res.destroy(error);
   } finally {
     clearTimeout(timer);

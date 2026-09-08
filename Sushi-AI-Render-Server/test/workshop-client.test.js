@@ -54,9 +54,12 @@ async function setup(t, handler, imageFails = false) {
   assert.deepEqual(errors, [], errors.map(e => e.message).join('\n'));
   w.document.getElementById('角色描述').value = 'A small cat by a sunny window';
   // Default unit tests exercise the authenticated /api/images (Horde) path.
-  // Race/turbo coverage is in dedicated tests that mock Pollinations.
+  // Race/proxy coverage is in dedicated tests that mock /api/workshop/image.
   var engine = w.document.getElementById('出图引擎');
-  if (engine) engine.value = 'horde';
+  if (engine) {
+    engine.disabled = false;
+    engine.value = 'horde';
+  }
   return { w, calls, errors, text: () => w.document.getElementById('状态提示').textContent };
 }
 
@@ -142,18 +145,18 @@ test('failed translation preserves the current text, and legacy perchance select
   assert.doesNotMatch(f.text(), /在 Perchance 官网生成/);
 });
 
-test('auto race prefers turbo without requiring official redirect', async t => {
+test('auto race prefers a free platform without requiring official redirect', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('出图引擎').value = 'auto';
-  // Make turbo win immediately via mocked fetch to pollinations.
   const realFetch = f.w.fetch;
   f.w.fetch = async (url, options = {}) => {
-    if (String(url).includes('image.pollinations.ai')) {
-      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6JkAAAAASUVORK5CYII=', 'base64');
+    const href = String(url);
+    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
+      const bytes = Buffer.alloc(3200, 7);
       return {
         ok: true,
         status: 200,
-        blob: async () => new f.w.Blob([png], { type: 'image/png' })
+        blob: async () => new f.w.Blob([bytes], { type: 'image/png' })
       };
     }
     return realFetch(url, options);
@@ -163,7 +166,32 @@ test('auto race prefers turbo without requiring official redirect', async t => {
   await f.w.开始生成();
   assert.equal(opened.length, 0);
   assert.ok(f.w.document.querySelector('#图像输出 img'));
-  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'turbo');
+  const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
+  assert.ok(['turbo', 'flux', 'flux-realism', 'sana', 'horde'].includes(engine), 'engine=' + engine);
+  // Platform picker must remain selectable after a successful run.
+  assert.equal(f.w.document.getElementById('出图引擎').disabled, false);
+});
+
+test('manual platform selection is honored and not remapped to auto', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const box = f.w.document.getElementById('出图引擎');
+  box.value = 'sana';
+  box.disabled = false;
+  const realFetch = f.w.fetch;
+  const hits = [];
+  f.w.fetch = async (url, options = {}) => {
+    const href = String(url);
+    if (href.includes('/api/workshop/image')) {
+      hits.push(href);
+      const bytes = Buffer.alloc(3200, 9);
+      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
+    }
+    return realFetch(url, options);
+  };
+  await f.w.开始生成();
+  assert.ok(hits.some(h => h.includes('model=sana')), hits.join('\n'));
+  assert.equal(box.value, 'sana');
+  assert.equal(box.disabled, false);
 });
 
 test('failed image downloads show a reload action and do not silently create another paid/quota task', async t => {
