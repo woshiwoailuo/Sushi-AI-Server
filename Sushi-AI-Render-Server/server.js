@@ -1421,7 +1421,7 @@ app.post('/api/workshop/horde-image', async (req, res) => {
     const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
       method: 'POST', signal: controller.signal,
       headers: { 'Content-Type': 'application/json', apikey: '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
-      body: JSON.stringify({ prompt, nsfw: false, censor_nsfw: true, params: { n: 1, width, height, steps: 15, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
+      body: JSON.stringify({ prompt, nsfw: true, censor_nsfw: false, params: { n: 1, width, height, steps: 15, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
     });
     const acceptedJson = await accepted.json().catch(() => ({}));
     if (!accepted.ok || !acceptedJson.id) return workshopImageError(res, accepted.status === 429 ? 429 : 502, 'Horde 生图服务器未受理请求');
