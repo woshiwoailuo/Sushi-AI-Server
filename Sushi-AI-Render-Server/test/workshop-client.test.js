@@ -180,7 +180,7 @@ test('auto race prefers a free platform without requiring official redirect', as
   assert.equal(opened.length, 0);
   assert.ok(f.w.document.querySelector('#图像输出 img'));
   const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.ok(['turbo', 'flux', 'flux-realism', 'sana', 'horde'].includes(engine), 'engine=' + engine);
+  assert.ok(['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'].includes(engine), 'engine=' + engine);
   // Platform picker must remain selectable after a successful run.
   assert.equal(f.w.document.getElementById('出图引擎').disabled, false);
 });
@@ -230,3 +230,63 @@ test('a quota error in a batch preserves the earlier successful image', async t 
   assert.equal(f.w.document.querySelectorAll('#图像输出 img').length, 1);
   assert.equal(submissions, 2);
 });
+
+test('random generate fills rich core while managed display stays simple two-line style', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.本地随机一项, 'function');
+  const item = f.w.本地随机一项();
+  assert.match(item.中文, /成年/);
+  assert.match(item.英文, /fictional adult/i);
+  assert.ok(item.核心.length > item.中文.length, 'core should be richer than managed Chinese');
+  assert.ok(item.详英.length > item.英文.length, 'generation English should be richer than managed English');
+  assert.match(item.核心, /光|构图|景深|材质|发型|五官/);
+  assert.match(item.详英, /light|depth of field|composition|texture|fictional/i);
+  assert.doesNotMatch(item.核心 + item.详英 + item.中文 + item.英文, /\bchild\b|\bteen\b|儿童|少年|未成年(?!人)/i);
+  assert.match(item.核心 + item.详英, /no minors|无未成年人|18\+/i);
+
+  // Deterministic pair for UI fill assertions
+  f.w.本地随机一项 = () => ({
+    中文: '两名成年人在暖光室内对视',
+    英文: 'photoreal photo of two fictional adults facing each other in warm indoor light',
+    核心: '两名虚构成年人在暖光室内近距离对视，肩线相对；双人半身构图，浅景深；钨丝暖黄主光；无未成年人。',
+    详英: 'photoreal photo of two fictional adults facing each other in warm indoor light, intimate half-body two-shot, tungsten key, shallow depth of field, fictional adults 18+ only, no minors'
+  });
+  await f.w.开始随机生成();
+  assert.equal(f.w.document.getElementById('角色描述').value, f.w.本地随机一项().核心);
+  assert.equal(f.w.document.getElementById('中文译文').value, '两名成年人在暖光室内对视');
+  assert.equal(f.w.document.getElementById('英文描述').value, 'photoreal photo of two fictional adults facing each other in warm indoor light');
+  assert.equal(f.w.document.getElementById('说明标题').textContent, '两名成年人在暖光室内对视');
+  assert.equal(f.w.document.getElementById('说明英文').textContent, 'photoreal photo of two fictional adults facing each other in warm indoor light');
+  const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
+  assert.match(payload.prompt, /shallow depth of field|tungsten key|intimate half-body/i);
+  assert.doesNotMatch(payload.prompt, /^photoreal photo of two fictional adults facing each other in warm indoor light$/);
+});
+
+test('perch/perchance is selectable and included in the free race list', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const box = f.w.document.getElementById('出图引擎');
+  assert.ok(box.querySelector('option[value="perchance"]'), 'perchance option required');
+  box.value = 'perchance';
+  assert.equal(f.w.当前引擎(), 'perchance');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
+  assert.match(src, /FREE_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
+  assert.match(src, /name === 'perch'/);
+  // Canonical select id is perchance; perch is accepted as an alias in normalizeEngineName.
+  assert.match(src, /官方' \|\| name === 'perch'/);
+  const opened = [];
+  f.w.open = (url) => { opened.push(String(url)); return null; };
+  box.value = 'perchance';
+  const realFetch = f.w.fetch;
+  f.w.fetch = async (url, options = {}) => {
+    const href = String(url);
+    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
+      const bytes = Buffer.alloc(3200, 7);
+      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
+    }
+    return realFetch(url, options);
+  };
+  await f.w.开始生成();
+  assert.equal(opened.length, 0, 'must never open perchance.org');
+  assert.equal(box.value, 'perchance');
+});
+

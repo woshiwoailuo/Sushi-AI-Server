@@ -89,7 +89,7 @@
               Sana · 中文友好
             </option>
             <option value="perchance">
-              Perchance · 应用内生成
+              Perch / Perchance · 应用内生成
             </option>
           </select>
         </label>
@@ -127,7 +127,7 @@
               <option value="flux">Flux</option>
               <option value="flux-realism">Flux写实</option>
               <option value="sana">Sana</option>
-              <option value="perchance">Perchance · 应用内</option>
+              <option value="perchance">Perch / Perchance · 应用内</option>
             </select>
           </label>
           <label class="换背景行">
@@ -690,8 +690,8 @@
     var 英文区 = document.getElementById("说明英文");
     var 核心 = ((document.getElementById("角色描述") || {}).value || "").trim();
     var 中文 = ((document.getElementById("中文译文") || {}).value || "").trim();
-    var 英文 = ((document.getElementById("安全英文") || {}).value || "").trim()
-      || ((document.getElementById("英文描述") || {}).value || "").trim();
+    var 英文 = ((document.getElementById("英文描述") || {}).value || "").trim()
+      || ((document.getElementById("安全英文") || {}).value || "").trim();
     var 展示中文 = 去重描述(含中文(中文) ? 中文 : (含中文(核心) ? 核心 : ""));
     if (!英文 && 核心 && !含中文(核心)) 英文 = 核心;
     英文 = 只留英文(去掉方括号(英文));
@@ -737,7 +737,7 @@
   }
   function 规范化出图平台(值, 用户选过) {
     值 = String(值 || "").trim();
-    if (值 === "官方") 值 = "perchance";
+    if (值 === "官方" || 值 === "perch") 值 = "perchance";
     var 可用 = ["auto", "turbo", "horde", "flux", "flux-realism", "sana", "perchance"];
     if (用户选过 && 可用.indexOf(值) >= 0) return 值;
     if (!用户选过 && (!值 || 值 === "auto")) return "auto";
@@ -1948,22 +1948,93 @@
     return String(文 || "").replace(/[\[\]\{\}]/g, " ").replace(/\s+/g, " ").trim();
   }
 
-  function 本地随机一对() {
+  function 丰富随机项(简中, 简英, 核心, 详英) {
+    var 项 = new Object();
+    项.中文 = String(简中 || "").trim();
+    项.英文 = String(简英 || "").trim();
+    项.核心 = String(核心 || "").trim() || 项.中文;
+    项.详英 = String(详英 || "").trim() || 项.英文;
+    return 项;
+  }
+
+  function 扩写随机核心(简中, 简英) {
+    var 核心 = 简中 +
+      "。虚构成年角色，五官与发型清晰，皮肤质感自然；半身或全身构图，浅景深；主光明确、辅光柔和，阴影层次清楚；服装面料与场景材质可辨；无未成年人。";
+    var 详英 = 简英 +
+      ", detailed facial features and hair, natural skin texture, half-body or full-body framing, shallow depth of field, clear key light with soft fill, readable fabric and environment materials, cinematic composition, fictional consenting adults 18+ only, no minors";
+    return 丰富随机项(简中, 简英, 核心, 详英);
+  }
+
+  function 本地随机一项() {
     var 池 = [
-      ["黄昏窗边的成年女人，写实照片", "photoreal photo of a fictional adult woman by a dusk window"],
-      ["雨夜街道上的成年男人，电影感", "cinematic photoreal photo of a fictional adult man on a rainy night street"],
-      ["两名成年人在暖光室内对视", "photoreal photo of two fictional adults facing each other in warm indoor light"],
-      ["旧沙发上的成年女人，胶片质感", "film-look photoreal photo of a fictional adult woman sitting on an old sofa"],
-      ["靠在车门边的成年男人，黄金时刻", "golden hour photoreal photo of a fictional adult man leaning on a car door"],
-      ["厨房里忙碌的成年女人，纪实摄影", "documentary photoreal photo of a fictional adult woman cooking in a kitchen"],
-      ["图书馆窗边读书的成年男人", "photoreal photo of a fictional adult man reading by a library window"],
-      ["海边栈道上的成年女人，自然光", "photoreal photo of a fictional adult woman on a seaside boardwalk, natural light"],
-      ["三名成年人站在一起的半身写实照", "photoreal half-body photo of three fictional adults standing together"]
+      丰富随机项(
+        "黄昏窗边的成年女人，写实照片",
+        "photoreal photo of a fictional adult woman by a dusk window",
+        "黄昏窗边的虚构成年女人，侧脸看向窗外暖橙余晖；半身构图，浅景深虚化室内；窗边轮廓光勾勒发丝与肩线，室内有一盏柔和补光；针织衫纹理清晰，皮肤与眼神自然写实；无未成年人。",
+        "photoreal photo of a fictional adult woman by a dusk window, three-quarter profile looking outside, warm orange rim light on hair and shoulders, soft indoor fill, half-body framing, shallow depth of field, visible knitwear texture, natural skin detail, cinematic still, fictional adult 18+ only, no minors"
+      ),
+      丰富随机项(
+        "雨夜街道上的成年男人，电影感",
+        "cinematic photoreal photo of a fictional adult man on a rainy night street",
+        "雨夜街道上的虚构成年男人，湿润沥青反光，霓虹冷暖交织；全身或七分身构图，微仰视角；街灯作主光，雨丝与积水高光清楚；风衣面料微湿，面部轮廓锐利写实；无未成年人。",
+        "cinematic photoreal photo of a fictional adult man on a rainy night street, wet asphalt reflections, mixed neon key light, visible rain streaks, slight low angle, full or three-quarter body, damp coat fabric detail, sharp facial structure, fictional adult 18+ only, no minors"
+      ),
+      丰富随机项(
+        "两名成年人在暖光室内对视",
+        "photoreal photo of two fictional adults facing each other in warm indoor light",
+        "两名虚构成年人在暖光室内近距离对视，肩线相对；双人半身构图，浅景深；钨丝暖黄主光从侧前方打来，背景墙面柔和虚化；表情克制、眼神交汇，服装与皮肤质感清晰；无未成年人。",
+        "photoreal photo of two fictional adults facing each other in warm indoor light, intimate half-body two-shot, tungsten key from front-side, shallow depth of field, restrained expressions with eye contact, clear clothing and skin texture, fictional consenting adults 18+ only, no minors"
+      ),
+      丰富随机项(
+        "旧沙发上的成年女人，胶片质感",
+        "film-look photoreal photo of a fictional adult woman sitting on an old sofa",
+        "旧沙发上的虚构成年女人侧坐，一条腿收起；中景半身，轻微胶片颗粒；落地窗柔光作主光，室内阴影偏冷；沙发绒面与针织纹理清楚，表情放松自然；无未成年人。",
+        "film-look photoreal photo of a fictional adult woman sitting sideways on an old sofa, mid shot, gentle film grain, soft window key light with cooler shadow, visible sofa velvet and knit texture, relaxed natural expression, fictional adult 18+ only, no minors"
+      ),
+      丰富随机项(
+        "靠在车门边的成年男人，黄金时刻",
+        "golden hour photoreal photo of a fictional adult man leaning on a car door",
+        "黄金时刻靠在车门边的虚构成年男人，手臂搭在车顶；七分身构图，逆光勾边；低角度阳光拉长影子，车漆反光清楚；衬衫微皱，面部高光自然；无未成年人。",
+        "golden hour photoreal photo of a fictional adult man leaning on a car door, arm on roof, three-quarter body, backlight rim, long shadows, clear car-paint reflections, slightly wrinkled shirt, natural facial highlights, fictional adult 18+ only, no minors"
+      ),
+      丰富随机项(
+        "厨房里忙碌的成年女人，纪实摄影",
+        "documentary photoreal photo of a fictional adult woman cooking in a kitchen",
+        "厨房里忙碌的虚构成年女人正在翻炒，蒸汽升腾；纪实抓拍半身，略带运动感；顶灯与窗光混合，不锈钢锅具有高光；围裙与食材细节清楚，表情专注；无未成年人。",
+        "documentary photoreal photo of a fictional adult woman cooking in a kitchen, steam rising, candid half-body with slight motion, mixed overhead and window light, stainless cookware highlights, apron and food detail, focused expression, fictional adult 18+ only, no minors"
+      ),
+      丰富随机项(
+        "图书馆窗边读书的成年男人",
+        "photoreal photo of a fictional adult man reading by a library window",
+        "图书馆窗边读书的虚构成年男人，手持书本；半身侧光构图，书架虚化；冷白窗光为主，室内暖台灯为辅；纸张纤维与毛衣纹理清楚，神情安静；无未成年人。",
+        "photoreal photo of a fictional adult man reading by a library window, half-body side light, soft bookshelf bokeh, cool window key with warm desk-lamp fill, visible paper fiber and sweater knit, calm expression, fictional adult 18+ only, no minors"
+      ),
+      丰富随机项(
+        "海边栈道上的成年女人，自然光",
+        "photoreal photo of a fictional adult woman on a seaside boardwalk, natural light",
+        "海边栈道上的虚构成年女人迎风而立，发丝轻扬；全身远中景，地平线偏低；阴天柔和自然光，海面与木板纹理清楚；休闲外套质感写实，表情轻松；无未成年人。",
+        "photoreal photo of a fictional adult woman on a seaside boardwalk in natural light, wind-lifted hair, full-body mid-distance framing, low horizon, overcast soft daylight, clear wood plank and sea texture, casual jacket detail, relaxed expression, fictional adult 18+ only, no minors"
+      ),
+      丰富随机项(
+        "三名成年人站在一起的半身写实照",
+        "photoreal half-body photo of three fictional adults standing together",
+        "三名虚构成年人并肩半身站立，间距自然；水平机位、轻微广角；均匀影棚柔光，背景干净浅灰；各自发型服装可辨，表情自然互动；无未成年人。",
+        "photoreal half-body photo of three fictional adults standing together, even spacing, eye-level slight wide framing, soft studio key light, clean light-gray backdrop, distinct hairstyles and outfits, natural interaction, fictional adults 18+ only, no minors"
+      )
     ];
     return 池[Math.floor(Math.random() * 池.length)];
   }
+
+  function 本地随机一对() {
+    var 项 = 本地随机一项();
+    var 对 = [项.中文, 项.英文];
+    对.核心 = 项.核心;
+    对.详英 = 项.详英;
+    对.项 = 项;
+    return 对;
+  }
   function 本地随机描述() {
-    return 本地随机一对()[0];
+    return 本地随机一项().中文;
   }
 
   function 解析AI两行(回) {
@@ -1997,10 +2068,9 @@
       项 = 解析AI两行(await 问免费模型("雨夜街头一名成年女人撑伞。\nA fictional adult woman with an umbrella on a rainy night street, photoreal photo.\n再写一组全新的，只要上面这种两行。", "auto"));
     } catch (e) {}
     if (!项) {
-      var p = 本地随机一对();
-      项 = new Object();
-      项.中文 = p[0];
-      项.英文 = p[1];
+      项 = 本地随机一项();
+    } else {
+      项 = 扩写随机核心(项.中文, 项.英文);
     }
     预载描写.push(项);
     if (!预载图 && !正在生成图片) 预热出图(项.英文);
@@ -2023,12 +2093,8 @@
 
   function 取出预载() {
     var 项 = 预载描写.shift();
-    if (!项) {
-      var p = 本地随机一对();
-      项 = new Object();
-      项.中文 = p[0];
-      项.英文 = p[1];
-    }
+    if (!项) 项 = 本地随机一项();
+    if (!项.核心 || !项.详英) 项 = 扩写随机核心(项.中文, 项.英文);
     return 项;
   }
 
@@ -2154,13 +2220,16 @@
     var 英文框 = document.getElementById("英文描述");
     var 中文框 = document.getElementById("中文译文");
     var 项 = 取出预载();
-    var 中文 = 项.中文;
-    var 英文 = 项.英文;
-    if (描述框) 描述框.value = 中文;
-    if (英文框) 英文框.value = 英文;
-    if (中文框) 中文框.value = 中文;
-    写出安全英文();
+    var 简中 = 项.中文;
+    var 简英 = 项.英文;
+    var 核心 = 项.核心 || 简中;
+    var 详英 = 项.详英 || 简英;
+    if (描述框) 描述框.value = 核心;
+    if (英文框) 英文框.value = 简英;
+    if (中文框) 中文框.value = 简中;
     刷新画面说明();
+    var 安 = document.getElementById("安全英文");
+    if (安) 安.value = 详英;
     即将抢出 = true;
     抢出已定 = false;
     本轮胜出 = "";
@@ -2594,7 +2663,7 @@
       "flux-realism": "Flux写实",
       sana: "Sana",
       horde: "群体计算",
-      perchance: "Perchance · 应用内"
+      perchance: "Perch / Perchance · 应用内"
     };
     return 真[值] || 值;
   }
@@ -3214,7 +3283,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.22" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.23" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

@@ -662,7 +662,7 @@ function imageRoute(handler) {
 }
 
 app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
-  res.json({ provider: 'horde', free: true, maxWaitSeconds: 600, race: ['turbo', 'flux', 'flux-realism', 'sana', 'horde'] });
+  res.json({ provider: 'horde', free: true, maxWaitSeconds: 600, race: ['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'] });
 });
 app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
 app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {
