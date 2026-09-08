@@ -10,6 +10,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
+const { ImageError, createImageService } = require('./lib/image-service');
+const workshopLoaderHtml = require('./lib/workshop-loader');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -448,6 +450,7 @@ app.use(cors({
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+app.use('/api/images', express.json({ limit: '12mb' }));
 app.use(express.json({ limit: '6mb' }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -561,6 +564,63 @@ app.get('/api/me/quota', authMiddleware, (req, res) => {
     plan: req.user.plan,
     vip_until: req.user.vip_until,
   });
+});
+
+
+const images = createImageService({
+  apiKey: process.env.HORDE_API_KEY || '0000000000',
+  model: process.env.HORDE_MODEL || '',
+  reserve(userId) {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!user || user.banned) throw new ImageError('账号不可用', 403, 'ACCOUNT_DISABLED');
+    if (!user.email_verified) throw new ImageError('请先验证邮箱', 403, 'VERIFY_EMAIL');
+    if (remainingQuota(user) <= 0) throw new ImageError('今日额度已用尽', 402, 'QUOTA_EMPTY');
+    const result = db.prepare('INSERT INTO gen_logs (user_id, created_at, kind) VALUES (?, ?, ?)')
+      .run(userId, nowIso(), 'image_pending');
+    persistSqlJs();
+    return Number(result.lastInsertRowid);
+  },
+  refund(id, userId) {
+    db.prepare("DELETE FROM gen_logs WHERE id = ? AND user_id = ? AND kind = 'image_pending'").run(id, userId);
+    persistSqlJs();
+  },
+  commit(id, userId) {
+    db.prepare("UPDATE gen_logs SET kind = 'image' WHERE id = ? AND user_id = ? AND kind = 'image_pending'").run(id, userId);
+    persistSqlJs();
+  },
+});
+
+function imageAccount(req, res, next) {
+  if (req.user.banned) return res.status(403).json({ error: '账号已被封禁' });
+  if (!req.user.email_verified) return res.status(403).json({ error: '请先验证邮箱' });
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+}
+
+function imageRoute(handler) {
+  return (req, res) => Promise.resolve().then(() => handler(req, res)).catch((error) => {
+    if (!res.headersSent && !res.destroyed) res.status(error.status || 500).json({
+      error: error instanceof ImageError ? error.message : '生成服务暂时不可用，请稍后重试',
+      code: error.code || 'SERVER_ERROR',
+    });
+  });
+}
+
+app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
+  res.json({ provider: 'horde', free: true, maxWaitSeconds: 600, race: ['turbo', 'horde'] });
+});
+app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
+app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {
+  const job = await images.create(req.user.id, req.body);
+  if (res.destroyed) { await images.cancel(req.user.id, job.id); return; }
+  res.status(202).json(job);
+}));
+app.get('/api/images/:id', authMiddleware, imageAccount, imageRoute(async (req, res) => res.json(await images.get(req.user.id, req.params.id))));
+app.delete('/api/images/:id', authMiddleware, imageAccount, imageRoute(async (req, res) => res.json(await images.cancel(req.user.id, req.params.id))));
+
+app.get('/assets/workshop-generation.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(PUBLIC_DIR, 'assets', 'workshop-generation.js'));
 });
 
 app.post('/api/gen/check', authMiddleware, (req, res) => {
@@ -906,134 +966,6 @@ function getLiveTicket(id) {
   return ticket;
 }
 
-function workshopLoaderHtml(ticket) {
-  const payload = {
-    k: ticket.id,
-    iv: ticket.iv,
-    ct: ticket.ciphertext,
-    tag: ticket.tag,
-  };
-  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>苏轼AI</title>
-<style>
-  html,body{margin:0;height:100%;background:#0c0e10;color:#8b8a84;font-family:system-ui,sans-serif}
-  body{display:grid;place-items:center}
-  .msg{font-size:13px;letter-spacing:.18em}
-</style>
-</head>
-<body>
-<div class="msg">UNLOCKING</div>
-<script>window.__SUSHI_WRAP__=${json};</script>
-<script>
-(function(){
-  const wrap = window.__SUSHI_WRAP__ || {};
-  let unlocking = false;
-  function hexToBytes(hex){
-    const s = String(hex || '').replace(/[^0-9a-f]/gi,'');
-    const out = new Uint8Array(s.length / 2);
-    for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
-    return out;
-  }
-  function b64ToBytes(b64){
-    const bin = atob(String(b64 || ''));
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-  function ticketId(){
-    const q = new URLSearchParams(location.search);
-    return q.get('k') || wrap.k || '';
-  }
-  async function decryptAndWrite(keyHex, ivHex, ctB64, tagB64){
-    if (unlocking) return;
-    unlocking = true;
-    try {
-      const keyBytes = hexToBytes(keyHex);
-      const iv = hexToBytes(ivHex || wrap.iv);
-      const ct = b64ToBytes(ctB64 || wrap.ct);
-      const tag = b64ToBytes(tagB64 || wrap.tag);
-      const combined = new Uint8Array(ct.length + tag.length);
-      combined.set(ct, 0);
-      combined.set(tag, ct.length);
-      const cryptoKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
-      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, combined);
-      const html = new TextDecoder().decode(plain);
-      document.open();
-      document.write(html);
-      document.close();
-    } catch (err) {
-      unlocking = false;
-      console.warn('unlock failed', err);
-    }
-  }
-  window.__sushiUnlock = function(keyHex, ivHex){
-    if (!keyHex) return;
-    decryptAndWrite(String(keyHex), ivHex);
-  };
-  async function loadBlob(){
-    if (wrap.ct && wrap.tag && wrap.iv) return wrap;
-    const k = ticketId();
-    if (!k) return wrap;
-    const res = await fetch('/api/workshop/blob?k=' + encodeURIComponent(k));
-    if (!res.ok) return wrap;
-    const data = await res.json();
-    wrap.iv = data.iv || wrap.iv;
-    wrap.ct = data.ct || wrap.ct;
-    wrap.tag = data.tag || wrap.tag;
-    return wrap;
-  }
-  async function tryUnlockCookie(){
-    const k = ticketId();
-    if (!k) return false;
-    try {
-      const res = await fetch('/api/workshop/unlock', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticket: k })
-      });
-      if (!res.ok) return false;
-      const data = await res.json();
-      if (data.key) {
-        await decryptAndWrite(data.key, data.iv);
-        return true;
-      }
-    } catch (e) {}
-    return false;
-  }
-  async function tryHash(){
-    const hash = (location.hash || '').replace(/^#/, '');
-    if (!hash) return false;
-    const parts = hash.split('.');
-    const key = parts[0];
-    const iv = parts.slice(1).join('.') || wrap.iv;
-    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
-    if (!key) return false;
-    await decryptAndWrite(key, iv);
-    return true;
-  }
-  async function boot(){
-    await loadBlob();
-    const ssKey = sessionStorage.getItem('sushi_wrap_key');
-    const ssIv = sessionStorage.getItem('sushi_wrap_iv');
-    if (ssKey) {
-      await decryptAndWrite(ssKey, ssIv);
-      return;
-    }
-    if (await tryHash()) return;
-    if (await tryUnlockCookie()) return;
-  }
-  boot();
-})();
-</script>
-</body>
-</html>`;
-}
 
 function createWorkshopTicket(userId) {
   sweepTickets();
@@ -1097,6 +1029,27 @@ app.get('/api/workshop/blob', (req, res) => {
   res.json({ iv: ticket.iv, ct: ticket.ciphertext, tag: ticket.tag });
 });
 
+app.post('/api/workshop/session', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const ticket = getLiveTicket(String((req.body && req.body.ticket) || ''));
+  const key = String((req.body && req.body.key) || '');
+  if (!ticket || !/^[0-9a-f]{64}$/i.test(key)) {
+    return res.status(401).json({ error: '进入凭证已过期，请返回后重新进入' });
+  }
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(key, 'hex'), Buffer.from(ticket.key, 'hex'))) {
+      return res.status(401).json({ error: '进入凭证已过期，请返回后重新进入' });
+    }
+  } catch (e) {
+    return res.status(401).json({ error: '进入凭证已过期，请返回后重新进入' });
+  }
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(ticket.userId);
+  if (!user || user.banned) return res.status(403).json({ error: '账号不可用' });
+  if (!user.email_verified) return res.status(403).json({ error: '请先验证邮箱' });
+  setAuthCookie(res, signToken(user));
+  res.json({ ok: true });
+});
+
 app.post('/api/workshop/unlock', authMiddleware, (req, res) => {
   const id = String((req.body && req.body.ticket) || '');
   const ticket = getLiveTicket(id);
@@ -1122,7 +1075,7 @@ app.post('/api/workshop/chat', async (req, res) => {
   if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
   const model = String((req.body && req.body.model) || 'turbo');
   if (!CHAT_MODELS.has(model)) return workshopImageError(res, 400, '不支持的对话模型');
-  const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-20) : [];
+  const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-48) : [];
   if (!messages.length) return workshopImageError(res, 400, '对话内容不能为空');
   if (model === 'deepseek' && !DEEPSEEK_API_KEY) {
     return workshopImageError(res, 503, 'DeepSeek 尚未配置，请在 Render Environment 添加 DEEPSEEK_API_KEY');
@@ -1324,12 +1277,15 @@ async function initialize() {
   await openDatabase();
   migrate();
   seedAdmin();
+  try { db.prepare("DELETE FROM gen_logs WHERE kind = 'image_pending'").run(); } catch (e) {}
   persistSqlJs();
 }
 
 async function main() {
   await initialize();
   return new Promise((resolve, reject) => {
+    const maintenance = setInterval(() => { try { void images.sweep(); } catch (e) {} }, 30_000);
+    if (maintenance.unref) maintenance.unref();
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('[sushi-club] listening on http://0.0.0.0:' + PORT);
       console.log('[sushi-club] db mode:', dbMode);

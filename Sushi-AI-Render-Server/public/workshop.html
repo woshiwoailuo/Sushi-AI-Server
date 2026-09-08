@@ -70,14 +70,14 @@
         <label>
           生图平台
           <select id="出图引擎" name="出图引擎">
-            <option value="perchance" selected>
-              Perchance 官方 · 默认
-            </option>
-            <option value="perchance">
-              Perchance 官方
+            <option value="auto" selected>
+              自动抢出 · Turbo+Horde
             </option>
             <option value="turbo">
-              Turbo
+              Turbo · 极速
+            </option>
+            <option value="horde">
+              Horde · 免费共享算力
             </option>
             <option value="flux-realism">
               Flux写实 · 备用更像真人
@@ -87,10 +87,6 @@
             </option>
             <option value="sana">
               Sana · 备用
-            </option>
-
-            <option value="horde">
-              群体计算 · 备用不跟 Pollinations 抢队列
             </option>
           </select>
         </label>
@@ -122,9 +118,9 @@
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
-              <option value="auto">自动抢出</option>
-              <option value="perchance">Perchance 官方</option>
+              <option value="auto" selected>自动抢出 · Turbo+Horde</option>
               <option value="turbo">Turbo</option>
+              <option value="horde">Horde</option>
               <option value="flux">Flux</option>
               <option value="flux-realism">Flux写实</option>
               <option value="sana">Sana</option>
@@ -358,6 +354,15 @@
             >
             <span>只换背景，人物、衣服、姿势尽量保持原图</span>
           </label>
+
+          <label class="换背景行">
+            <input
+              id="纯背景出图"
+              type="checkbox"
+              onchange="同步纯背景()"
+            >
+            <span>纯场景 / 插图生背景（不要人物，只画环境）</span>
+          </label>
           <label>
             还原程度
             <select id="图生图强度" name="图生图强度">
@@ -375,6 +380,8 @@
             </select>
           </label>
           <div class="核心操作">
+            <button type="button" class="次按钮" onclick="document.getElementById('参考图文件').click()">插入图片</button>
+            <button type="button" class="主按钮" onclick="一键生成背景()">生成背景</button>
             <button type="button" class="次按钮" onclick="清空参考图()">清除参考图</button>
           </div>
           <p id="图生图状态" class="说明文字"></p>
@@ -401,11 +408,12 @@
         <label>
           记忆模式
           <select id="记忆模式" onchange="切换记忆模式(this.value)">
-            <option value="short">短记忆 · 最近对话</option>
-            <option value="long" selected>长记忆 · 跨次保留</option>
+            <option value="short">短记忆 · 最近约 12 轮</option>
+            <option value="long" selected>长记忆 · 大数据（本机保存大量历史+摘要）</option>
             <option value="off">关闭记忆</option>
           </select>
         </label>
+        <p id="记忆说明" class="说明文字">默认长记忆：对话与摘要保存在本机 localStorage（单域约数 MB）。服务端 SQLite 在 Vercel 上会重置，故跨设备不以服务端为准。</p>
         <div id="对话列表" class="对话列表" aria-live="polite"></div>
         <div class="对话输入行">
           <textarea id="AI问题" rows="2" placeholder="输入想问的话…"></textarea>
@@ -449,6 +457,7 @@
 
       </div>
 
+      <button type="button" id="取消生成按钮" class="次按钮" onclick="取消生成()" hidden>取消本轮生成</button>
       <div id="状态提示" class="状态提示">
 
         <div class="状态图标">✦</div>
@@ -465,7 +474,7 @@
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">生图平台：自动抢出 · 先到先得</p>
+      <p id="平台提示" class="平台提示">生图平台：自动抢出 · Turbo + Horde 先到先得</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -499,7 +508,7 @@
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["perchance", "turbo", "flux-realism", "flux", "sana"];
+  var 引擎顺序 = ["auto", "turbo", "horde", "flux-realism", "flux", "sana"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -507,7 +516,7 @@
   var 进度成功 = 0;
   var 十八禁点击 = 0;
   var 十八禁行已开 = false;
-  var 用户选定平台 = "perchance";
+  var 用户选定平台 = "auto";
   var 用户选定图生图平台 = "aihorde";
   var 本轮胜出 = "";
   var 管理员已解锁 = false;
@@ -610,8 +619,8 @@
     载入图生图平台();
     var 平台框 = document.getElementById("出图引擎");
     if (平台框) {
-      if (!平台框.value) 平台框.value = "perchance";
-      用户选定平台 = 平台框.value || "perchance";
+      if (!平台框.value || 平台框.value === "perchance") 平台框.value = "auto";
+      用户选定平台 = 平台框.value || "auto";
       平台框.addEventListener("change", function () {
         用户选定平台 = 平台框.value || "perchance";
         保存默认平台(用户选定平台, true);
@@ -724,8 +733,11 @@
   }
   function 规范化出图平台(值, 用户选过) {
     值 = String(值 || "").trim();
-    if (!用户选过 && (!值 || 值 === "auto")) return "perchance";
-    return 值 || "perchance";
+    var 可用 = ["auto", "turbo", "horde", "flux", "flux-realism", "sana"];
+    if (值 === "perchance" || 值 === "官方") return "auto";
+    if (用户选过 && 可用.indexOf(值) >= 0) return 值;
+    if (!用户选过 && (!值 || 值 === "auto")) return "auto";
+    return 可用.indexOf(值) >= 0 ? 值 : "auto";
   }
 
   function 图生图平台键() {
@@ -1095,9 +1107,18 @@
     return 邮 ? 基 + "_" + 邮 : 基;
   }
 
+  function 对话保留上限() {
+    var 模式 = 记忆模式值();
+    if (模式 === "off") return 8;
+    if (模式 === "short") return 24;
+    return 200; // 长记忆 · 大数据
+  }
+  function 摘要保留上限() {
+    return 记忆模式值() === "long" ? 12000 : (记忆模式值() === "short" ? 1200 : 0);
+  }
   function 保存对话历史() {
     try {
-      var 裁 = 对话历史.slice(-40);
+      var 裁 = 对话历史.slice(-对话保留上限());
       对话历史 = 裁;
       localStorage.setItem(对话存储键(), JSON.stringify(裁));
     } catch (e) {}
@@ -1108,7 +1129,7 @@
     try {
       var 原始 = localStorage.getItem(对话存储键());
       var 列表 = 原始 ? JSON.parse(原始) : [];
-      if (Array.isArray(列表)) 对话历史 = 列表.slice(-40);
+      if (Array.isArray(列表)) 对话历史 = 列表.slice(-对话保留上限());
     } catch (e) {
       对话历史 = [];
     }
@@ -1285,14 +1306,16 @@
     try { 记忆摘要 = String(localStorage.getItem(记忆摘要键()) || ""); } catch (e) { 记忆摘要 = ""; }
   }
   function 写记忆摘要(文) {
-    记忆摘要 = String(文 || "").slice(-800);
+    var 限 = 摘要保留上限() || 800;
+    记忆摘要 = String(文 || "").slice(-限);
     try { localStorage.setItem(记忆摘要键(), 记忆摘要); } catch (e) {}
   }
   function 滚动写入记忆(用户文, 助手文) {
     if (!记忆已开()) return;
+    var 长 = 记忆模式值() === "long";
     var 片 = "";
-    if (用户文) 片 += "用户：" + String(用户文).slice(0, 120) + "。";
-    if (助手文) 片 += "角色：" + String(助手文).slice(0, 160) + "。";
+    if (用户文) 片 += "用户：" + String(用户文).slice(0, 长 ? 400 : 120) + "。";
+    if (助手文) 片 += "角色：" + String(助手文).slice(0, 长 ? 600 : 160) + "。";
     写记忆摘要((记忆摘要 || "") + 片);
   }
   function 清空对话() {
@@ -1311,20 +1334,20 @@
     if (记忆已开() && 记忆摘要) {
       列.push({
         role: "system",
-        content: "用简体中文回复。延续以下角色记忆（姓名、关系、正在发生的事）：" + String(记忆摘要).slice(-800)
+        content: "用简体中文回复。延续以下角色记忆（姓名、关系、正在发生的事）：" + String(记忆摘要).slice(-(记忆模式值() === "long" ? 6000 : 800))
       });
     } else {
       列.push({ role: "system", content: "用简体中文回复，不要突然改成英文。" });
     }
     if (!正在预载 && 记忆已开()) {
-      var 保留 = 记忆模式值() === "long" ? 40 : 12;
+      var 保留 = 记忆模式值() === "long" ? 80 : 12;
       var 起 = Math.max(0, 对话历史.length - 保留);
       for (i = 起; i < 对话历史.length; i++) {
         var 项 = 对话历史[i];
         if (!项 || !项.text) continue;
         列.push({
           role: 项.role === "user" ? "user" : "assistant",
-          content: String(项.text).slice(0, 520)
+          content: String(项.text).slice(0, 记忆模式值() === "long" ? 900 : 520)
         });
       }
     }
@@ -1337,12 +1360,12 @@
 
   function 组装群体提示(问句) {
     var 文 = "### System:\n用简体中文回复。";
-    if (记忆已开() && 记忆摘要) 文 += "角色记忆：" + String(记忆摘要).slice(-800);
+    if (记忆已开() && 记忆摘要) 文 += "角色记忆：" + String(记忆摘要).slice(-(记忆模式值() === "long" ? 6000 : 800));
     文 += "\n";
     var i = 0;
     var 片 = "### User:\n" + String(问句 || "").slice(0, 800) + "\n### Assistant:\n";
     if (!正在预载 && 记忆已开()) {
-      var 保留 = 记忆模式值() === "long" ? 30 : 10;
+      var 保留 = 记忆模式值() === "long" ? 60 : 10;
       var 起 = Math.max(0, 对话历史.length - 保留);
       for (i = 起; i < 对话历史.length; i++) {
         var 项 = 对话历史[i];
@@ -1351,7 +1374,7 @@
       }
     }
     if (文.indexOf(片) === -1) 文 += 片;
-    return 文.slice(-4500);
+    return 文.slice(-(记忆模式值() === "long" ? 12000 : 4500));
   }
 
   function 花粉通道名(模型) {
@@ -1721,6 +1744,39 @@
     return !!(勾 && 勾.checked && 地址 && (地址.value || "").trim());
   }
 
+  function 同步纯背景() {
+    var 纯 = document.getElementById("纯背景出图");
+    var 勾 = document.getElementById("只换背景");
+    if (纯 && 纯.checked) {
+      if (勾) 勾.checked = false;
+      设图生图状态("纯场景 / 插图生背景：出图时尽量不要人物，只画环境。");
+    } else {
+      设图生图状态("已关闭纯背景。可再勾选「只换背景」保留人物。");
+    }
+  }
+  function 一键生成背景() {
+    var 区 = document.getElementById("图生图区");
+    if (区) { 区.open = true; 区.hidden = false; }
+    var 核心 = document.getElementById("角色描述");
+    var 纯 = document.getElementById("纯背景出图");
+    var 勾 = document.getElementById("只换背景");
+    if (有参考图()) {
+      if (纯) 纯.checked = false;
+      if (勾) { 勾.checked = true; 同步换背景强度(); }
+      if (核心 && !(核心.value || "").trim()) {
+        核心.value = "背景换成宁静雪山与晨雾，人物保持原样";
+      }
+      设图生图状态("已准备换背景：保留参考图人物，改场景后开始生成。");
+    } else {
+      if (纯) 纯.checked = true;
+      if (勾) 勾.checked = false;
+      if (核心 && !(核心.value || "").trim()) {
+        核心.value = "空旷的电影感场景背景，没有人物，只有环境与光线";
+      }
+      设图生图状态("无参考图：按纯场景 / 插图生背景出图。");
+    }
+    try { 开始生成(); } catch (e) { 设图生图状态("生成未能启动，请再试一次。"); }
+  }
   function 同步换背景强度() {
     var 勾 = document.getElementById("只换背景");
     var 强度 = document.getElementById("图生图强度");
@@ -2324,8 +2380,9 @@
 
   function 当前引擎() {
     var 框 = document.getElementById("出图引擎");
-    var 值 = (框 && 框.value) || 用户选定平台 || "perchance";
-    if (有参考图()) return "perchance";
+    var 值 = (框 && 框.value) || 用户选定平台 || "auto";
+    if (值 === "perchance" || 值 === "官方") 值 = "auto";
+    if (有参考图()) return "horde";
     return 值 || "auto";
   }
 
@@ -2959,6 +3016,11 @@
   }
 
   function 用官方插件出图(竞速) {
+    // Perchance 官方跳转已禁用：一律改应用内 Turbo+Horde 抢出
+    设平台提示("auto");
+    用写实引擎出图("turbo");
+    用群体出图探测();
+    return;
     上次官方张数 = 0;
     var 输出区 = document.getElementById("官方画廊") || document.getElementById("图像输出");
     var 备用区 = document.getElementById("图像输出");
@@ -3044,7 +3106,7 @@
     var 框 = document.getElementById("出图引擎");
     if (框) 框.value = 引擎;
     设平台提示(引擎);
-    if (引擎 === "perchance") 用官方插件出图();
+    if (引擎 === "perchance" || 引擎 === "auto") { 用写实引擎出图("turbo"); 用群体出图探测(); }
     else if (引擎 === "horde") 用群体出图();
     else 用写实引擎出图(引擎);
   }
@@ -3095,24 +3157,24 @@
       用图生图出图();
       return;
     }
-    if (本轮抢出 || 选引擎 === "auto") {
+    if (本轮抢出 || 选引擎 === "auto" || 选引擎 === "perchance") {
       抢出已定 = false;
       本轮胜出 = "";
       设平台提示("auto");
       var 行 = document.getElementById("平台提示");
-      if (行) 行.textContent = "生图平台：自动抢出 · 先到先得";
+      if (行) 行.textContent = "生图平台：自动抢出 · Turbo + Horde 先到先得";
       var 输出区 = document.getElementById("图像输出");
       if (输出区) 输出区.style.visibility = "";
       计划张数 = 抢出目标张数 || 1;
       用写实引擎出图("turbo");
       用群体出图探测();
-      用官方插件出图(true);
     } else {
       本轮抢出 = false;
-      按指定引擎出图(选引擎 || "turbo");
+      按指定引擎出图(选引擎 === "perchance" ? "turbo" : (选引擎 || "turbo"));
     }
   }
 </script>
+<script src="/assets/workshop-generation.js?v=1.1.20" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

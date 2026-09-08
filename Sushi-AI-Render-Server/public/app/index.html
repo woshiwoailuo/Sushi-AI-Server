@@ -19,13 +19,16 @@
       --radius: 12px;
       --safe-t: env(safe-area-inset-top);
       --safe-b: env(safe-area-inset-bottom);
+      --user-bg: #3B6FF5;
+      --bot-bg: #EEF2FF;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
     body { min-height: 100dvh; overflow: hidden; }
-    button, input { font: inherit; color: inherit; }
-    input { background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; width: 100%; outline: none; }
-    input:focus { border-color: rgba(59,111,245,.55); box-shadow: 0 0 0 3px rgba(59,111,245,.12); }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    input, textarea, select { background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; width: 100%; outline: none; }
+    input:focus, textarea:focus, select:focus { border-color: rgba(59,111,245,.55); box-shadow: 0 0 0 3px rgba(59,111,245,.12); }
+    textarea { resize: none; }
     .screen { position: absolute; inset: 0; display: none; flex-direction: column; }
     .screen.on { display: flex; }
     .splash { align-items: center; justify-content: center; background: var(--bg); }
@@ -45,21 +48,11 @@
     .btn-ghost { background: transparent; color: var(--muted); margin-top: 10px; }
     .err { color: var(--danger); font-size: 13px; min-height: 18px; margin: 6px 0 12px; }
     .app { background: var(--bg); }
-    .top { padding: calc(16px + var(--safe-t)) 20px 8px; }
-    .hello { font-size: 22px; font-weight: 620; }
+    .top { padding: calc(12px + var(--safe-t)) 16px 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .hello { font-size: 20px; font-weight: 620; }
     .muted { color: var(--muted); font-size: 13px; }
-    .content { flex: 1; overflow: auto; padding: 8px 20px 110px; }
-    .row { display: flex; gap: 12px; }
+    .content { flex: 1; overflow: auto; padding: 8px 16px 110px; }
     .card { background: var(--card); border-radius: var(--radius); padding: 16px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(27,31,42,.04); }
-    .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,111,245,.1); color: var(--accent); border-radius: 999px; padding: 4px 10px; font-size: 11px; }
-    .quota { flex: 1; }
-    .quota b { font-size: 28px; font-variant-numeric: tabular-nums; }
-    .feat { margin-top: 16px; }
-    .feat h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin-bottom: 10px; }
-    .feat-card { min-height: 118px; margin-bottom: 12px; background: var(--card); position: relative; overflow: hidden; }
-    .feat-card::after { content: ""; position: absolute; right: -20px; top: -30px; width: 120px; height: 120px; border-radius: 50%; background: rgba(59,111,245,.08); }
-    .feat-card .tag { font-size: 11px; color: var(--accent); }
-    .feat-card h4 { margin: 8px 0 6px; font-size: 18px; }
     .nav { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); height: 64px; background: #FFFFFF; border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; box-shadow: 0 8px 24px rgba(27,31,42,.08); }
     .nav button { background: none; border: 0; color: var(--muted); font-size: 12px; }
     .nav button.active { color: var(--accent); font-weight: 640; }
@@ -70,25 +63,40 @@
     .hidden { display: none !important; }
     .profile dt { color: var(--muted); font-size: 12px; margin-top: 14px; }
     .profile dd { margin-top: 4px; font-size: 16px; }
-    .go-in { min-height: 64px; font-size: 18px; margin-top: 8px; }
-    .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .tpl-btn { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 10px; width: 100%; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text); }
-    .core { color: var(--muted); font-size: 14px; line-height: 1.6; margin-top: 8px; }
-
+    .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .chip.on { background: rgba(59,111,245,.1); color: var(--accent); border-color: rgba(59,111,245,.35); }
+    .mem-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+    .chat-shell { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0 12px 96px; }
+    .chat-list { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 10px; padding: 8px 4px 12px; }
+    .bubble { max-width: 92%; padding: 12px 14px; border-radius: 16px; line-height: 1.55; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
+    .bubble.user { align-self: flex-end; background: var(--user-bg); color: #fff; border-bottom-right-radius: 6px; }
+    .bubble.bot { align-self: flex-start; background: var(--bot-bg); color: var(--text); border-bottom-left-radius: 6px; }
+    .bubble.wait { opacity: .72; font-style: italic; }
+    .bubble .meta { display: block; margin-top: 6px; font-size: 11px; opacity: .75; }
+    .chat-empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.7; padding: 24px 12px; }
+    .composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 10px; }
+    .composer textarea { border: 0; box-shadow: none; padding: 8px; min-height: 48px; max-height: 120px; }
+    .composer .send { width: auto; min-width: 76px; padding: 12px 16px; }
+    .home-tools { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .home-tools .btn { width: auto; padding: 10px 14px; font-size: 13px; }
+    .limit-note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 8px; }
+    .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .tpl-btn { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 10px; width: 100%; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text); }
+    .core { color: var(--muted); font-size: 13px; line-height: 1.5; }
   </style>
 </head>
 <body>
   <section id="splash" class="screen splash on">
     <div class="mark">苏</div>
     <h1>苏轼AI</h1>
-    <p>娱乐创作 · 角色与画面生成</p>
+    <p>正经娱乐 · AI 对话与创作</p>
   </section>
 
   <section id="auth" class="screen auth">
     <div class="brand">
       <div class="kicker">苏轼AI</div>
       <h2 id="authTitle">登录</h2>
-      <p class="sub">娱乐创作 · 角色与画面生成</p>
+      <p class="sub">正经娱乐 · 对话优先，工坊随时可进</p>
     </div>
     <form id="authForm">
       <div class="field" id="nameField" style="display:none">
@@ -132,21 +140,40 @@
 
   <section id="home" class="screen app">
     <div class="top">
-      <div class="hello">苏轼AI</div>
-      <div class="core" id="coreDesc">角色馆 · 正经娱乐，文生图+对话</div>
-    </div>
-    <div class="content">
-      <button class="btn btn-lime go-in" type="button" id="goGen">进去</button>
-      <div class="feat">
-        <h3>文生图模板</h3>
-        <div class="tpl-grid" id="tplGrid"></div>
+      <div>
+        <div class="hello">AI 对话</div>
+        <div class="core" id="coreDesc">默认长记忆 · 本机保存历史</div>
       </div>
+      <button type="button" class="chip" id="openWorkshopBtn">去工坊</button>
+    </div>
+    <div style="padding: 0 16px 8px;">
+      <div class="mem-row" id="memRow" role="group" aria-label="记忆模式">
+        <button type="button" class="chip" data-mem="long">长记忆 · 大数据</button>
+        <button type="button" class="chip" data-mem="short">短记忆</button>
+        <button type="button" class="chip" data-mem="off">关闭记忆</button>
+      </div>
+      <p class="limit-note">长记忆把大量对话与摘要保存在本机 localStorage（单域约数 MB）。Vercel 上 SQLite 会重置，故跨设备不以服务端为准；本页会调用已有对话接口。</p>
+    </div>
+    <div class="chat-shell">
+      <div class="chat-list" id="chatList" aria-live="polite"></div>
+      <div class="composer">
+        <textarea id="chatInput" rows="2" placeholder="说点什么…（正经娱乐向）"></textarea>
+        <button class="btn btn-lime send" type="button" id="chatSend">发送</button>
+      </div>
+      <div class="home-tools">
+        <button class="btn btn-ghost" type="button" id="clearChatBtn" style="margin:0;background:var(--card);border:1px solid var(--line);color:var(--text)">清空对话</button>
+        <button class="btn btn-ghost" type="button" id="toImageTools" style="margin:0;background:var(--card);border:1px solid var(--line);color:var(--text)">图生图 / 换背景</button>
+      </div>
+      <details style="margin-top:12px">
+        <summary class="muted" style="cursor:pointer">文生图快捷模板（会跳转工坊）</summary>
+        <div class="tpl-grid" id="tplGrid"></div>
+      </details>
     </div>
   </section>
 
   <section id="gen" class="screen app">
     <div class="top">
-      <div class="hello">创作</div>
+      <div class="hello">创作工坊</div>
     </div>
     <div class="content gen-wrap" id="genBody" style="padding-bottom: 96px;">
       <div class="card paywall" id="genGate">
@@ -167,7 +194,7 @@
         <dt>每日额度</dt><dd id="meQuota">—</dd>
         <dt>会员至</dt><dd id="meVip">—</dd>
         <dt>今日剩余</dt><dd id="meRemain">—</dd>
-        <dt>版本</dt><dd id="meVer">1.1.12</dd>
+        <dt>版本</dt><dd id="meVer">1.1.20</dd>
       </div>
       <button class="btn btn-ghost" type="button" id="checkUpdateBtn" style="margin-top:16px;background:var(--card);border:1px solid var(--line);color:var(--text)">检查更新</button>
       <button class="btn btn-ghost" type="button" id="downloadApkBtn" style="margin-top:10px;background:var(--card);border:1px solid var(--line);color:var(--text)">下载安装包</button>
@@ -176,8 +203,8 @@
   </section>
 
   <nav class="nav hidden" id="tabbar">
-    <button data-tab="home" class="active">首页</button>
-    <button data-tab="gen">创作</button>
+    <button data-tab="home" class="active">对话</button>
+    <button data-tab="gen">工坊</button>
     <button data-tab="me">我的</button>
   </nav>
 
@@ -189,6 +216,9 @@
     let me = null;
     let genLoaded = false;
     let pendingEmail = '';
+    let chatBusy = false;
+    let chatHistory = [];
+    let memorySummary = '';
 
     function token() { return localStorage.getItem('sushi_jwt') || ''; }
     function setToken(t) {
@@ -239,6 +269,12 @@
       } catch (e) { me = null; }
       return me;
     }
+    function emailKey() {
+      try { return (me && me.email) || localStorage.getItem('sushi_email') || ''; } catch (e) { return ''; }
+    }
+    function chatStoreKey() { return '苏轼AI_首页对话_' + (emailKey() || 'guest'); }
+    function memModeKey() { return '苏轼AI_首页记忆模式_' + (emailKey() || 'guest'); }
+    function memSumKey() { return '苏轼AI_首页记忆摘要_' + (emailKey() || 'guest'); }
     function workshopUrl(ticket, key, iv) {
       const hash = (key && iv) ? ('#' + key + '.' + iv) : '';
       return '/workshop?k=' + encodeURIComponent(ticket) + hash;
@@ -248,7 +284,7 @@
       const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
       if (token()) headers.Authorization = 'Bearer ' + token();
       const ctrl = opts.signal ? null : new AbortController();
-      const to = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
+      const to = ctrl ? setTimeout(function () { ctrl.abort(); }, opts.timeoutMs || 10000) : null;
       const res = await fetch(API + path, Object.assign({ credentials: 'include', signal: (opts.signal || (ctrl && ctrl.signal)) }, opts, { headers }));
       if (to) clearTimeout(to);
       const data = await res.json().catch(() => ({}));
@@ -270,6 +306,10 @@
       const app = ['home','gen','me'].includes(id);
       $('tabbar').classList.toggle('hidden', !app);
       document.querySelectorAll('.nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
+      if (id === 'home') {
+        loadChat();
+        renderMemChips();
+      }
     }
 
     function renderMe() {
@@ -289,21 +329,205 @@
       return q;
     }
 
-    async function bootSession() {
-      restoreMe();
-      if (me) renderMe();
-      show('gen');
-      enterGen();
+    function memMode() {
+      try {
+        var v = localStorage.getItem(memModeKey()) || 'long';
+        return v === 'short' || v === 'off' || v === 'long' ? v : 'long';
+      } catch (e) { return 'long'; }
+    }
+    function setMemMode(v) {
+      v = v === 'short' || v === 'off' ? v : 'long';
+      try { localStorage.setItem(memModeKey(), v); } catch (e) {}
+      renderMemChips();
+      var desc = $('coreDesc');
+      if (desc) {
+        desc.textContent = v === 'long' ? '默认长记忆 · 本机大数据历史'
+          : (v === 'short' ? '短记忆 · 仅近轮对话' : '记忆已关闭');
+      }
+    }
+    function renderMemChips() {
+      var cur = memMode();
+      document.querySelectorAll('#memRow [data-mem]').forEach(function (b) {
+        b.classList.toggle('on', b.getAttribute('data-mem') === cur);
+      });
+    }
+    function chatCap() {
+      var m = memMode();
+      if (m === 'off') return 6;
+      if (m === 'short') return 24;
+      return 200;
+    }
+    function summaryCap() {
+      var m = memMode();
+      if (m === 'off') return 0;
+      if (m === 'short') return 1200;
+      return 12000;
+    }
+    function loadChat() {
+      chatHistory = [];
+      memorySummary = '';
+      try {
+        var raw = localStorage.getItem(chatStoreKey());
+        var list = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(list)) chatHistory = list.slice(-chatCap());
+      } catch (e) { chatHistory = []; }
+      try { memorySummary = String(localStorage.getItem(memSumKey()) || ''); } catch (e) { memorySummary = ''; }
+      renderChat();
+    }
+    function saveChat() {
+      try {
+        chatHistory = chatHistory.slice(-chatCap());
+        localStorage.setItem(chatStoreKey(), JSON.stringify(chatHistory));
+        if (summaryCap()) localStorage.setItem(memSumKey(), String(memorySummary || '').slice(-summaryCap()));
+        else localStorage.removeItem(memSumKey());
+      } catch (e) {}
+    }
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, function (c) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+      });
+    }
+    function renderChat() {
+      var box = $('chatList');
+      if (!box) return;
+      if (!chatHistory.length) {
+        box.innerHTML = '<div class="chat-empty">先聊起来。<br>默认「长记忆 · 大数据」会记住设定与前情（保存在本机）。<br>图生图、换背景、出图请点上方「去工坊」。</div>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < chatHistory.length; i++) {
+        var item = chatHistory[i] || {};
+        var cls = item.role === 'user' ? 'user' : 'bot';
+        var meta = item.channel ? '<span class="meta">' + escapeHtml(item.channel) + '</span>' : '';
+        html += '<div class="bubble ' + cls + '">' + escapeHtml(item.text) + meta + '</div>';
+      }
+      box.innerHTML = html;
+      box.scrollTop = box.scrollHeight;
+    }
+    function appendTemp(text) {
+      var box = $('chatList');
+      if (!box) return null;
+      var empty = box.querySelector('.chat-empty');
+      if (empty) empty.remove();
+      var el = document.createElement('div');
+      el.className = 'bubble bot wait';
+      el.textContent = text || '思考中…';
+      box.appendChild(el);
+      box.scrollTop = box.scrollHeight;
+      return el;
+    }
+    function rollMemory(userText, botText) {
+      if (memMode() === 'off') return;
+      var long = memMode() === 'long';
+      var piece = '';
+      if (userText) piece += '用户：' + String(userText).slice(0, long ? 400 : 120) + '。';
+      if (botText) piece += '助手：' + String(botText).slice(0, long ? 600 : 160) + '。';
+      memorySummary = String((memorySummary || '') + piece).slice(-summaryCap());
+    }
+    function buildMessages(question) {
+      var msgs = [];
+      var m = memMode();
+      if (m !== 'off' && memorySummary) {
+        msgs.push({
+          role: 'system',
+          content: '用简体中文回复，风格正经娱乐、不涉低俗夜场措辞。延续记忆：' + String(memorySummary).slice(-(m === 'long' ? 6000 : 800))
+        });
+      } else {
+        msgs.push({ role: 'system', content: '用简体中文回复，风格正经娱乐、不涉低俗夜场措辞。' });
+      }
+      if (m !== 'off') {
+        var keep = m === 'long' ? 80 : 12;
+        var start = Math.max(0, chatHistory.length - keep);
+        for (var i = start; i < chatHistory.length; i++) {
+          var item = chatHistory[i];
+          if (!item || !item.text) continue;
+          msgs.push({
+            role: item.role === 'user' ? 'user' : 'assistant',
+            content: String(item.text).slice(0, m === 'long' ? 900 : 520)
+          });
+        }
+      }
+      msgs.push({ role: 'user', content: String(question || '').slice(0, 800) });
+      return msgs;
+    }
+    async function askModel(model, messages) {
+      var data = await api('/api/workshop/chat', {
+        method: 'POST',
+        body: JSON.stringify({ model: model, messages: messages }),
+        timeoutMs: 45000
+      });
+      var content = data && data.choices && data.choices[0] && data.choices[0].message
+        ? data.choices[0].message.content : '';
+      content = String(content || '').trim();
+      if (content.length < 2) throw new Error('空回复');
+      if (/payment required|invalid api key|queue full/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
+      return content;
+    }
+    async function raceChat(question) {
+      var messages = buildMessages(question);
+      var models = ['turbo', 'openai-fast'];
+      return await new Promise(function (resolve, reject) {
+        var left = models.length;
+        var failed = 0;
+        var settled = false;
+        models.forEach(function (model) {
+          askModel(model, messages).then(function (text) {
+            if (settled) return;
+            settled = true;
+            resolve({ text: text, channel: model === 'openai-fast' ? '快速模型' : 'Turbo' });
+          }).catch(function () {
+            failed += 1;
+            if (!settled && failed >= left) reject(new Error('各路对话暂时不可用，请稍后重试'));
+          });
+        });
+      });
+    }
+    async function sendChat() {
+      if (chatBusy) return;
+      var input = $('chatInput');
+      var text = input ? String(input.value || '').trim() : '';
+      if (!text) { if (input) input.focus(); return; }
+      chatBusy = true;
+      $('chatSend').disabled = true;
+      if (input) input.value = '';
+      chatHistory.push({ role: 'user', text: text, at: Date.now() });
+      saveChat();
+      renderChat();
+      var waiting = appendTemp('思考中…');
+      try {
+        var result = await raceChat(text);
+        if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
+        chatHistory.push({ role: 'assistant', text: result.text, channel: result.channel, at: Date.now() });
+        rollMemory(text, result.text);
+        saveChat();
+        renderChat();
+      } catch (err) {
+        if (waiting) {
+          waiting.classList.remove('wait');
+          waiting.textContent = (err && err.message) || '发送失败';
+        }
+      } finally {
+        chatBusy = false;
+        $('chatSend').disabled = false;
+      }
+    }
+
+    async function enterHome() {
+      show('home');
+      loadChat();
+      setMemMode(memMode());
       try {
         const data = await api('/api/me');
         cacheMe(data.user);
         renderMe();
         refreshQuota().catch(function () {});
-      } catch (e) {
-        if (!sessionFresh()) {
-          /* keep cached UI; do not kick on slow link */
-        }
-      }
+      } catch (e) {}
+    }
+
+    async function bootSession() {
+      restoreMe();
+      if (me) renderMe();
+      await enterHome();
     }
 
     $('authSwitch').onclick = () => {
@@ -316,9 +540,6 @@
       $('authSubmit').removeAttribute('disabled');
       $('authSwitch').textContent = mode === 'login' ? '没有账号？去注册' : '已有账号，去登录';
       $('authErr').textContent = '';
-      requestAnimationFrame(() => {
-        try { $('authSubmit').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
-      });
     };
 
     $('authForm').onsubmit = async (e) => {
@@ -340,8 +561,7 @@
         cacheMe(data.user);
         renderMe();
         refreshQuota().catch(function () {});
-        show('gen');
-        enterGen();
+        await enterHome();
       } catch (err) {
         if (err.data && err.data.need_verify) {
           showVerify($('email').value.trim().toLowerCase());
@@ -363,8 +583,7 @@
         cacheMe(data.user);
         renderMe();
         refreshQuota().catch(function () {});
-        show('gen');
-        enterGen();
+        await enterHome();
       } catch (err) {
         $('verifyErr').textContent = err.message;
       }
@@ -411,7 +630,27 @@
         g.appendChild(b);
       });
     })();
-    $('goGen').onclick = () => document.querySelector('[data-tab="gen"]').click();
+
+    document.querySelectorAll('#memRow [data-mem]').forEach(function (btn) {
+      btn.onclick = function () { setMemMode(btn.getAttribute('data-mem')); };
+    });
+    $('chatSend').onclick = sendChat;
+    $('chatInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+    $('clearChatBtn').onclick = function () {
+      if (!confirm('清空后本页不再记得这次对话。确定？')) return;
+      chatHistory = [];
+      memorySummary = '';
+      saveChat();
+      renderChat();
+    };
+    function goWorkshop() { document.querySelector('[data-tab="gen"]').click(); }
+    $('openWorkshopBtn').onclick = goWorkshop;
+    $('toImageTools').onclick = goWorkshop;
     $('logoutBtn').onclick = () => { setToken(''); me = null; genLoaded = false; show('auth'); };
     var chk = $('checkUpdateBtn');
     if (chk) chk.onclick = async function () {
@@ -428,6 +667,7 @@
       btn.onclick = async () => {
         const tab = btn.dataset.tab;
         if (tab === 'gen') await enterGen();
+        else if (tab === 'home') await enterHome();
         else show(tab);
       };
     });
@@ -481,12 +721,11 @@
       restoreMe();
       if (me) renderMe();
       if (sessionFresh()) {
-        show('gen');
-        enterGen();
+        await enterHome();
         bootSession().catch(function () {});
         return;
       }
-      try { await bootSession(); } catch { show('gen'); enterGen(); }
+      try { await bootSession(); } catch { await enterHome(); }
     }, 200);
   </script>
 </body>
