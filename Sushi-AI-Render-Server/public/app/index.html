@@ -451,7 +451,8 @@
       return msgs;
     }
     async function askModel(model, messages) {
-      var timeoutMs = model === 'horde' ? 32000 : 14000;
+      // Align with workshop (#14): 20s / Horde 38s; short replies length>=1 OK.
+      var timeoutMs = model === 'horde' ? 38000 : 20000;
       try {
         var data = await api('/api/workshop/chat', {
           method: 'POST',
@@ -465,16 +466,17 @@
         else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
         throw new Error(msg);
       }
+      // Server already normalizeChatPayload; accept any non-empty short reply.
       var content = data && data.choices && data.choices[0] && data.choices[0].message
         ? data.choices[0].message.content : '';
       content = String(content || '').trim();
-      if (content.length < 2) throw new Error('空回复');
+      if (content.length < 1) throw new Error('空回复');
       if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
       return content;
     }
     async function raceChat(question) {
       var messages = buildMessages(question);
-      // openai / deepseek / horde：多通道抢答；Horde 走同源 JWT 代理，避免官网 402 后整页挂死。
+      // openai / deepseek / horde：多通道抢答；整体抢答上限 30s（与工坊一致）。
       var models = ['openai', 'deepseek', 'horde'];
       var labels = { openai: '快速对话', deepseek: 'DeepSeek', horde: 'Horde', turbo: '快速对话', 'openai-fast': '快速对话' };
       return await new Promise(function (resolve, reject) {
@@ -482,15 +484,23 @@
         var failed = 0;
         var settled = false;
         var lastErr = '';
+        var raceTimer = setTimeout(function () {
+          if (settled) return;
+          settled = true;
+          reject(new Error('抢答超时'));
+        }, 30000);
         models.forEach(function (model) {
           askModel(model, messages).then(function (text) {
             if (settled) return;
             settled = true;
+            clearTimeout(raceTimer);
             resolve({ text: text, channel: labels[model] || model });
           }).catch(function (err) {
             lastErr = (err && err.message) || lastErr;
             failed += 1;
             if (!settled && failed >= left) {
+              settled = true;
+              clearTimeout(raceTimer);
               reject(new Error(lastErr && /未登录|401/.test(lastErr) ? '请先登录后再对话' : (lastErr || '各路对话暂时不可用，请稍后重试')));
             }
           });

@@ -293,20 +293,34 @@
 
   async function generatePollinations(run, prompt, index, model) {
     model = normalizeEngineName(model || 'turbo');
+    if (isEngineCool(model)) {
+      var coolErr = new Error(coolHint(model) + '（限流跳过）');
+      coolErr.status = 429;
+      coolErr.code = 'ENGINE_COOLDOWN';
+      throw coolErr;
+    }
     var seedBase = run.payload.seed !== '' && run.payload.seed != null
       ? Number(run.payload.seed)
       : Math.floor(Math.random() * 2147483646);
     if (!Number.isFinite(seedBase)) seedBase = Math.floor(Math.random() * 2147483646);
     var seed = seedBase + (index || 0) * 97;
     var label = engineLabel(model);
-    status('正在用 ' + label + ' 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '同源代理出图，失败会自动换种子重试。', true);
+    status('正在用 ' + label + ' 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '同源代理出图；遇限流会立刻换引擎，不空等。', true);
     var lastError = null;
     for (var attempt = 0; attempt < 3; attempt += 1) {
       ensureActive(run);
       var url = pollinationsProxyUrl(model, prompt, run.payload.width, run.payload.height, seed + attempt * 131);
       try {
         var response = await fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: run.controller.signal });
-        if (!response.ok) throw new Error(label + ' HTTP ' + response.status);
+        if (!response.ok) {
+          var httpErr = new Error(label + (response.status === 429 ? ' 限流(429)' : (' HTTP ' + response.status)));
+          httpErr.status = response.status;
+          if (response.status === 429 || response.status >= 500) {
+            markEngineCool(model, response.status);
+            throw httpErr; // fail fast — skip this engine for the rest of the round
+          }
+          throw httpErr;
+        }
         var blob = await response.blob();
         if (!blob || !blob.size || blob.size < 2500) throw new Error(label + ' 图片无效');
         if (blob.type && blob.type.indexOf('image/') !== 0 && blob.type.indexOf('application/octet-stream') !== 0) {
@@ -322,6 +336,7 @@
       } catch (error) {
         if (run.cancelled || (error && error.name === 'AbortError')) throw new Error('已取消生成');
         lastError = error;
+        if (error && (error.status === 429 || error.status >= 500 || error.code === 'ENGINE_COOLDOWN')) throw error;
         await pause(run, 400 + attempt * 350);
       }
     }
@@ -340,6 +355,40 @@
     ensureActive(run);
     var done = await poll(run, run.job);
     return { url: done.image.url, engine: 'horde', job: done };
+  }
+
+  // Short cool-down after 429/5xx so race skips that engine for the rest of this round.
+  var ENGINE_COOLDOWN_MS = 25000;
+  var engineCooldownUntil = Object.create(null);
+  var lastRateLimited = false;
+
+  function markEngineCool(eng, statusCode) {
+    eng = normalizeEngineName(eng);
+    if (!eng || eng === 'auto') return;
+    engineCooldownUntil[eng] = Date.now() + ENGINE_COOLDOWN_MS;
+    if (statusCode === 429) lastRateLimited = true;
+  }
+
+  function isEngineCool(eng) {
+    eng = normalizeEngineName(eng);
+    var until = engineCooldownUntil[eng];
+    return !!(until && Date.now() < until);
+  }
+
+  function coolHint(eng) {
+    var until = engineCooldownUntil[normalizeEngineName(eng)];
+    if (!until) return '';
+    var sec = Math.max(1, Math.ceil((until - Date.now()) / 1000));
+    return engineLabel(eng) + ' 冷却中约 ' + sec + ' 秒';
+  }
+
+  function raceFailMessage(errors) {
+    var msgs = (errors || []).map(function (e) { return e && e.message; }).filter(Boolean);
+    var rate = lastRateLimited || msgs.some(function (m) { return /429|限流|繁忙|冷却/.test(String(m)); });
+    if (rate) {
+      return '出图通道限流：已跳过繁忙引擎（短冷却）。请稍后重试或手动换通道；不是全部永久失败。';
+    }
+    return msgs.length ? msgs.join('；') : '自动抢出失败：各平台均未成功';
   }
 
   var FREE_RACE_ENGINES = ['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'];
@@ -421,7 +470,16 @@
 
   async function generateOne(run, prompt, index) {
     var engine = resolveEngine();
-    if (engine === 'horde') return generateHorde(run, prompt, index);
+    lastRateLimited = false;
+    if (engine === 'horde') {
+      if (isEngineCool('horde')) throw Object.assign(new Error(coolHint('horde') + '。限流冷却中，请稍后或换自动抢出。'), { status: 429, code: 'ENGINE_COOLDOWN' });
+      try {
+        return await generateHorde(run, prompt, index);
+      } catch (error) {
+        if (error && (error.status === 429 || error.status >= 500)) markEngineCool('horde', error.status);
+        throw error;
+      }
+    }
     if (engine === 'perchance') {
       // Explicit Perch/Perchance: try in-app plugin first, then fall back to full free race.
       try { return await generatePerchance(run, prompt, index); }
@@ -429,11 +487,18 @@
     }
     if (engine !== 'auto' && engine !== 'perchance') return generatePollinations(run, prompt, index, engine);
 
-    // auto / perchance(in-app): race ALL free platforms together; first success wins.
-    // Perchance stays a manual selectable option; generation never window.open's perchance.org.
+    // auto / perchance(in-app): race free platforms; skip engines still in short cool-down after 429/5xx.
+    // Perchance stays in the race; generation never window.open's perchance.org.
+    var activeEngines = FREE_RACE_ENGINES.filter(function (eng) { return !isEngineCool(eng); });
+    var cooled = FREE_RACE_ENGINES.filter(isEngineCool);
+    if (!activeEngines.length) {
+      throw Object.assign(new Error('出图通道限流：本轮引擎都在短冷却中，请稍后再试（不是全部永久失败）。'), { status: 429, code: 'ALL_COOLDOWN' });
+    }
     status(
       (engine === 'perchance' ? 'Perch / Perchance 应用内 · 第 ' : '自动抢出 · 第 ') + (run.completed + 1) + '/' + run.total + ' 张',
-      'Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得。',
+      (cooled.length
+        ? ('已跳过冷却中：' + cooled.map(engineLabel).join('、') + '。')
+        : '') + activeEngines.map(engineLabel).join(' / ') + ' 同时开跑，先到先得。',
       true
     );
     var winner = null;
@@ -445,12 +510,17 @@
       return result;
     }
 
-    var tasks = FREE_RACE_ENGINES.map(function (eng) {
+    var tasks = activeEngines.map(function (eng) {
       if (eng === 'horde') {
         return (async function () {
           var payload = Object.assign({}, run.payload, { prompt: prompt });
           if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
-          var job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: run.controller.signal });
+          try {
+            var job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: run.controller.signal });
+          } catch (error) {
+            if (error && (error.status === 429 || error.status >= 500)) markEngineCool('horde', error.status);
+            throw error;
+          }
           hordeJobId = job.id;
           run.job = job;
           if (winner) {
@@ -471,11 +541,7 @@
     try {
       return await Promise.any(tasks);
     } catch (error) {
-      var msg = '自动抢出失败：各平台均未成功';
-      if (error && error.errors && error.errors.length) {
-        msg = error.errors.map(function (e) { return e && e.message; }).filter(Boolean).join('；') || msg;
-      }
-      throw new Error(msg);
+      throw new Error(raceFailMessage(error && error.errors));
     } finally {
       if (winner && winner.engine !== 'horde' && hordeJobId) {
         try { await api('/' + encodeURIComponent(hordeJobId), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
@@ -530,7 +596,14 @@
       var cleanupError = '';
       try { await stopJob(run); } catch (e) { cleanupError = ' 未收到取消确认，任务最迟在 10 分钟上限后结束。'; }
       var title = run.cancelled ? '已停止本轮生成' : (run.completed ? '已生成 ' + run.completed + ' 张，后续未完成' : '本次未完成');
-      status(title, (run.cancelled ? '已保留已完成的图片。' : error.message) + cleanupError, false);
+      var detail = run.cancelled ? '已保留已完成的图片。' : String(error && error.message || error || '');
+      if (!run.cancelled && (error && (error.status === 429 || error.code === 'ENGINE_COOLDOWN' || error.code === 'ALL_COOLDOWN' || /限流|冷却|429/.test(detail)))) {
+        title = run.completed ? title : '出图通道限流';
+        if (!/限流|冷却/.test(detail)) detail = '免费通道繁忙（限流），已跳过该引擎短冷却；请稍后重试或换通道。';
+      } else if (!run.cancelled && /各平台均未成功|自动抢出失败/.test(detail)) {
+        title = run.completed ? title : '各通道均未成功';
+      }
+      status(title, detail + cleanupError, false);
       if (!run.cancelled && window.记录失败原因) window.记录失败原因(error.message);
     } finally {
       if (active === run) { active = null; controls(false); }
