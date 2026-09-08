@@ -43,7 +43,10 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGIN || '')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
-const DATA_DIR = path.join(__dirname, 'data');
+// Vercel 的运行目录只读，临时数据必须写入 /tmp；本地/Render 继续使用持久目录。
+const DATA_DIR = process.env.VERCEL
+  ? path.join('/tmp', 'sushi-data')
+  : path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'app.db');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const APK_DIR = path.join(DATA_DIR, 'apk');
@@ -1286,11 +1289,15 @@ app.use((req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'app', 'index.html'));
 });
 
-async function main() {
+async function initialize() {
   await openDatabase();
   migrate();
   seedAdmin();
   persistSqlJs();
+}
+
+async function main() {
+  await initialize();
   app.listen(PORT, '0.0.0.0', () => {
     console.log('[sushi-club] listening on http://0.0.0.0:' + PORT);
     console.log('[sushi-club] db mode:', dbMode);
@@ -1305,7 +1312,16 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+} else {
+  let ready = null;
+  module.exports = async function vercelHandler(req, res) {
+    if (!ready) ready = initialize();
+    await ready;
+    return app(req, res);
+  };
+}
