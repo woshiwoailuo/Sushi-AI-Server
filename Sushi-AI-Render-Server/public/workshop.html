@@ -2688,6 +2688,17 @@
       "&nologo=true&enhance=false&safe=false";
   }
 
+  function 构建直连写实图址(英文, 种子, 模型) {
+    var 尺寸 = 解析尺寸();
+    var 提示 = encodeURIComponent(写实提示(英文).slice(0, 1400));
+    return "https://image.pollinations.ai/prompt/" + 提示 +
+      "?model=" + encodeURIComponent(模型) +
+      "&width=" + 尺寸.宽 +
+      "&height=" + 尺寸.高 +
+      "&seed=" + 种子 +
+      "&nologo=true&enhance=false&safe=false";
+  }
+
   function 用写实引擎出图(模型, 已有) {
     var 输出区 = document.getElementById("图像输出");
     var 状态区 = document.getElementById("状态提示");
@@ -2720,6 +2731,7 @@
       图.alt = "生成结果 " + 本号;
       图.setAttribute("data-engine", 模型);
       图._根号 = 0;
+      图._直连尝试 = false;
       图.onload = function () {
         if (当前出图令牌 !== 出图令牌) return;
         if (本轮胜出 && 本轮胜出 !== 模型) return;
@@ -2733,6 +2745,11 @@
       };
       图.onerror = function () {
         if (当前出图令牌 !== 出图令牌) return;
+        if (!图._直连尝试) {
+          图._直连尝试 = true;
+          图.src = 构建直连写实图址(英文, 基础种子 + 本号 * 97, 模型);
+          return;
+        }
         图._根号 += 1;
         if (图._根号 < 写实根址.length) {
           图.src = 构建写实图址(英文, 基础种子 + 本号 * 97, 模型, 图._根号);
