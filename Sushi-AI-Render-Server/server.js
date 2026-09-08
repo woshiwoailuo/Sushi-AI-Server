@@ -1327,7 +1327,13 @@ if (require.main === module) {
   let ready = null;
   module.exports = async function vercelHandler(req, res) {
     if (!ready) ready = initialize();
-    await ready;
+    try {
+      await ready;
+    } catch (error) {
+      ready = null;
+      console.error('[vercel] startup failed:', error && error.stack ? error.stack : error);
+      return res.status(500).json({ error: '服务启动失败，请稍后重试' });
+    }
     return app(req, res);
   };
 }
