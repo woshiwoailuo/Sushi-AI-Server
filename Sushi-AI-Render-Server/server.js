@@ -1332,7 +1332,10 @@ if (require.main === module) {
     } catch (error) {
       ready = null;
       console.error('[vercel] startup failed:', error && error.stack ? error.stack : error);
-      return res.status(500).json({ error: '服务启动失败，请稍后重试' });
+      return res.status(500).json({
+        error: '服务启动失败，请稍后重试',
+        detail: String(error && error.message ? error.message : error).slice(0, 240),
+      });
     }
     return app(req, res);
   };
