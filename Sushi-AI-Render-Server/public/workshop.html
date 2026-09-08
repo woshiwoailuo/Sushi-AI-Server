@@ -2959,48 +2959,13 @@
     var 尺寸 = 解析尺寸();
     var w = Math.min(768, Math.max(512, Math.round((尺寸.宽 || 512) / 64) * 64));
     var h = Math.min(768, Math.max(512, Math.round((尺寸.高 || 512) / 64) * 64));
-    var 体 = new Object();
-    体.prompt = (写实提示(英文) || "photo").slice(0, 1000);
-    体.nsfw = true;
-    体.censor_nsfw = false;
-    var 参 = new Object();
-    参.n = 1;
-    参.width = w;
-    参.height = h;
-    参.steps = 15;
-    体.params = 参;
-    var resp = await 限时拉取("https://aihorde.net/api/v2/generate/async", {
-      method: "POST",
-      mode: "cors",
-      credentials: "omit",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": "0000000000",
-        "Client-Agent": "woshisushi:1.0:perchance.org"
-      },
-      body: JSON.stringify(体)
-    }, 8000);
-    var data = JSON.parse(await resp.text());
-    if (!resp.ok || !data || !data.id) throw new Error("群体未受理");
-    var n = 0;
-    for (n = 0; n < 12; n++) {
-      await new Promise(function (r) { setTimeout(r, 900); });
-      if (当前出图令牌 !== 出图令牌) throw new Error("已取消");
-      var st = await 限时拉取("https://aihorde.net/api/v2/generate/status/" + data.id, {
-        mode: "cors",
-        credentials: "omit",
-        headers: {
-          "apikey": "0000000000",
-          "Client-Agent": "woshisushi:1.0:perchance.org"
-        }
-      }, 6000);
-      var j = JSON.parse(await st.text());
-      if (j && j.done && j.generations && j.generations[0] && j.generations[0].img) {
-        return j.generations[0].img;
-      }
-      if (j && j.faulted) throw new Error("群体失败");
-    }
-    throw new Error("群体超时");
+    var resp = await 限时拉取("/api/workshop/horde-image", {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ k: 工坊票据(), prompt: (写实提示(英文) || "photo").slice(0, 1000), width: w, height: h })
+    }, 55000);
+    var j = await resp.json().catch(function () { return {}; });
+    if (!resp.ok || !j || !j.url) throw new Error((j && j.error) || "群体未返回图片");
+    return j.url;
   }
 
   function 用群体出图探测() {
