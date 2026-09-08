@@ -1389,7 +1389,7 @@
 
   function 可用对话文(文) {
     文 = String(文 || "").trim();
-    if (文.length < 8) return "";
+    if (文.length < 1) return "";
     var 头 = 文.slice(0, 280);
     if (/payment required|queue full|deprecation_notice|invalid api key/i.test(头)) return "";
     if (文.charAt(0) === "{" && /"error"/i.test(头)) return "";
@@ -1409,7 +1409,7 @@
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ k: 工坊票据(), model: 体.model, messages: 体.messages })
-      }, 15000);
+      }, 20000);
       var 文本 = (await resp.text() || "").trim();
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       var data = JSON.parse(文本);
@@ -1454,7 +1454,7 @@
           model: "horde",
           messages: [{ role: "user", content: String(问句 || "").slice(0, 1200) }]
         })
-      }, 32000);
+      }, 38000);
       var 文本 = (await resp.text() || "").trim();
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       var data = JSON.parse(文本);
@@ -1528,7 +1528,7 @@
         if (已中) return;
         已中 = true;
         失败(new Error("抢答超时"));
-      }, 12500);
+      }, 30000);
       function 一条(任务) {
         任务.then(function (文) {
           if (已中 || !文) {
