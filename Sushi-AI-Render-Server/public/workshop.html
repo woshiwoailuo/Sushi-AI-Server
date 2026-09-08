@@ -121,7 +121,7 @@
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
-              <option value="auto" selected>自动抢出 · 全平台</option>
+              <option value="perchance" selected>Perch / Perchance · 应用内优先</option>
               <option value="turbo">Turbo</option>
               <option value="horde">Horde</option>
               <option value="flux">Flux</option>
@@ -512,7 +512,7 @@
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["auto", "turbo", "flux", "flux-realism", "sana", "horde"];
+  var 引擎顺序 = ["perchance", "auto", "turbo", "flux", "flux-realism", "sana", "horde"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -520,7 +520,7 @@
   var 进度成功 = 0;
   var 十八禁点击 = 0;
   var 十八禁行已开 = false;
-  var 用户选定平台 = "auto";
+  var 用户选定平台 = "perchance";
   var 用户选定图生图平台 = "aihorde";
   var 本轮胜出 = "";
   var 管理员已解锁 = false;
