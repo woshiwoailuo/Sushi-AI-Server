@@ -1568,7 +1568,7 @@ app.get('/api/workshop/image', async (req, res) => {
   let seed = Number.isFinite(Number(req.query.seed)) ? Math.trunc(Number(req.query.seed)) : Math.floor(Math.random() * 2147483646);
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90_000);
+  const timer = setTimeout(() => controller.abort(), 30_000);
   const tryOnce = async (attempt) => {
     const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
     upstream.searchParams.set('model', pollinationsModelFor(model));
@@ -1643,7 +1643,7 @@ app.post('/api/workshop/horde-image', async (req, res) => {
   const height = Math.min(768, Math.max(512, Number(req.body.height) || 512));
   const seed = Number.isFinite(Number(req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 55_000);
+  const timer = setTimeout(() => controller.abort(), 30_000);
   try {
     const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
       method: 'POST', signal: controller.signal,
