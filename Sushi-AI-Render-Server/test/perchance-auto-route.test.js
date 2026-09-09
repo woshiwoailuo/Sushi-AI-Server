@@ -33,3 +33,17 @@ test('workshop image providers have no application-side cool-down', () => {
   assert.doesNotMatch(source, /Date\.now\(\) \+ ENGINE_COOLDOWN_MS/);
   assert.match(source, /可立即重试|未设置冷却/);
 });
+
+
+test('repeated Perch attempts reset the prior gallery and provider failure state', () => {
+  assert.match(source, /gallery\.replaceChildren\(\)/);
+  assert.match(source, /function resetDisabledEnginesForNewRun/);
+  assert.match(source, /resetDisabledEnginesForNewRun\(\);/);
+  assert.doesNotMatch(source, /option\.remove\(\)/);
+});
+
+test('generation prompt favors realistic output without rewriting the visible core description', () => {
+  assert.match(source, /prompt = photorealPrompt\(prompt\);/);
+  assert.match(source, /visible 核心描述 remains the source of truth/);
+  assert.match(source, /同源写实备用模型重试/);
+});
