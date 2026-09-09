@@ -10,7 +10,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const { ImageError, createImageService } = require('./lib/image-service');
+const { ImageError, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('./lib/image-service');
 const workshopLoaderHtml = require('./lib/workshop-loader');
 const {
   openPostgres,
@@ -679,7 +679,14 @@ function imageRoute(handler) {
 }
 
 app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
-  res.json({ provider: 'horde', free: true, maxWaitSeconds: 600, race: ['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'] });
+  res.json({
+    provider: 'horde',
+    free: true,
+    maxWaitSeconds: 600,
+    race: ['perchance', 'horde-real', 'sana', 'horde-anime'],
+    realRace: ['perchance', 'horde-real'],
+    animeRace: ['sana', 'horde-anime'],
+  });
 });
 app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
 app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {
@@ -1350,9 +1357,9 @@ function normalizeImageModel(raw) {
 }
 
 function pollinationsModelFor(model) {
-  // Perchance.org 被 Cloudflare + SAMEORIGIN 拦住，应用内 Perch 走 Flux 写实同源代理。
-  if (model === 'perchance') return 'flux-realism';
-  return model;
+  // Live Pollinations catalog is only `sana`. turbo/flux/flux-realism all aliased to the same dummy jpeg.
+  void model;
+  return 'sana';
 }
 
 app.post('/api/workshop/chat', async (req, res) => {
@@ -1527,7 +1534,7 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
         return res.status(200).json({
           ok: true,
           model,
-          channel: model === 'flux-realism' ? 'Flux写实' : model,
+          channel: model === 'perchance' ? 'Perch写实' : (model === 'sana' ? 'Sana' : 'Sana'),
           contentType: mime,
           url: 'data:' + mime + ';base64,' + got.buf.toString('base64'),
         });
@@ -1646,13 +1653,17 @@ app.post('/api/workshop/horde-image', async (req, res) => {
   const width = Math.min(768, Math.max(512, Number(req.body.width) || 512));
   const height = Math.min(768, Math.max(512, Number(req.body.height) || 512));
   const seed = Number.isFinite(Number(req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
+  const style = String((req.body && req.body.style) || '').trim().toLowerCase();
+  const models = (style === 'anime' || style === 'horde-anime' || style === 'auto-anime')
+    ? HORDE_ANIME_MODELS
+    : HORDE_REAL_MODELS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
     const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
       method: 'POST', signal: controller.signal,
       headers: { 'Content-Type': 'application/json', apikey: '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
-      body: JSON.stringify({ prompt, nsfw: true, censor_nsfw: false, params: { n: 1, width, height, steps: 15, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
+      body: JSON.stringify({ prompt, nsfw: true, censor_nsfw: false, models, params: { n: 1, width, height, steps: 15, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
     });
     const acceptedJson = await accepted.json().catch(() => ({}));
     if (!accepted.ok || !acceptedJson.id) return workshopImageError(res, accepted.status === 429 ? 429 : 502, 'Horde 生图服务器未受理请求');

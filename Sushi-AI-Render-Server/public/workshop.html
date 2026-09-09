@@ -74,30 +74,19 @@
         <label>
           生图平台
           <select id="出图引擎" name="出图引擎">
-            <option value="auto" selected>
-              自动抢出 · 全平台
-            </option>
-            <option value="turbo">
-              Turbo · 极速
-            </option>
-            <option value="horde">
-              Horde · 免费共享算力
-            </option>
-            <option value="flux">
-              Flux · 通用高质量
-            </option>
-            <option value="flux-realism">
-              Flux写实 · 人像优先
-            </option>
-            <option value="sana">
-              Sana · 中文友好
-            </option>
-            <option value="perchance">
-              Perch / Perchance · 应用内生成
-            </option>
+            <optgroup label="写实">
+              <option value="auto-real" selected>自动抢出 · 写实</option>
+              <option value="perchance">Perch · 写实</option>
+              <option value="horde-real">Horde · 写实</option>
+            </optgroup>
+            <optgroup label="动漫">
+              <option value="auto-anime">自动抢出 · 动漫</option>
+              <option value="sana">Sana · 动漫/插画</option>
+              <option value="horde-anime">Horde · 动漫</option>
+            </optgroup>
           </select>
         </label>
-        <input id="备用引擎" type="hidden" value="turbo">
+        <input id="备用引擎" type="hidden" value="sana">
 
         <div class="核心操作">
 
@@ -125,14 +114,16 @@
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
-              <option value="perchance" selected>Perch / Perchance · 应用内优先</option>
-              <option value="turbo">Turbo</option>
-              <option value="horde">Horde · 免费共享</option>
-            <option value="openai">快速对话 · 免费通道</option>
-              <option value="flux">Flux</option>
-              <option value="flux-realism">Flux写实</option>
-              <option value="sana">Sana</option>
-              <option value="perchance">Perch / Perchance · 应用内</option>
+              <optgroup label="写实">
+                <option value="auto-real" selected>自动抢出 · 写实</option>
+                <option value="perchance">Perch · 写实</option>
+                <option value="horde-real">Horde · 写实</option>
+              </optgroup>
+              <optgroup label="动漫">
+                <option value="auto-anime">自动抢出 · 动漫</option>
+                <option value="sana">Sana · 动漫/插画</option>
+                <option value="horde-anime">Horde · 动漫</option>
+              </optgroup>
             </select>
           </label>
           <label class="换背景行">
@@ -515,7 +506,7 @@
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["perchance", "auto", "turbo", "flux", "flux-realism", "sana", "horde"];
+  var 引擎顺序 = ["auto-real", "perchance", "horde-real", "auto-anime", "sana", "horde-anime"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -523,7 +514,7 @@
   var 进度成功 = 0;
   var 十八禁点击 = 0;
   var 十八禁行已开 = false;
-  var 用户选定平台 = "perchance";
+  var 用户选定平台 = "auto-real";
   var 用户选定图生图平台 = "aihorde";
   var 本轮胜出 = "";
   var 管理员已解锁 = false;
@@ -627,17 +618,17 @@
     载入已配置通道();
     var 平台框 = document.getElementById("出图引擎");
     if (平台框) {
-      if (!平台框.value) 平台框.value = "auto";
-      用户选定平台 = 平台框.value || "auto";
+      if (!平台框.value) 平台框.value = "auto-real";
+      用户选定平台 = 平台框.value || "auto-real";
       平台框.addEventListener("change", function () {
-        用户选定平台 = 平台框.value || "perchance";
+        用户选定平台 = 平台框.value || "auto-real";
         保存默认平台(用户选定平台, true);
         本引擎已出张数 = 0;
         本平台成功 = 0;
         本平台失败 = 0;
         var 提示 = document.getElementById("分类状态");
-        if (提示) 提示.textContent = 用户选定平台 === "auto"
-          ? "自动抢出：各路一起跑，先出的留下。"
+        if (提示) 提示.textContent = (用户选定平台 === "auto-real" || 用户选定平台 === "auto-anime")
+          ? "自动抢出：同风格通道一起跑，先出的留下。"
           : ("已选定 " + 引擎名称(用户选定平台) + "，本轮只用这一路。");
       });
     }
@@ -746,10 +737,11 @@
   function 规范化出图平台(值, 用户选过) {
     值 = String(值 || "").trim();
     if (值 === "官方" || 值 === "perch") 值 = "perchance";
-    var 可用 = ["auto", "turbo", "horde", "flux", "flux-realism", "sana", "perchance"];
+    if (值 === "turbo" || 值 === "flux" || 值 === "flux-realism" || 值 === "auto" || 值 === "horde") 值 = "auto-real";
+    var 可用 = ["auto-real", "auto-anime", "perchance", "horde-real", "horde-anime", "sana"];
     if (用户选过 && 可用.indexOf(值) >= 0) return 值;
-    if (!用户选过 && (!值 || 值 === "auto")) return "auto";
-    return 可用.indexOf(值) >= 0 ? 值 : "auto";
+    if (!用户选过 && (!值 || 值 === "auto-real")) return "auto-real";
+    return 可用.indexOf(值) >= 0 ? 值 : "auto-real";
   }
 
   function 图生图平台键() {
@@ -814,7 +806,7 @@
       var 平台 = 规范化出图平台(localStorage.getItem("角色生成器_默认平台"), 读取是否用户选过平台());
       if (平台框) {
         平台框.value = 平台;
-        用户选定平台 = 平台框.value || "perchance";
+        用户选定平台 = 平台框.value || "auto-real";
       }
       var 对话框 = document.getElementById("AI通道");
       var 通道 = 规范化对话通道(localStorage.getItem("角色生成器_对话通道"), 读取是否用户选过对话());
@@ -2279,7 +2271,7 @@
       预载图.src = 图.src;
     };
     var 提示 = encodeURIComponent((写实提示(英文) || "photo").slice(0, 500));
-    图.src = 写实根址[0] + "?k=" + encodeURIComponent(工坊票据()) + "&prompt=" + 提示 + "&model=turbo&width=768&height=768&nologo=true&enhance=false&safe=false&seed=" + Math.floor(Math.random() * 1e9);
+    图.src = 写实根址[0] + "?k=" + encodeURIComponent(工坊票据()) + "&prompt=" + 提示 + "&model=sana&width=768&height=768&nologo=true&enhance=false&safe=false&seed=" + Math.floor(Math.random() * 1e9);
   }
 
   function 取出预载() {
@@ -2467,10 +2459,10 @@
     if (抢出已定) return;
     抢出已定 = true;
     本轮抢出 = false;
-    本轮胜出 = 引擎 || "turbo";
+    本轮胜出 = 引擎 || "perchance";
     var 框 = document.getElementById("出图引擎");
-    var 用户选 = (框 && 框.value) || 用户选定平台 || "auto";
-    if (用户选 !== "auto") {
+    var 用户选 = (框 && 框.value) || 用户选定平台 || "auto-real";
+    if (用户选 !== "auto" && 用户选 !== "auto-real" && 用户选 !== "auto-anime") {
       用户选定平台 = 用户选;
     }
     设平台提示(本轮胜出);
@@ -2630,7 +2622,7 @@
   async function 开始备用生成() {
     走备用线路 = true;
     var 备 = document.getElementById("备用引擎");
-    用户选定平台 = (备 && 备.value) || "turbo";
+    用户选定平台 = (备 && 备.value) || "sana";
     await 开始生成();
   }
 
@@ -2647,7 +2639,7 @@
 
     if (正在生成图片) return;
     var 令牌 = ++出图令牌;
-    本轮抢出 = (!!即将抢出 || 当前引擎() === "auto") && !有参考图();
+    本轮抢出 = (!!即将抢出 || /^(auto|auto-real|auto-anime)$/.test(当前引擎())) && !有参考图();
     即将抢出 = false;
     本轮胜出 = "";
     抢出已定 = false;
@@ -2770,10 +2762,11 @@
 
   function 当前引擎() {
     var 框 = document.getElementById("出图引擎");
-    var 值 = (框 && 框.value) || 用户选定平台 || "auto";
-    if (值 === "官方") 值 = "perchance";
-    if (有参考图()) return "horde";
-    return 值 || "auto";
+    var 值 = (框 && 框.value) || 用户选定平台 || "auto-real";
+    if (值 === "官方" || 值 === "perch") 值 = "perchance";
+    if (值 === "turbo" || 值 === "flux" || 值 === "flux-realism" || 值 === "auto" || 值 === "horde") 值 = "auto-real";
+    if (有参考图()) return /anime|sana/.test(值) ? "horde-anime" : "horde-real";
+    return 值 || "auto-real";
   }
 
 
@@ -2949,13 +2942,17 @@
 
   function 引擎名称(值) {
     var 真 = {
-      auto: "自动抢出",
-      turbo: "Turbo",
-      flux: "Flux",
-      "flux-realism": "Flux写实",
-      sana: "Sana",
-      horde: "群体计算",
-      perchance: "Perch / Perchance · 应用内"
+      auto: "自动抢出 · 写实",
+      "auto-real": "自动抢出 · 写实",
+      "auto-anime": "自动抢出 · 动漫",
+      turbo: "Sana",
+      flux: "Sana",
+      "flux-realism": "Sana",
+      sana: "Sana · 动漫/插画",
+      horde: "Horde · 写实",
+      "horde-real": "Horde · 写实",
+      "horde-anime": "Horde · 动漫",
+      perchance: "Perch · 写实"
     };
     return 真[值] || 值;
   }
@@ -2980,7 +2977,7 @@
   }
 
   function 保存默认平台(值, 用户选的) {
-    用户选定平台 = 值 || "perchance";
+    用户选定平台 = 值 || "auto-real";
     var 框 = document.getElementById("出图引擎");
     if (框) 框.value = 用户选定平台;
     try {
@@ -3039,16 +3036,16 @@
   }
   function 重置生成参数() {
     var 默认值 = {
-      "出图引擎": "perchance", "图像比例": "512x512", "生成数量": "1",
+      "出图引擎": "auto-real", "图像比例": "512x512", "生成数量": "1",
       "引导强度": "7", "图生图强度": "0.52"
     };
     Object.keys(默认值).forEach(function (id) {
       var 框 = document.getElementById(id);
       if (框) 框.value = 默认值[id];
     });
-    用户选定平台 = "perchance";
+    用户选定平台 = "auto-real";
     同步换背景强度();
-    设平台提示("perchance");
+    设平台提示("auto-real");
     工具提示("已恢复推荐参数，核心描述和历史记录未改变。");
   }
 
@@ -3377,7 +3374,7 @@
     // 应用内 Perchance：有嵌入插件则走官方画廊；否则回落到应用内免费通道（绝不 window.open 官网）
     if (typeof update !== "function") {
       设平台提示("perchance");
-      用写实引擎出图("turbo");
+      用写实引擎出图("perchance");
       用群体出图探测();
       return;
     }
@@ -3392,8 +3389,8 @@
       输出区.innerHTML = "";
       状态区.style.display = "flex";
       状态区.innerHTML = '<div class="加载动画"></div><b>Perchance 官方组件未加载</b><p>已自动切换免费写实线路，请稍候。</p>';
-      记录失败原因("Perchance 官方组件未加载，已切换 Turbo 备用线路");
-      用写实引擎出图("turbo", 0);
+      记录失败原因("Perchance 官方组件未加载，已切换写实备用线路");
+      用写实引擎出图("perchance", 0);
       return;
     }
     执行生成.value =
@@ -3406,7 +3403,7 @@
     状态区.innerHTML =
       '<div class="加载动画"></div>' +
       (竞速
-        ? ("<b>正在抢出 " + 计划张数 + " 张</b><p>Turbo 已开跑，官方若先到也算。</p>")
+        ? ("<b>正在抢出 " + 计划张数 + " 张</b><p>写实通道已开跑，官方若先到也算。</p>")
         : ("<b>正在用官方插件生成 " + 计划张数 + " 张</b><p>本轮只用这一路。</p>"));
     try {
       update(输出区);
@@ -3444,8 +3441,8 @@
           /* Turbo / Horde 已在跑，官方迟到不再挡 */
         } else if (!抢出已定) {
           var 行 = document.getElementById("平台提示");
-          if (行) 行.textContent = "生图平台：官方超时，改抢 Turbo";
-          用写实引擎出图("turbo");
+          if (行) 行.textContent = "生图平台：官方超时，改抢写实备用";
+          用写实引擎出图("perchance");
           用群体出图探测();
         } else {
           结束本次生成("生成角色图片");
@@ -3466,9 +3463,10 @@
     var 框 = document.getElementById("出图引擎");
     if (框) 框.value = 引擎;
     设平台提示(引擎);
-    if (引擎 === "auto") { 用写实引擎出图("turbo"); 用群体出图探测(); }
+    if (引擎 === "auto" || 引擎 === "auto-real") { 用写实引擎出图("perchance"); 用群体出图探测(); }
+    else if (引擎 === "auto-anime") { 用写实引擎出图("sana"); 用群体出图探测(); }
     else if (引擎 === "perchance") { 用官方插件出图(false); }
-    else if (引擎 === "horde") 用群体出图();
+    else if (引擎 === "horde" || 引擎 === "horde-real" || 引擎 === "horde-anime") 用群体出图();
     else 用写实引擎出图(引擎);
   }
 
@@ -3502,36 +3500,38 @@
       预载图 = null;
       抢出已定 = true;
       本轮抢出 = false;
-      本轮胜出 = "turbo";
-      设平台提示("turbo");
+      本轮胜出 = "perchance";
+      设平台提示("perchance");
       if (计划张数 <= 1) {
         结束本次生成("生成角色图片");
         return;
       }
-      用写实引擎出图("turbo", 1);
+      用写实引擎出图("perchance", 1);
       return;
     }
-    var 选引擎 = 当前引擎() || "auto";
+    var 选引擎 = 当前引擎() || "auto-real";
     if (有参考图()) {
       本轮抢出 = false;
-      设平台提示("horde");
+      设平台提示(/anime|sana/.test(选引擎) ? "horde-anime" : "horde-real");
       用图生图出图();
       return;
     }
-    if (本轮抢出 || 选引擎 === "auto") {
+    if (本轮抢出 || 选引擎 === "auto" || 选引擎 === "auto-real") {
       抢出已定 = false;
       本轮胜出 = "";
-      设平台提示("auto");
+      设平台提示("auto-real");
       var 行 = document.getElementById("平台提示");
-      if (行) 行.textContent = "生图平台：自动抢出 · 全平台先到先得";
+      if (行) 行.textContent = "生图平台：自动抢出 · 写实先到先得";
       var 输出区 = document.getElementById("图像输出");
       if (输出区) 输出区.style.visibility = "";
       计划张数 = 抢出目标张数 || 1;
-      // 全平台抢出（仅 auto）：写实优先 + Horde 同时探测，先到先得。
-      用写实引擎出图("flux-realism");
-      用写实引擎追加("turbo");
-      用写实引擎追加("flux");
-      用写实引擎追加("sana");
+      用写实引擎出图("perchance");
+      用群体出图探测();
+    } else if (选引擎 === "auto-anime") {
+      抢出已定 = false;
+      本轮胜出 = "";
+      设平台提示("auto-anime");
+      用写实引擎出图("sana");
       用群体出图探测();
     } else if (选引擎 === "perchance") {
       本轮抢出 = false;
@@ -3539,11 +3539,11 @@
       用官方插件出图(false);
     } else {
       本轮抢出 = false;
-      按指定引擎出图(选引擎 || "turbo");
+      按指定引擎出图(选引擎 || "auto-real");
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.31" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.33" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

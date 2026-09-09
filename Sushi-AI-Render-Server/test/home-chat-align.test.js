@@ -92,7 +92,7 @@ test('free chat providers keep provider-specific errors and Gemini system instru
 test('homepage can generate images directly from chat intent', () => {
   assert.match(home, /function wantsImageGen/);
   assert.match(home, /function generateHomeImage/);
-  assert.match(home, /model: 'flux-realism'/);
+  assert.match(home, /model: 'sana'/);
   assert.match(home, /item\.image \? '<img class="chat-img"/);
   assert.match(home, /photorealistic RAW photo/);
   assert.match(home, /not anime, not manga, not cartoon/);

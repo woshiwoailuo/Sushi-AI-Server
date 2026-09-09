@@ -29,6 +29,31 @@ function imageSource(value) {
   return 'data:image/' + type + ';base64,' + bytes.toString('base64');
 }
 
+const HORDE_REAL_MODELS = [
+  'PerfectDeliberate',
+  'Deliberate 3.0',
+  "ICBINP - I Can't Believe It's Not Photography",
+  'AbsoluteReality',
+  'AlbedoBase XL (SDXL)',
+  'Flux.1-Schnell fp8 (Compact)',
+];
+const HORDE_ANIME_MODELS = [
+  'Counterfeit',
+  'Anima-Turbo-v1.1',
+  'Anything v5',
+  'Flat-2D Animerge',
+  'Rev Animated',
+  'WAI-NSFW-illustrious-SDXL',
+];
+
+function hordeModelsFor(input = {}, model = '') {
+  const style = String((input && input.style) || '').trim().toLowerCase();
+  if (style === 'anime' || style === 'horde-anime' || style === 'auto-anime') return HORDE_ANIME_MODELS.slice();
+  if (style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real') return HORDE_REAL_MODELS.slice();
+  if (model) return [model];
+  return null;
+}
+
 function generationPayload(input = {}, model = '') {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ImageError('生图参数格式无效', 400, 'BAD_INPUT');
   const prompt = String(input.prompt || '').trim();
@@ -55,8 +80,9 @@ function generationPayload(input = {}, model = '') {
     if (!/^\d{1,10}$/.test(String(input.seed))) throw new ImageError('随机种子格式无效', 400, 'BAD_SEED');
     params.seed = String(input.seed);
   }
-  const payload = { prompt: prompt + (negative ? ' ### ' + negative : ''), params, r2: true };
-  if (model) payload.models = [model];
+  const payload = { prompt: prompt + (negative ? ' ### ' + negative : ''), params, r2: true, nsfw: true, censor_nsfw: false };
+  const models = hordeModelsFor(input, model);
+  if (models && models.length) payload.models = models;
   if (input.sourceImage) {
     const source = String(input.sourceImage);
     if (!/^data:image\/(?:png|jpe?g|webp);base64,/i.test(source) || source.length > 10 * 1024 * 1024) {
@@ -260,4 +286,4 @@ function createImageService(options = {}) {
   return { create, get, cancel, current, sweep };
 }
 
-module.exports = { ImageError, imageSource, generationPayload, createImageService };
+module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, hordeModelsFor };

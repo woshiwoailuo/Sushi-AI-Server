@@ -7,7 +7,7 @@ const previousReadFileSync = fs.readFileSync.bind(fs);
 function patchWorkshop(source) {
   let html = String(source || '');
 
-  // Provider <select> is owned by runtime-patch (Turbo/Horde/auto). Do not overwrite here.
+  // Provider <select> is owned by runtime-patch (写实/动漫 split). Do not overwrite here.
   html = html.replace(
     '<div id="管理面板" class="分区" hidden>',
     '<label class="换背景行" style="margin-top:10px">\n' +
@@ -77,37 +77,33 @@ function patchWorkshop(source) {
     var tip=byId('平台提示');
     if(!tip) return;
     var messages={
-      auto:'自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得',
-      turbo:'Turbo · Pollinations 极速免费通道',
-      horde:'AI Horde · 免费共享算力，繁忙时需要排队',
-      flux:'Flux · 通用高质量免费通道',
-      'flux-realism':'Flux写实 · 人像优先免费通道',
-      'flux-real':'Flux写实 · 人像优先免费通道',
-      sana:'Sana · 中文友好免费通道',
-      perchance:'Perch / Perchance · 应用内生成（不跳转官网）'
+      'auto-real':'自动抢出 · 写实：Perch 与 Horde 写实同时开跑，先到先得',
+      'auto-anime':'自动抢出 · 动漫：Sana 与 Horde 动漫同时开跑，先到先得',
+      auto:'自动抢出 · 写实：Perch 与 Horde 写实同时开跑，先到先得',
+      'horde-real':'Horde · 写实 · 免费共享算力，繁忙时需要排队',
+      horde:'Horde · 写实 · 免费共享算力，繁忙时需要排队',
+      'horde-anime':'Horde · 动漫 · 免费共享算力，繁忙时需要排队',
+      sana:'Sana · 动漫/插画 · Pollinations 目前唯一可用模型',
+      perchance:'Perch · 写实 · 应用内生成（不跳转官网）'
     };
-    tip.textContent=messages[name]||messages.auto;
+    tip.textContent=messages[name]||messages['auto-real'];
   }
   function forceDefaultProvider(){
     var box=byId('出图引擎');
     if(!box) return;
-    if(!box.querySelector('option[value="perchance"]')){
-      var po=document.createElement('option'); po.value='perchance'; po.textContent='Perch / Perchance · 应用内生成'; box.appendChild(po);
-    }
-    var fluxReal=box.querySelector('option[value="flux-real"]');
-    if(fluxReal) fluxReal.value='flux-realism';
     var saved='';
     try { saved=localStorage.getItem('角色生成器_默认平台')||''; } catch(e) {}
-    if(saved==='官方') saved='perchance';
-    if(!saved) saved='auto';
-    if(saved==='flux-real') saved='flux-realism';
-    if(!box.querySelector('option[value="'+saved+'"]')) saved='auto';
+    if(saved==='官方'||saved==='perch') saved='perchance';
+    if(saved==='anishort') saved='sana';
+    if(saved==='turbo'||saved==='flux'||saved==='flux-realism'||saved==='flux-real'||saved==='auto'||saved==='horde'||saved==='zimage'||saved==='sdxl'||saved==='krea2'||saved==='liblib') saved='auto-real';
+    if(!saved) saved='auto-real';
+    if(!box.querySelector('option[value="'+saved+'"]')) saved='auto-real';
     box.value=saved;
     box.disabled=false;
     box.removeAttribute('disabled');
     window.__sushiImageProviderLock='';
-    try { localStorage.setItem('角色生成器_默认平台', box.value || 'auto'); } catch(e) {}
-    providerChanged(box.value || 'auto');
+    try { localStorage.setItem('角色生成器_默认平台', box.value || 'auto-real'); } catch(e) {}
+    providerChanged(box.value || 'auto-real');
   }
   function lockProvider(name){
     // Do not lock the platform picker — users must be able to switch anytime.
@@ -168,9 +164,9 @@ function patchWorkshop(source) {
     if(typeof original!=='function') return;
     window.开始生成=function(){
       var box=byId('出图引擎');
-      var chosen=box?box.value:'auto';
-      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='zimage'||chosen==='sdxl'){
-        if(box) box.value = chosen==='anishort' ? 'sana' : 'flux';
+      var chosen=box?box.value:'auto-real';
+      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='zimage'||chosen==='sdxl'||chosen==='turbo'||chosen==='flux'||chosen==='flux-realism'||chosen==='horde'||chosen==='auto'){
+        if(box) box.value = chosen==='anishort' ? 'sana' : 'auto-real';
         providerChanged(box.value);
       }
       return original.apply(this,arguments);
