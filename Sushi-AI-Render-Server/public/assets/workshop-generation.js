@@ -333,13 +333,9 @@
     if (!engine || engine === 'auto') return;
     disabledEngines[engine] = String(reason || '30秒内未返回可用图片');
     var select = $('出图引擎');
-    if (select) {
-      var option = select.querySelector('option[value="' + engine + '"]');
-      if (option) option.remove();
-      if (select.value === engine) {
-        select.value = 'auto';
-        window.__sushiPreferredProvider = 'auto';
-      }
+    if (select && select.value === engine) {
+      select.value = 'auto';
+      window.__sushiPreferredProvider = 'auto';
     }
     var admin = $('管理默认平台');
     if (admin) {
@@ -355,6 +351,11 @@
 
   function isEngineDisabled(engine) {
     return !!disabledEngines[normalizeEngineName(engine)];
+  }
+
+  function resetDisabledEnginesForNewRun() {
+    disabledEngines = Object.create(null);
+    try { window.__sushiDisabledImageEngines = []; } catch (e) {}
   }
 
   async function runWithProviderBudget(run, engine, task) {
@@ -592,7 +593,10 @@
         styleBox.value = '写实摄影，电影剧照，自然皮肤质感，非卡通，非动漫，非插画，真实照片';
       }
       gallery.hidden = false;
-      var before = gallery.querySelectorAll('iframe, img, canvas').length;
+      // Clear the previous Perch result so repeated generations observe only this attempt.
+      if (typeof gallery.replaceChildren === 'function') gallery.replaceChildren();
+      else while (gallery.firstChild) gallery.removeChild(gallery.firstChild);
+      var before = 0;
       trigger.value = String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000)) + '-p' + String(index || 0);
       try {
         trigger.dispatchEvent(new Event('input', { bubbles: true }));
@@ -643,11 +647,10 @@
       var result = await generatePollinations(run, prompt, index, 'perchance', providerSignal);
       return { url: result.url, engine: 'perchance' };
     } catch (error) {
-      if (error && (error.code === 'ENGINE_COOLDOWN' || error.status === 429 || error.status >= 500 || /取消/.test(String(error.message || '')))) throw error;
-      // Repair route: keep the user's Perch choice and core prompt, but use
-      // the stable Turbo model through the same-origin proxy if Flux写实 is
-      // temporarily unavailable. The user never leaves the workshop.
-      status('Perch 暂时无响应，正在自动修复', '保留核心描述，切换同源备用模型重试。', true);
+      if (error && /取消|lost-race|已取消生成/.test(String(error.message || ''))) throw error;
+      // If Perch's upstream is busy or fails, keep the user's Perch choice
+      // and continue immediately through the same-origin realistic fallback.
+      status('Perch 暂时无响应，正在自动修复', '保留核心描述，切换同源写实备用模型重试。', true);
       var repaired = await generatePollinations(run, prompt, index, 'turbo', providerSignal);
       return { url: repaired.url, engine: 'perchance' };
     }
@@ -656,14 +659,15 @@
   async function generateOne(run, prompt, index) {
     var engine = resolveEngine();
     lastRateLimited = false;
-    // Workshop: visible 核心描述 is source of truth after「智能修饰」.
-    // Do NOT silently re-apply photorealPrompt on top (avoids double enrich). Light 18+ pass-through only.
+    // Workshop: visible 核心描述 remains the source of truth and is never rewritten.
+    // Enrich only the private generation prompt so default output favors real photography.
     prompt = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (prompt && !/fictional adult|18\+|no minors|虚构成年|无未成年人/i.test(prompt)) {
       prompt += /[\u4e00-\u9fff]/.test(prompt)
         ? '，虚构成年人，18+，无未成年人'
         : ', fictional adult 18+ only, no minors';
     }
+    prompt = photorealPrompt(prompt);
     // Honor explicit platform selection: only race when engine === 'auto'.
     if (engine === 'horde') {
       if (isEngineCool('horde')) throw Object.assign(new Error(coolHint('horde') + '。限流冷却中，请稍后或换自动抢出。'), { status: 429, code: 'ENGINE_COOLDOWN' });
@@ -846,6 +850,7 @@
     var description = lastEdited === '英文描述' ? value('英文描述') : value('角色描述');
     if (!description) description = value('角色描述') || value('英文描述');
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
+    resetDisabledEnginesForNewRun();
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);
     if ($('纯背景出图') && $('纯背景出图').checked) {
