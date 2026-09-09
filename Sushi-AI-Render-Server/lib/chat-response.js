@@ -124,4 +124,27 @@ function openaiStyleChat(content, model) {
   };
 }
 
-module.exports = { contentText, collapseRepeatedText, normalizeChatPayload };
+
+function normalizeChatModel(raw) {
+  const model = String(raw || 'openai').trim().toLowerCase();
+  if (model === 'deepseek') return 'deepseek';
+  if (model === 'grok' || model === 'xai' || model === 'x-ai') return 'grok';
+  if (model === 'groq' || model === 'groqcloud' || model === 'groq-cloud') return 'groq';
+  if (model === 'horde' || model === 'aihorde' || model === 'ai-horde') return 'horde';
+  // Pollinations legacy ids: turbo is gone; openai-fast often 402s while alias "openai" still works anonymously.
+  if (model === 'turbo' || model === 'openai-fast' || model === 'fast' || model === 'openai' || model === 'gpt-oss') {
+    return 'openai';
+  }
+  return model;
+}
+
+/** Clear 503 copy when a keyed chat platform is selected but env is empty. */
+function missingChatApiKeyMessage(model) {
+  const m = normalizeChatModel(model);
+  if (m === 'groq') return 'Groq 尚未配置（未设置 GROQ_API_KEY），请改用其他对话通道或稍后重试';
+  if (m === 'grok') return 'Grok 尚未配置（未设置 XAI_API_KEY），请改用其他对话通道或稍后重试';
+  if (m === 'deepseek') return 'DeepSeek 尚未配置，请改用其他对话通道或稍后重试';
+  return '对话通道尚未配置，请改用其他对话通道或稍后重试';
+}
+
+module.exports = { contentText, collapseRepeatedText, normalizeChatPayload, normalizeChatModel, missingChatApiKeyMessage };

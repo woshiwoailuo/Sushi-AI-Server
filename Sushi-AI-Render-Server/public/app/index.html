@@ -169,10 +169,11 @@
         <label for="chatChannel">回答通道</label>
         <select id="chatChannel" aria-label="AI 回答通道">
           <option value="auto" selected>自动抢答 · 推荐</option>
+          <option value="groq">Groq · 免费额度</option>
           <option value="horde">Horde · 免费可用</option>
           <option value="grok">Grok · xAI（需配置密钥）</option>
         </select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答优先 Horde；Grok 需在 Vercel 设置 <code>XAI_API_KEY</code>（或 <code>GROK_API_KEY</code>），未配置时请改用 Horde。</p>
+        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答：Groq + Horde 免费通道并行。Groq 需 Vercel 设置 <code>GROQ_API_KEY</code>（可选 <code>GROQ_MODEL</code>，默认 <code>openai/gpt-oss-20b</code>）。Grok 仍需 <code>XAI_API_KEY</code>，未配置时请勿选 Grok。</p>
       </div>
     </div>
     <div class="chat-shell">
@@ -535,7 +536,8 @@
       } catch (err) {
         var msg = (err && err.message) || '通道失败';
         if (err && err.status === 402) msg = '快速对话通道暂时不可用（需付费额度）';
-        else if (err && err.status === 503 && /Grok/i.test(msg)) msg = 'Grok 未配置：请在 Vercel 环境变量填写 XAI_API_KEY（或 GROK_API_KEY）后重新部署；也可改用 Horde';
+        else if (err && err.status === 503 && /Groq/i.test(msg)) msg = 'Groq 未配置：请在 Vercel 环境变量填写 GROQ_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
+        else if (err && err.status === 503 && /Grok/i.test(msg)) msg = 'Grok 未配置：请在 Vercel 环境变量填写 XAI_API_KEY（或 GROK_API_KEY）后重新部署；也可改用 Groq / Horde';
         else if (err && err.status === 503 && /DeepSeek/i.test(msg)) msg = 'DeepSeek 未配置';
         else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
         throw new Error(msg);
@@ -548,14 +550,15 @@
       if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
       return content;
     }
-    var CHAT_LABELS = { grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
+    var CHAT_LABELS = { groq: 'Groq', grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
     function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
     function normalizeChatChannel(raw) {
       var v = String(raw || 'auto').trim().toLowerCase();
       // Drop dead-end channels from picker (OpenAI 402 / DeepSeek 未配置); map stale localStorage to auto.
       if (v === 'openai' || v === 'turbo' || v === 'openai-fast' || v === 'fast' || v === 'deepseek') return 'auto';
       if (v === 'xai' || v === 'x-ai') return 'grok';
-      if (v === 'grok' || v === 'horde' || v === 'auto') return v;
+      if (v === 'groq' || v === 'groqcloud' || v === 'groq-cloud') return 'groq';
+      if (v === 'grok' || v === 'horde' || v === 'groq' || v === 'auto') return v;
       return 'auto';
     }
     function loadChatChannel() {
@@ -683,8 +686,8 @@
       // Explicit channel: answer only on that platform.
       if (channel && channel !== 'auto') return askOneChat(question, channel);
       var messages = buildMessages(question);
-      // auto：Horde 优先（Grok 未配置时不挡路），再并行 Grok；整体抢答上限 30s。
-      var models = ['horde', 'grok'];
+      // auto：免费通道 Groq + Horde 并行（Grok 需密钥，不进抢答以免 503 噪声）；整体抢答上限 30s。
+      var models = ['groq', 'horde'];
       return await new Promise(function (resolve, reject) {
         var left = models.length;
         var failed = 0;
