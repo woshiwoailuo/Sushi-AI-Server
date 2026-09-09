@@ -1235,7 +1235,7 @@ app.post('/api/workshop/unlock', authMiddleware, async (req, res) => {
 });
 
 const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
-const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai', 'groq']);
+const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai', 'groq', 'gemini', 'google', 'openrouter']);
 const DEEPSEEK_API_KEY = String(process.env.DEEPSEEK_API_KEY || '').trim();
 const DEEPSEEK_MODEL = String(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim();
 const XAI_API_KEY = String(process.env.XAI_API_KEY || process.env.GROK_API_KEY || '').trim();
@@ -1243,6 +1243,10 @@ const GROK_MODEL = String(process.env.GROK_MODEL || process.env.XAI_MODEL || 'gr
 // Groq free-tier friendly default: openai/gpt-oss-20b (llama-3.1-8b-instant shut down for free/dev Aug 2026).
 const GROQ_API_KEY = String(process.env.GROQ_API_KEY || '').trim();
 const GROQ_MODEL = String(process.env.GROQ_MODEL || 'openai/gpt-oss-20b').trim() || 'openai/gpt-oss-20b';
+const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_MODEL = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').trim() || 'gemini-2.5-flash-lite';
+const OPENROUTER_API_KEY = String(process.env.OPENROUTER_API_KEY || '').trim();
+const OPENROUTER_MODEL = String(process.env.OPENROUTER_MODEL || 'openrouter/free').trim() || 'openrouter/free';
 const HORDE_TEXT_API_KEY = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
 const HORDE_TEXT_CLIENT = 'sushi-club:1.1.21:https://aihorde.net';
 
@@ -1348,7 +1352,7 @@ app.post('/api/workshop/chat', async (req, res) => {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const model = normalizeChatModel(requested);
-  if (model !== 'deepseek' && model !== 'openai' && model !== 'horde' && model !== 'grok' && model !== 'groq') {
+  if (!['deepseek', 'openai', 'horde', 'grok', 'groq', 'gemini', 'openrouter'].includes(model)) {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-48) : [];
@@ -1361,6 +1365,12 @@ app.post('/api/workshop/chat', async (req, res) => {
   }
   if (model === 'groq' && !GROQ_API_KEY) {
     return workshopImageError(res, 503, missingChatApiKeyMessage('groq'));
+  }
+  if (model === 'gemini' && !GEMINI_API_KEY) {
+    return workshopImageError(res, 503, missingChatApiKeyMessage('gemini'));
+  }
+  if (model === 'openrouter' && !OPENROUTER_API_KEY) {
+    return workshopImageError(res, 503, missingChatApiKeyMessage('openrouter'));
   }
 
   const controller = new AbortController();
@@ -1377,6 +1387,10 @@ app.post('/api/workshop/chat', async (req, res) => {
         ? 'https://api.x.ai/v1/chat/completions'
         : model === 'groq'
           ? 'https://api.groq.com/openai/v1/chat/completions'
+          : model === 'openrouter'
+            ? 'https://openrouter.ai/api/v1/chat/completions'
+            : model === 'gemini'
+              ? 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(GEMINI_MODEL) + ':generateContent?key=' + encodeURIComponent(GEMINI_API_KEY)
           : 'https://text.pollinations.ai/openai';
     const upstreamModel = model === 'deepseek'
       ? DEEPSEEK_MODEL
@@ -1384,8 +1398,20 @@ app.post('/api/workshop/chat', async (req, res) => {
         ? GROK_MODEL
         : model === 'groq'
           ? GROQ_MODEL
+          : model === 'gemini'
+            ? GEMINI_MODEL
+            : model === 'openrouter'
+              ? OPENROUTER_MODEL
           : 'openai';
-    const requestBody = model === 'deepseek'
+    const requestBody = model === 'gemini'
+      ? {
+          contents: messages.filter((item) => item && item.content).map((item) => ({
+            role: item.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: String(item.content).slice(0, 6000) }],
+          })),
+          generationConfig: { maxOutputTokens: 800, temperature: 0.7 },
+        }
+      : model === 'deepseek'
       ? {
           model: upstreamModel,
           messages,
@@ -1393,7 +1419,7 @@ app.post('/api/workshop/chat', async (req, res) => {
           temperature: 0.7,
           thinking: { type: 'disabled' },
         }
-      : (model === 'grok' || model === 'groq')
+      : (model === 'grok' || model === 'groq' || model === 'openrouter')
         ? {
             model: upstreamModel,
             messages,
@@ -1405,8 +1431,10 @@ app.post('/api/workshop/chat', async (req, res) => {
       ? { Authorization: 'Bearer ' + DEEPSEEK_API_KEY }
       : model === 'grok'
         ? { Authorization: 'Bearer ' + XAI_API_KEY }
-        : model === 'groq'
+      : model === 'groq'
           ? { Authorization: 'Bearer ' + GROQ_API_KEY }
+          : model === 'openrouter'
+            ? { Authorization: 'Bearer ' + OPENROUTER_API_KEY, 'HTTP-Referer': 'https://sushi-ai-server.vercel.app', 'X-Title': 'Sushi AI' }
           : {};
     let upstream = await fetch(endpoint, {
       method: 'POST',
