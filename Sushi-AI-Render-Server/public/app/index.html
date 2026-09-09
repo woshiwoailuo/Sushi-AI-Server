@@ -79,6 +79,11 @@
     .composer .send { width: auto; min-width: 76px; padding: 12px 16px; }
     .home-tools { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
     .home-tools .btn { width: auto; padding: 10px 14px; font-size: 13px; }
+    .chat-channel-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .chat-channel-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .chat-channel-row select { width: auto; min-width: 160px; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .bubble img.chat-img { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 12px; margin: 4px 0 8px; background: #fff; }
+    .bubble.bot img.chat-img { box-shadow: 0 8px 24px rgba(27,31,42,.08); }
     .limit-note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 8px; }
     .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
     .tpl-btn { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 10px; width: 100%; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text); }
@@ -160,6 +165,15 @@
         <button type="button" class="chip" data-mem="off">关闭记忆</button>
       </div>
       <p class="limit-note">长记忆把大量对话与摘要保存在本机 localStorage（单域约数 MB）。Vercel 上 SQLite 会重置，故跨设备不以服务端为准；本页会调用已有对话接口。</p>
+      <div class="chat-channel-row">
+        <label for="chatChannel">回答通道</label>
+        <select id="chatChannel" aria-label="AI 回答通道">
+          <option value="auto" selected>自动抢答 · 推荐</option>
+          <option value="openai">快速对话 · OpenAI</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="horde">Horde</option>
+        </select>
+      </div>
     </div>
     <div class="chat-shell">
       <div class="chat-list" id="chatList" aria-live="polite"></div>
@@ -398,7 +412,7 @@
       var box = $('chatList');
       if (!box) return;
       if (!chatHistory.length) {
-        box.innerHTML = '<div class="chat-empty">先聊起来。<br>默认「长记忆 · 大数据」会记住设定与前情（保存在本机）。<br>图生图、换背景、出图请点上方「去工坊」。</div>';
+        box.innerHTML = '<div class="chat-empty">先聊起来。<br>默认「长记忆 · 大数据」会记住设定与前情（保存在本机）。<br>可说「画一张… / 生成图片…」直接出图；精细图生图、换背景仍可去工坊。</div>';
         return;
       }
       var html = '';
@@ -406,7 +420,8 @@
         var item = chatHistory[i] || {};
         var cls = item.role === 'user' ? 'user' : 'bot';
         var meta = item.channel ? '<span class="meta">' + escapeHtml(item.channel) + '</span>' : '';
-        html += '<div class="bubble ' + cls + '">' + escapeHtml(item.role === 'assistant' ? collapseRepeatedText(item.text) : item.text) + meta + '</div>';
+        var img = item.image ? '<img class="chat-img" alt="生成图片" src="' + escapeHtml(item.image) + '" />' : '';
+        html += '<div class="bubble ' + cls + '">' + img + escapeHtml(item.role === 'assistant' ? collapseRepeatedText(item.text) : item.text) + meta + '</div>';
       }
       box.innerHTML = html;
       box.scrollTop = box.scrollHeight;
@@ -530,11 +545,107 @@
       if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
       return content;
     }
-    async function raceChat(question) {
+    var CHAT_LABELS = { openai: '快速对话', deepseek: 'DeepSeek', horde: 'Horde', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
+    function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
+    function normalizeChatChannel(raw) {
+      var v = String(raw || 'auto').trim().toLowerCase();
+      if (v === 'turbo' || v === 'openai-fast' || v === 'fast') return 'openai';
+      if (v === 'openai' || v === 'deepseek' || v === 'horde' || v === 'auto') return v;
+      return 'auto';
+    }
+    function loadChatChannel() {
+      var v = 'auto';
+      try { v = normalizeChatChannel(localStorage.getItem(chatChannelKey()) || 'auto'); } catch (e) {}
+      var box = $('chatChannel');
+      if (box) box.value = v;
+      return v;
+    }
+    function saveChatChannel(v) {
+      v = normalizeChatChannel(v);
+      try { localStorage.setItem(chatChannelKey(), v); } catch (e) {}
+      var box = $('chatChannel');
+      if (box) box.value = v;
+      return v;
+    }
+    function selectedChatChannel() {
+      var box = $('chatChannel');
+      return normalizeChatChannel(box && box.value ? box.value : loadChatChannel());
+    }
+    function wantsImageGen(text) {
+      return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|给我.*(图|照片)|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)|txt2img|text.?to.?image/i.test(String(text || ''));
+    }
+    function photorealHomePrompt(text) {
+      var t = String(text || '').trim();
+      t = t.replace(/^(请)?(帮我)?(生成|画|做)(一)?[张幅]?(图|图片|照片)?[：:\s]*/i, '').trim() || t;
+      t = t.replace(/\b(anime|manga|cartoon|chibi)\b/gi, ' ').replace(/\s{2,}/g, ' ').trim();
+      if (!/photoreal|写实|摄影|RAW photo|DSLR/i.test(t)) {
+        t += ', photorealistic RAW photo, cinematic still, natural light, real human, fictional adult 18+, not anime, not manga, not cartoon';
+      } else if (!/not anime|no anime/i.test(t)) {
+        t += ', not anime, not manga, not cartoon';
+      }
+      return t.slice(0, 1200);
+    }
+    async function generateHomeImage(promptText) {
+      var prompt = photorealHomePrompt(promptText);
+      var ticket = '';
+      try {
+        var wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', timeoutMs: 8000 });
+        ticket = wrap && wrap.ticket || '';
+      } catch (e) { ticket = ''; }
+      if (ticket) {
+        var url = '/api/workshop/image?k=' + encodeURIComponent(ticket)
+          + '&model=flux-realism&width=768&height=768&seed=' + Math.floor(Math.random() * 1e9)
+          + '&prompt=' + encodeURIComponent(prompt.slice(0, 1400));
+        var res = await fetch(url, { credentials: 'include', cache: 'no-store' });
+        if (!res.ok) throw new Error(res.status === 401 ? '请先登录后再出图' : ('出图失败(' + res.status + ')'));
+        var blob = await res.blob();
+        if (!blob || blob.size < 2500) throw new Error('图片无效，请换描述再试');
+        var dataUrl = await new Promise(function (resolve, reject) {
+          var r = new FileReader();
+          r.onload = function () { resolve(r.result); };
+          r.onerror = function () { reject(new Error('读图失败')); };
+          r.readAsDataURL(blob);
+        });
+        return { url: dataUrl, channel: 'Flux写实' };
+      }
+      var created = await api('/api/images', {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt: prompt,
+          width: 768,
+          height: 768,
+          negativePrompt: 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text'
+        }),
+        timeoutMs: 90000
+      });
+      var job = created && (created.job || created);
+      if (!job || !job.id) throw new Error('未能创建出图任务');
+      var deadline = Date.now() + 180000;
+      while (Date.now() < deadline) {
+        var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
+        var cur = st && (st.job || st);
+        if (cur && cur.state === 'done' && cur.image && cur.image.url) {
+          return { url: cur.image.url, channel: 'Horde' };
+        }
+        if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
+          throw new Error((cur && cur.error) || '出图失败');
+        }
+        await new Promise(function (r) { setTimeout(r, 2500); });
+      }
+      throw new Error('出图超时，请稍后重试');
+    }
+    async function askOneChat(question, model) {
       var messages = buildMessages(question);
-      // openai / deepseek / horde：多通道抢答；整体抢答上限 30s（与工坊一致）。
+      var text = await askModel(model, messages);
+      return { text: text, channel: CHAT_LABELS[model] || model };
+    }
+    async function raceChat(question, channel) {
+      channel = normalizeChatChannel(channel);
+      // Explicit channel: answer only on that platform.
+      if (channel && channel !== 'auto') return askOneChat(question, channel);
+      var messages = buildMessages(question);
+      // auto：openai / deepseek / horde 多通道抢答；整体抢答上限 30s（与工坊一致）。
       var models = ['openai', 'deepseek', 'horde'];
-      var labels = { openai: '快速对话', deepseek: 'DeepSeek', horde: 'Horde', turbo: '快速对话', 'openai-fast': '快速对话' };
       return await new Promise(function (resolve, reject) {
         var left = models.length;
         var failed = 0;
@@ -550,7 +661,7 @@
             if (settled) return;
             settled = true;
             clearTimeout(raceTimer);
-            resolve({ text: text, channel: labels[model] || model });
+            resolve({ text: text, channel: CHAT_LABELS[model] || model });
           }).catch(function (err) {
             lastErr = (err && err.message) || lastErr;
             failed += 1;
@@ -571,12 +682,28 @@
       chatBusy = true;
       $('chatSend').disabled = true;
       if (input) input.value = '';
+      var channel = selectedChatChannel();
       chatHistory.push({ role: 'user', text: text, at: Date.now() });
       saveChat();
       renderChat();
-      var waiting = appendTemp('思考中…');
+      var waiting = appendTemp(wantsImageGen(text) ? '正在出图…' : '思考中…');
       try {
-        var result = await raceChat(text);
+        if (wantsImageGen(text)) {
+          var imgResult = await generateHomeImage(text);
+          if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
+          chatHistory.push({
+            role: 'assistant',
+            text: '已按你的描述生成图片（写实向）。还可继续描述微调，或去工坊做图生图/换背景。',
+            image: imgResult.url,
+            channel: imgResult.channel,
+            at: Date.now()
+          });
+          rollMemory(text, '已生成图片');
+          saveChat();
+          renderChat();
+          return;
+        }
+        var result = await raceChat(text, channel);
         if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
         chatHistory.push({ role: 'assistant', text: result.text, channel: result.channel, at: Date.now() });
         rollMemory(text, result.text);
@@ -596,6 +723,7 @@
     async function enterHome() {
       show('home');
       loadChat();
+      loadChatChannel();
       setMemMode(memMode());
       try {
         const data = await api('/api/me');
@@ -692,11 +820,11 @@
     };
 
     const TPLS = [
-      ['古风书生月下', '虚构成年书生立于庭院月下，青衫长袍，手持卷轴，月光清冷，水墨与工笔结合，全身构图，精致细节，电影感光影'],
+      ['古风书生月下', '虚构成年书生立于庭院月下，青衫长袍，手持卷轴，月光清冷，写实摄影与电影剧照质感，全身构图，皮肤与布料纹理清晰，非动漫'],
       ['赛博夜市', '虚构成年旅人走在霓虹夜市雨后街道，全息招牌与蒸汽小吃摊，潮湿地面反光，电影广角，未来市集氛围'],
-      ['油画肖像', '虚构成年角色半身油画肖像，伦勃朗式侧光，厚涂笔触，古典画室背景，神情平静，高细节皮肤与衣料'],
+      ['写实肖像', '虚构成年角色半身写实肖像，伦勃朗式侧光，自然皮肤质感，古典画室背景，神情平静，摄影棚光影，非卡通'],
       ['雨巷旗袍', '虚构成年女子撑油纸伞走在江南雨巷，旗袍剪裁端庄，青石板湿润反光，电影胶片色，全身中景'],
-      ['水墨仙侠', '虚构成年仙侠立于云海孤峰，水墨渲染与淡彩，广袖道袍，远山留白，清冷仙气，全身构图'],
+      ['山巅旅人', '虚构成年旅人立于云海孤峰，写实摄影，广袖风衣，远山薄雾，清冷空气感，全身构图，非动漫'],
       ['室内光影', '虚构成年角色坐在落地窗前阅读，午后阳光切进室内，体积光与柔和阴影，写实摄影，安静生活感'],
       ['电影分镜', '虚构成年角色在列车车厢靠窗，过道景深虚化，电影分镜中景，自然光，纪实与剧情片质感'],
       ['角色三视图', '虚构成年角色设定三视图，正面侧面背面并列，干净白底，服装结构清晰，概念设定图风格'],
@@ -724,6 +852,10 @@
     document.querySelectorAll('#memRow [data-mem]').forEach(function (btn) {
       btn.onclick = function () { setMemMode(btn.getAttribute('data-mem')); };
     });
+    if ($('chatChannel')) {
+      loadChatChannel();
+      $('chatChannel').onchange = function () { saveChatChannel($('chatChannel').value); };
+    }
     $('chatSend').onclick = sendChat;
     $('chatInput').addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {

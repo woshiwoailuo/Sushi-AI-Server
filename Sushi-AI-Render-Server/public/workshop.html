@@ -173,7 +173,7 @@
         <input id="镜头视角" name="镜头视角" type="hidden" value="">
         <input id="光线氛围" name="光线氛围" type="hidden" value="">
         <input id="色彩方案" name="色彩方案" type="hidden" value="">
-        <input id="艺术风格" name="艺术风格" type="hidden" value="写实摄影，电影剧照，非卡通">
+        <input id="艺术风格" name="艺术风格" type="hidden" value="写实摄影，电影剧照，自然皮肤质感，非卡通，非动漫，非插画">
         <input id="补充细节" name="补充细节" type="hidden" value="">
         <input id="执行随机" name="执行随机" type="hidden" value="">
         <input id="安全英文" name="安全英文" type="hidden" value="">
@@ -310,7 +310,7 @@
               id="负面提示"
               name="负面提示"
               rows="4"
-            >低清晰度，模糊，失焦，错误解剖，多头，双头，三头，身体融合，多余手臂，多余腿，缺失手臂，缺失腿，手脚数量不对，三只手，三只腿，多余手指，缺失手指，畸形手部，重复肢体，扭曲五官，模糊脸，变形脸，五官错位，塑料皮肤，蜡像感，卡通，动漫，插画，数字绘画，儿童，未成年人，真实名人，电脑界面，文字，水印</textarea>
+            >低清晰度，模糊，失焦，错误解剖，多头，双头，三头，身体融合，多余手臂，多余腿，缺失手臂，缺失腿，手脚数量不对，三只手，三只腿，多余手指，缺失手指，畸形手部，重复肢体，扭曲五官，模糊脸，变形脸，五官错位，塑料皮肤，蜡像感，卡通，动漫，插画，数字绘画，二次元，漫画，儿童，未成年人，真实名人，电脑界面，文字，水印, anime, manga, cartoon, illustration, cel shading</textarea>
           </label>
 
         </div>
@@ -395,7 +395,7 @@
       <details id="问答区" class="分区" open>
         <summary>AI 对话</summary>
           <label>
-            通道
+            回答通道（选定后只用这一路；自动抢答才多路赛跑）
           <select id="AI通道" onchange="对话通道已改()">
             <option value="auto" selected>自动抢答 · 推荐</option>
             <option value="openai">OpenAI 兼容模型</option>
@@ -474,7 +474,7 @@
 
       </div>
 
-      <div id="官方画廊" class="画廊">[生成启动]</div>
+      <div id="官方画廊" class="画廊" hidden></div>
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
@@ -1160,7 +1160,7 @@
     var 区 = document.getElementById("对话列表");
     if (!区) return;
     if (!对话历史.length) {
-      区.innerHTML = '<div class="对话空">还没有对话。选自动抢答会同时问各路，先到的留下，本轮就用它。</div>';
+      区.innerHTML = '<div class="对话空">还没有对话。选自动抢答会同时问各路，先到的留下；选定具体通道则只用该通道回答。</div>';
       return;
     }
     var html = "";
@@ -1872,7 +1872,22 @@
   }
 
   function 强制写实英文(英文) {
-    return String(英文 || "").trim();
+    var 文 = String(英文 || "").replace(/\s+/g, " ").trim();
+    if (!文) 文 = "photoreal cinematic photo of a fictional adult, natural light, DSLR";
+    if (!/\b(keep anime|anime style requested|manga style|cartoon style)\b/i.test(文)) {
+      文 = 文.replace(/\b(anime[- ]style|manga[- ]style|cartoon[- ]style|anime|manga|cartoon|chibi|2d illustration|cel shading)\b/gi, " ");
+      文 = 文.replace(/\s{2,}/g, " ").trim();
+    }
+    if (!/photoreal|RAW photo|DSLR|cinematic still|real human/i.test(文)) {
+      文 += ", photorealistic RAW photo, cinematic still, natural skin texture, sharp focus, real human";
+    }
+    if (!/not anime|no anime|非卡通|非动漫/i.test(文)) {
+      文 += ", not anime, not manga, not cartoon, not illustration";
+    }
+    if (!/fictional adult|18\+|no minors/i.test(文)) {
+      文 += ", fictional adult 18+ only, no minors";
+    }
+    return 文.replace(/\s{2,}/g, " ").trim();
   }
 
   function 补换背景英文(英文) {
@@ -2169,6 +2184,7 @@
     if (!文 || /女性[:：]\s*[\d.]+/.test(文) || (文.match(/\d/g) || []).length >= 12) {
       文 = "photoreal cinematic photo of a fictional adult, natural light, DSLR";
     }
+    文 = 强制写实英文(文);
     if (安) 安.value = 文;
     return 文;
   }
@@ -2871,13 +2887,13 @@
   }
 
   function 写实提示(英文) {
-    var 文 = String(英文 || "").trim();
+    var 文 = 强制写实英文(英文);
     var 核 = ((document.getElementById("角色描述") || {}).value || "") + ((document.getElementById("英文描述") || {}).value || "");
-    var 尾 = ", RAW photo, sharp focus, real human, not anime";
+    var 尾 = ", photorealistic RAW photo, cinematic still, DSLR, natural skin, sharp focus, real human, not anime, not manga, not cartoon";
     if (/性爱|插入|抽插|口交|后入|骑乘|性交|做爱|sex|penetrat|oral|doggy|cowgirl/i.test(核)) {
       尾 += ", explicit adult sex";
     }
-    return 去重描述(文) + 尾;
+    return 去重描述(文 + 尾);
   }
 
   function 构建写实图址(英文, 种子, 模型, 根号) {
@@ -3284,10 +3300,10 @@
       var 输出区 = document.getElementById("图像输出");
       if (输出区) 输出区.style.visibility = "";
       计划张数 = 抢出目标张数 || 1;
-      // 全平台抢出：Pollinations 各模型 + Horde 同时探测，先到先得。
-      用写实引擎出图("turbo");
+      // 全平台抢出（仅 auto）：写实优先 + Horde 同时探测，先到先得。
+      用写实引擎出图("flux-realism");
+      用写实引擎追加("turbo");
       用写实引擎追加("flux");
-      用写实引擎追加("flux-realism");
       用写实引擎追加("sana");
       用群体出图探测();
     } else if (选引擎 === "perchance") {
@@ -3300,7 +3316,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.23" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.25" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4485,40 +4501,47 @@
     }
   }
 
-  /* Desktop/web: enlarge gallery / result panel without hurting mobile */
+  /* Desktop/web: gallery dominates under 「角色画廊」; even columns */
   @media (min-width: 901px) {
     .工作区 {
-      grid-template-columns: minmax(280px, 28vw) minmax(0, 1fr);
+      grid-template-columns: minmax(240px, 22vw) minmax(0, 1fr);
     }
 
     .结果区 {
-      padding: 22px 28px 28px;
+      padding: 18px 24px 24px;
     }
 
     .状态提示 {
-      min-height: 48vh;
+      min-height: 0;
+      flex: 0 0 auto;
+    }
+
+    .状态提示[aria-busy="true"] {
+      min-height: 28vh;
     }
 
     .画廊 {
-      min-height: 52vh;
-      gap: 20px;
-      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      min-height: 64vh;
+      gap: 22px;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      flex: 1 1 auto;
     }
 
     .画廊 img,
     .画廊 iframe {
-      min-height: 420px;
+      min-height: 520px;
       object-fit: contain;
       background: #FFFFFF;
     }
 
     .对话列表 {
-      max-height: 420px;
-      min-height: 180px;
+      max-height: 360px;
+      min-height: 140px;
     }
 
     .画面说明 {
-      min-height: 180px;
+      min-height: 120px;
+      margin-top: 12px;
     }
   }
 </style>
