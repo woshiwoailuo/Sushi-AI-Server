@@ -27,9 +27,27 @@ test('homepage chat channel picker honors explicit selection and auto race', () 
   assert.match(home, /function raceChat\(question, channel\)/);
   assert.match(home, /if \(channel && channel !== 'auto'\) return askOneChat\(question, channel\);/);
   assert.match(home, /localStorage\.setItem\(chatChannelKey\(\), v\)/);
+  assert.match(home, /value="grok"/);
+  assert.match(home, /var models = \['grok', 'horde'\]/);
+  // Broken OpenAI(402) / DeepSeek(未配置) removed from homepage picker (not grayed).
+  const picker = home.slice(home.indexOf('id="chatChannel"'), home.indexOf('</select>', home.indexOf('id="chatChannel"')) + 9);
+  assert.match(picker, /value="auto"/);
+  assert.match(picker, /value="horde"/);
+  assert.doesNotMatch(picker, /value="openai"/);
+  assert.doesNotMatch(picker, /value="deepseek"/);
   assert.match(workshop, /id="AI通道"/);
   assert.match(workshop, /问免费模型\(文本, 本轮通道\)/);
   assert.match(workshop, /if \(指定 === "deepseek"\) return 问花粉/);
+});
+
+test('homepage and server wire Grok via xAI OpenAI-compatible chat', () => {
+  assert.match(home, /CHAT_LABELS[\s\S]*grok:\s*'Grok'/);
+  assert.match(home, /Grok 未配置/);
+  assert.match(server, /XAI_API_KEY|GROK_API_KEY/);
+  assert.match(server, /api\.x\.ai\/v1\/chat\/completions/);
+  assert.match(server, /model === 'grok'/);
+  assert.match(server, /Grok 尚未配置/);
+  assert.match(server, /normalizeChatModel[\s\S]*return 'grok'/);
 });
 
 test('homepage can generate images directly from chat intent', () => {
