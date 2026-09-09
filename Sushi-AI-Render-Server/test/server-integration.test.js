@@ -89,6 +89,11 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   assert.doesNotMatch(directHtml, /api\/workshop\/unlock/);
   assert.doesNotMatch(directHtml, /正在打开工坊/);
 
+  const htmlAlias = await request('/workshop.html', 'GET', undefined, auth);
+  assert.equal(htmlAlias.status, 200);
+  assert.match(await htmlAlias.text(), /角色描述|生成按钮/);
+  assert.equal((await request('/workshop.html')).status, 401);
+
   // Unlock tolerates string vs number userId (Postgres BIGINT shape).
   const ticket2 = await (await request('/api/workshop/ticket', 'POST', {}, auth)).json();
   const unlock = await request('/api/workshop/unlock', 'POST', { ticket: ticket2.ticket }, auth);
