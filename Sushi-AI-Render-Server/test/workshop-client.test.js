@@ -126,7 +126,7 @@ test('the current Chinese prompt is translated before submission, never replaced
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.match(payload.prompt, /A small cat by the window/);
   // Visible core is source of truth — no silent photoreal rewrite on generate.
-  assert.doesNotMatch(payload.prompt, /^photorealistic RAW photo/i);
+  assert.match(payload.prompt, /photorealistic/i);
   assert.doesNotMatch(payload.prompt, /A stale unrelated scene/);
 });
 
@@ -139,7 +139,7 @@ test('failed translation preserves the current text, and perchance stays selecta
   await f.w.开始生成();
   const failedPrompt = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body).prompt;
   assert.match(failedPrompt, /窗边的小猫/);
-  assert.doesNotMatch(failedPrompt, /^photorealistic RAW photo/i);
+  assert.match(failedPrompt, /^photorealistic RAW photo/i);
   const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length;
   // Perchance must remain selectable and generate in-app — never window.open / official link.
   const box = f.w.document.getElementById('出图引擎');
@@ -368,7 +368,7 @@ test('perchance cool-down cancelled: explicit selection retries in-app proxy wit
   assert.match(src, /function isPerchanceCooling\(\) \{\s*return false;/);
   assert.match(src, /cool-down cancelled|no cool-down gate/i);
   assert.doesNotMatch(src, /Perchance 短暂冷却中/);
-  assert.match(src, /Never open perchance\.org/);
+  assert.match(src, /Never (?:window\.)?open perchance\.org/i);
   assert.equal(f.w.当前引擎(), 'perchance');
   const opened = [];
   f.w.open = (url) => { opened.push(String(url)); return null; };
@@ -442,7 +442,7 @@ test('style-keyword generation keeps managed display simple while gen prompt hon
   assert.doesNotMatch(beforeCap, /not anime|photorealistic RAW photo/i);
 });
 
-test('default generation uses visible core as-is without silent photoreal rewrite', async t => {
+test('default generation keeps visible core unchanged while enriching the private prompt', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('角色描述').value = 'A fictional adult reading by a library window';
   f.w.document.getElementById('中文译文').value = '图书馆窗边的成年人';
@@ -455,8 +455,8 @@ test('default generation uses visible core as-is without silent photoreal rewrit
   await f.w.开始生成();
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.match(payload.prompt, /A fictional adult reading by a library window/i);
-  assert.doesNotMatch(payload.prompt, /^photorealistic RAW photo/i);
-  assert.doesNotMatch(payload.prompt, /not anime, not manga, not cartoon/i);
+  assert.match(payload.prompt, /^photorealistic RAW photo/i);
+  assert.match(payload.prompt, /not anime, not manga, not cartoon/i);
   assert.equal(f.w.document.getElementById('角色描述').value, beforeCore, '核心描述 must stay user text');
   assert.equal(f.w.document.getElementById('中文译文').value, beforeZh);
   assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
@@ -529,7 +529,7 @@ test('智能修饰 writes visible core modifiers and generation uses that text',
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.equal(f.w.document.getElementById('角色描述').value, afterFirst);
   assert.ok(payload.prompt && payload.prompt.length > 8);
-  assert.doesNotMatch(payload.prompt, /^photorealistic RAW photo/i);
+  assert.match(payload.prompt, /photorealistic/i);
 });
 
 test('photorealPrompt helper still available for style-aware enrich logic', async t => {

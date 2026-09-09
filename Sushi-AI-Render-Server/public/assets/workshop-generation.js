@@ -449,7 +449,8 @@
     var label = engineLabel(model);
     status('正在用 ' + label + ' 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '同源代理出图；遇限流会立刻换引擎，不空等。', true);
     var lastError = null;
-    for (var attempt = 0; attempt < 3; attempt += 1) {
+    var maxAttempts = model === 'perchance' ? 1 : 3;
+    for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
       ensureActive(run);
       var url = pollinationsProxyUrl(model, prompt, run.payload.width, run.payload.height, seed + attempt * 131);
       try {

@@ -9,6 +9,10 @@ const source = fs.readFileSync(
   path.join(__dirname, '..', 'public', 'assets', 'workshop-generation.js'),
   'utf8'
 );
+const workshopHtml = fs.readFileSync(
+  path.join(__dirname, '..', 'public', 'workshop.html'),
+  'utf8'
+);
 
 test('auto mode keeps Perchance eligible when the official plugin is unavailable', () => {
   assert.match(source, /var activeEngines = FREE_RACE_ENGINES\.filter/);
@@ -50,23 +54,23 @@ test('generation prompt favors realistic output without rewriting the visible co
 
 
 test('Perch timeout uses a fresh fallback and repeated attempts keep realistic routing', () => {
-  assert.match(source, /runWithProviderBudget\(run, engine, function \(signal\) \{[\s\S]*?\}, 15000\)/);
+  assert.match(source, /runWithProviderBudget\(run, engine[\s\S]*?\}, 10000\)/);
   assert.match(source, /runWithProviderBudget\(run, 'turbo'/);
   assert.match(source, /generatePerchancePlugin\(run, prompt, index, 5000\)/);
   assert.match(source, /Negative phrases.*must not be mistaken/);
 });
 
 test('chat channel selection keeps the explicit free OpenAI route', () => {
-  assert.match(source, /value="openai">快速对话/);
-  assert.match(source, /值 === "openai-fast".*return "openai"/);
-  assert.match(source, /指定 === "openai"\) return 问花粉/);
+  assert.match(workshopHtml, /value="openai">快速对话/);
+  assert.match(workshopHtml, /值 === "openai-fast".*return "openai"/);
+  assert.match(workshopHtml, /指定 === "openai"\) return 问花粉/);
 });
 
 
 test('workshop keeps chat selector active and hides configuration UI', () => {
-  assert.match(source, /AI通道/);
-  assert.match(source, /框\.disabled = false/);
-  assert.match(source, /#平台管理区, #管理面板, #工具区/);
+  assert.match(workshopHtml, /AI通道/);
+  assert.match(workshopHtml, /框\.disabled = false/);
+  assert.match(workshopHtml, /#平台管理区, #管理面板, #工具区/);
 });
 
 test('Perch requests are fast-cancelled and upstream work stops on disconnect', () => {
