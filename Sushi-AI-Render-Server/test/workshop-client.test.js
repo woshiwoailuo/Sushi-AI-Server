@@ -330,3 +330,14 @@ test('workshop source defaults to in-app perchance as the primary route', () => 
   assert.match(html, /var 用户选定平台 = "perchance";/);
   assert.match(client, /window\\.__sushiPreferredProvider \\|\\| 'perchance'/);
 });
+
+
+test('perchance failure enters a short cooldown without changing the selected route', async t => {
+  const f = await setup(t, (url, options) => response({ error: 'Perchance unavailable' }, 503));
+  const box = f.w.document.getElementById('出图引擎');
+  box.value = 'perchance';
+  const src = client;
+  assert.match(src, /PERCHANCE_COOLDOWN_MS = 30000/);
+  assert.match(src, /Perchance 组件短暂冷却中/);
+  assert.equal(f.w.当前引擎(), 'perchance');
+});
