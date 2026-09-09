@@ -520,9 +520,8 @@
     return '';
   }
 
-  async function generatePerchance(run, prompt, index) {
-    // In-app Perchance/Perch only — never open perchance.org; no cool-down gate.
-    // Prompt comes from visible 核心描述 (source of truth); only touch hidden 安全英文 temporarily.
+  async function generatePerchancePlugin(run, prompt, index, timeoutMs) {
+    // In-app Perchance plugin (only exists when hosted on perchance.org).
     var safeBox = $('安全英文');
     var prevSafe = safeBox ? safeBox.value : '';
     var styleBox = $('艺术风格');
@@ -533,7 +532,6 @@
       var trigger = $('执行生成');
       if (!gallery || !trigger) throw new Error('Perchance 界面未就绪');
       if (safeBox) safeBox.value = prompt;
-      // Also reinforce photoreal style token the plugin may read.
       if (styleBox && !hasExplicitArtStyle(prompt)) {
         styleBox.value = '写实摄影，电影剧照，自然皮肤质感，非卡通，非动漫，非插画，真实照片';
       }
@@ -545,10 +543,9 @@
         trigger.dispatchEvent(new Event('change', { bubbles: true }));
       } catch (e) {}
       try { window.update(gallery); } catch (error) { throw new Error('Perchance 未能启动'); }
-      var deadline = Date.now() + 45000;
+      var deadline = Date.now() + (timeoutMs || 8000);
       while (Date.now() < deadline) {
         ensureActive(run);
-        // Another free-race engine already won — exit quietly, do NOT enter cool-down.
         if (run && run._raceSettled) throw new Error('lost-race');
         var nodes = gallery.querySelectorAll('iframe, img, canvas');
         if (nodes.length > before) {
@@ -561,19 +558,33 @@
             }
           }
         }
-        await pause(run, 600);
+        await pause(run, 400);
       }
-      throw new Error('Perchance 出图超时');
-    } catch (error) {
-      var msg = String(error && error.message || error || '');
-      // lost-race / cancel: exit quietly. Cool-down cancelled — markPerchanceFailure is a no-op.
-      if (!error || /已取消生成|短暂冷却中|lost-race/.test(msg)) throw error;
-      markPerchanceFailure(msg);
-      throw error;
+      throw new Error('Perchance 插件超时');
     } finally {
       if (safeBox) safeBox.value = prevSafe;
       if (styleBox) styleBox.value = prevStyle;
     }
+  }
+
+  async function generatePerchance(run, prompt, index) {
+    // Official plugin if present; otherwise same-origin Perch proxy.
+    // Never window.open perchance.org (Cloudflare + X-Frame-Options block embeds).
+    if (typeof window.update === 'function') {
+      try {
+        return await generatePerchancePlugin(run, prompt, index, 8000);
+      } catch (error) {
+        var pluginMsg = String(error && error.message || error || '');
+        if (!error || /已取消生成|lost-race/.test(pluginMsg)) throw error;
+      }
+    }
+    status(
+      '正在用 Perch 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张',
+      '应用内出图，不跳转官网。',
+      true
+    );
+    var result = await generatePollinations(run, prompt, index, 'perchance');
+    return { url: result.url, engine: 'perchance' };
   }
 
   async function generateOne(run, prompt, index) {
@@ -598,7 +609,7 @@
       }
     }
     if (engine === 'perchance') {
-      // Explicit Perch/Perchance only — in-app plugin, never open perchance.org, never free-race fallback.
+      // Explicit Perch: plugin if loaded, otherwise same-origin proxy. Never open perchance.org.
       return await generatePerchance(run, prompt, index);
     }
     if (engine !== 'auto') return generatePollinations(run, prompt, index, engine);
@@ -606,6 +617,7 @@
     // auto only: race free platforms; skip engines still in short cool-down after 429/5xx.
     // Perchance always eligible (cool-down cancelled); generation never window.open's perchance.org.
     var activeEngines = FREE_RACE_ENGINES.filter(function (eng) {
+      if (eng === 'perchance' && typeof window.update !== 'function') return false;
       if (eng === 'perchance' && isPerchanceCooling()) return false; // always false now
       return !isEngineCool(eng);
     });
@@ -851,7 +863,7 @@
     else if (engine === 'flux') tip.textContent = 'Flux · 通用高质量免费通道';
     else if (engine === 'flux-realism') tip.textContent = 'Flux写实 · 人像优先免费通道';
     else if (engine === 'sana') tip.textContent = 'Sana · 中文友好免费通道';
-    else if (engine === 'perchance') tip.textContent = 'Perch / Perchance · 应用内生成（不跳转官网）';
+    else if (engine === 'perchance') tip.textContent = 'Perch / Perchance · 应用内出图（不跳转官网）';
     else tip.textContent = '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得';
   };
 
