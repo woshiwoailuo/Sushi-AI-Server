@@ -346,3 +346,41 @@ test('workshop source defaults to in-app perchance as the primary route', () => 
   assert.match(html, /var 用户选定平台 = "perchance";/);
   assert.match(client, /window\\.__sushiPreferredProvider \\|\\| 'perchance'/);
 });
+
+
+test('perchance failure enters a short cooldown without free-race fallback for explicit selection', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const box = f.w.document.getElementById('出图引擎');
+  box.value = 'perchance';
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
+  assert.match(src, /PERCHANCE_COOLDOWN_MS = 30000/);
+  assert.match(src, /markPerchanceFailure/);
+  assert.match(src, /isPerchanceCooling/);
+  assert.match(src, /Perchance 短暂冷却中/);
+  assert.match(src, /eng === 'perchance' && isPerchanceCooling\(\)/);
+  assert.match(src, /never free-race fallback/);
+  assert.equal(f.w.当前引擎(), 'perchance');
+  const opened = [];
+  f.w.open = (url) => { opened.push(String(url)); return null; };
+  const realFetch = f.w.fetch;
+  const pollinationHits = [];
+  f.w.fetch = async (url, options = {}) => {
+    const href = String(url);
+    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
+      pollinationHits.push(href);
+      const bytes = Buffer.alloc(3200, 7);
+      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
+    }
+    return realFetch(url, options);
+  };
+  // First explicit attempt fails closed (no plugin) and marks cooldown — never FREE_RACE.
+  await f.w.开始生成();
+  assert.equal(opened.length, 0, 'must never open perchance.org');
+  assert.equal(box.value, 'perchance');
+  assert.equal(pollinationHits.length, 0, 'explicit perchance must not fall back into free race');
+  // Second attempt while cooling should fail fast with the cooldown tip, still no race.
+  await f.w.开始生成();
+  assert.equal(pollinationHits.length, 0, 'cooling explicit perchance must still not free-race');
+  const tip = f.w.document.getElementById('状态提示').textContent || '';
+  assert.match(tip, /Perchance 短暂冷却中/);
+});

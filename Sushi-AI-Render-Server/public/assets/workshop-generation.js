@@ -412,6 +412,18 @@
     return engineLabel(eng) + ' 冷却中约 ' + sec + ' 秒';
   }
 
+  // Short cooldown after Perchance component failure/timeout so auto race prefers Turbo/Horde first.
+  var perchanceCooldownUntil = 0;
+  var PERCHANCE_COOLDOWN_MS = 30000;
+
+  function markPerchanceFailure() {
+    perchanceCooldownUntil = Date.now() + PERCHANCE_COOLDOWN_MS;
+  }
+
+  function isPerchanceCooling() {
+    return Date.now() < perchanceCooldownUntil;
+  }
+
   function raceFailMessage(errors) {
     var msgs = (errors || []).map(function (e) { return e && e.message; }).filter(Boolean);
     var rate = lastRateLimited || msgs.some(function (m) { return /429|限流|繁忙|冷却/.test(String(m)); });
@@ -458,27 +470,29 @@
   }
 
   async function generatePerchance(run, prompt, index) {
+    // Keep Perchance primary, but do not wait 45s again after a recent component failure.
+    if (isPerchanceCooling()) throw new Error('Perchance 短暂冷却中');
     // In-app Perchance/Perch only — never open perchance.org.
-    if (typeof window.update !== 'function') throw new Error('Perchance 组件未加载');
-    var gallery = $('官方画廊');
-    var trigger = $('执行生成');
-    if (!gallery || !trigger) throw new Error('Perchance 界面未就绪');
     var engBox = $('英文描述');
     var safeBox = $('安全英文');
     var prevEng = engBox ? engBox.value : '';
     var prevSafe = safeBox ? safeBox.value : '';
-    if (engBox) engBox.value = prompt;
-    if (safeBox) safeBox.value = prompt;
-    gallery.hidden = false;
-    var before = gallery.querySelectorAll('iframe, img, canvas').length;
-    trigger.value = String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000)) + '-p' + String(index || 0);
     try {
-      trigger.dispatchEvent(new Event('input', { bubbles: true }));
-      trigger.dispatchEvent(new Event('change', { bubbles: true }));
-    } catch (e) {}
-    try { window.update(gallery); } catch (error) { throw new Error('Perchance 未能启动'); }
-    var deadline = Date.now() + 45000;
-    try {
+      if (typeof window.update !== 'function') throw new Error('Perchance 组件未加载');
+      var gallery = $('官方画廊');
+      var trigger = $('执行生成');
+      if (!gallery || !trigger) throw new Error('Perchance 界面未就绪');
+      if (engBox) engBox.value = prompt;
+      if (safeBox) safeBox.value = prompt;
+      gallery.hidden = false;
+      var before = gallery.querySelectorAll('iframe, img, canvas').length;
+      trigger.value = String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000)) + '-p' + String(index || 0);
+      try {
+        trigger.dispatchEvent(new Event('input', { bubbles: true }));
+        trigger.dispatchEvent(new Event('change', { bubbles: true }));
+      } catch (e) {}
+      try { window.update(gallery); } catch (error) { throw new Error('Perchance 未能启动'); }
+      var deadline = Date.now() + 45000;
       while (Date.now() < deadline) {
         ensureActive(run);
         var nodes = gallery.querySelectorAll('iframe, img, canvas');
@@ -486,12 +500,18 @@
           var i = nodes.length - 1;
           for (; i >= before; i -= 1) {
             var url = nodeImageUrl(nodes[i]);
-            if (url && String(url).length > 32) return { url: url, engine: 'perchance' };
+            if (url && String(url).length > 32) {
+              perchanceCooldownUntil = 0;
+              return { url: url, engine: 'perchance' };
+            }
           }
         }
         await pause(run, 600);
       }
       throw new Error('Perchance 出图超时');
+    } catch (error) {
+      if (!error || !/已取消生成|短暂冷却中/.test(String(error.message || ''))) markPerchanceFailure();
+      throw error;
     } finally {
       if (engBox) engBox.value = prevEng;
       if (safeBox) safeBox.value = prevSafe;
@@ -514,14 +534,21 @@
     }
     if (engine === 'perchance') {
       // Explicit Perch/Perchance only — in-app plugin, never open perchance.org, never free-race fallback.
+      // If cooling after a recent failure, fail fast with tip (do not fall into FREE_RACE).
       return await generatePerchance(run, prompt, index);
     }
     if (engine !== 'auto') return generatePollinations(run, prompt, index, engine);
 
     // auto only: race free platforms; skip engines still in short cool-down after 429/5xx.
-    // Perchance stays in the race; generation never window.open's perchance.org.
-    var activeEngines = FREE_RACE_ENGINES.filter(function (eng) { return !isEngineCool(eng); });
-    var cooled = FREE_RACE_ENGINES.filter(isEngineCool);
+    // Perchance stays in the race unless recently failed; generation never window.open's perchance.org.
+    var activeEngines = FREE_RACE_ENGINES.filter(function (eng) {
+      if (eng === 'perchance' && isPerchanceCooling()) return false;
+      return !isEngineCool(eng);
+    });
+    var cooled = FREE_RACE_ENGINES.filter(function (eng) {
+      if (eng === 'perchance' && isPerchanceCooling()) return true;
+      return isEngineCool(eng);
+    });
     if (!activeEngines.length) {
       throw Object.assign(new Error('出图通道限流：本轮引擎都在短冷却中，请稍后再试（不是全部永久失败）。'), { status: 429, code: 'ALL_COOLDOWN' });
     }
