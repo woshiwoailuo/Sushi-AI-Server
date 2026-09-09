@@ -176,7 +176,7 @@
         <input id="镜头视角" name="镜头视角" type="hidden" value="">
         <input id="光线氛围" name="光线氛围" type="hidden" value="">
         <input id="色彩方案" name="色彩方案" type="hidden" value="">
-        <input id="艺术风格" name="艺术风格" type="hidden" value="写实摄影，电影剧照，自然皮肤质感，非卡通，非动漫，非插画">
+        <input id="艺术风格" name="艺术风格" type="hidden" value="写实摄影，电影剧照，自然皮肤质感，真实照片，非卡通，非动漫，非插画">
         <input id="补充细节" name="补充细节" type="hidden" value="">
         <input id="执行随机" name="执行随机" type="hidden" value="">
         <input id="安全英文" name="安全英文" type="hidden" value="">
@@ -1880,7 +1880,7 @@
 
   function 强制写实英文(英文) {
     var 文 = String(英文 || "").replace(/\s+/g, " ").trim();
-    if (!文) 文 = "photoreal cinematic photo of a fictional adult, natural light, DSLR";
+    if (!文) 文 = "photorealistic RAW photo of a fictional adult, natural light, DSLR";
     // 用户点名动漫/插画等画风时按文字生成，不强制写实、不剥离风格词。
     if (显式画风(文)) {
       if (!/fictional adult|18\+|no minors|虚构成年/i.test(文)) {
@@ -1888,19 +1888,21 @@
       }
       return 文.replace(/\s{2,}/g, " ").trim();
     }
-    // 默认写实：保留核心意图，向生成器补充光影/镜头/材质（不写回展示字段）。
-    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影/i.test(文)) {
-      文 += ", photorealistic RAW photo, cinematic still, natural light, shallow depth of field, detailed fabric and skin texture, sharp focus, real human";
-    } else {
-      if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric/i.test(文)) {
-        文 += ", natural light, cinematic composition";
-      }
-      if (!/texture|material|skin|fabric|detail/i.test(文)) {
-        文 += ", natural skin texture, clear material detail";
-      }
+    // 默认写实：前置摄影修辞，便于 Perchance 等偏二次元引擎也走照片风（只写生成器提示，不回写展示框）。
+    var 头 = "photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture";
+    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(文)) {
+      文 = 头 + ", " + 文;
+    } else if (!/^\s*photoreal/i.test(文)) {
+      文 = "photorealistic photograph of " + 文;
     }
-    if (!/not anime|no anime|非卡通|非动漫/i.test(文)) {
-      文 += ", not anime, not manga, not cartoon, not illustration";
+    if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric|shallow depth/i.test(文)) {
+      文 += ", natural light, cinematic still, shallow depth of field";
+    }
+    if (!/skin pores|subsurface|imperfection|fabric texture|material detail|sharp focus/i.test(文)) {
+      文 += ", natural skin texture, clear material detail, sharp focus, real human";
+    }
+    if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(文)) {
+      文 += ", not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading";
     }
     if (!/fictional adult|18\+|no minors/i.test(文)) {
       文 += ", fictional adult 18+ only, no minors";
@@ -3351,7 +3353,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.26" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.27" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

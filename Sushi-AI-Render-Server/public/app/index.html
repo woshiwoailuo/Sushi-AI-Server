@@ -587,11 +587,13 @@
         }
         return t.slice(0, 1200);
       }
-      // Default photoreal rhetoric — enrich scene for generators only (chat bubble text stays original).
+      // Default photoreal rhetoric — enrich generator prompt only (chat bubble text stays original).
+      var lead = 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture';
       if (!/photoreal|写实|摄影|RAW photo|DSLR|cinematic still/i.test(t)) {
-        t += ', photorealistic RAW photo, cinematic still, natural light, shallow depth of field, detailed fabric and skin texture, sharp focus, real human, fictional adult 18+, not anime, not manga, not cartoon';
-      } else if (!/not anime|no anime/i.test(t)) {
-        t += ', not anime, not manga, not cartoon';
+        t = lead + ', ' + t + ', natural light, cinematic still, shallow depth of field, sharp focus, real human, fictional adult 18+, not anime, not manga, not cartoon, not illustration';
+      } else {
+        if (!/^\s*photoreal/i.test(t)) t = 'photorealistic photograph of ' + t;
+        if (!/not anime|no anime/i.test(t)) t += ', not anime, not manga, not cartoon, not illustration';
       }
       return t.slice(0, 1200);
     }

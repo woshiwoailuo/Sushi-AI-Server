@@ -148,7 +148,7 @@
   function photorealPrompt(prompt) {
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (!text) {
-      text = 'photoreal cinematic photo of a fictional adult, natural light, DSLR';
+      text = 'photorealistic RAW photo of a fictional adult, natural light, DSLR';
     }
     // Keep the user's core intent. If they named an art style, do not strip or override it.
     if (hasExplicitArtStyle(text)) {
@@ -157,19 +157,22 @@
       }
       return text.replace(/\s{2,}/g, ' ').trim();
     }
-    // Default rhetoric: photoreal — enrich lighting / camera / materials for the generator only.
-    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影/i.test(text)) {
-      text += ', photorealistic RAW photo, cinematic still, natural light, shallow depth of field, detailed fabric and skin texture, sharp focus, real human';
-    } else {
-      if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric/i.test(text)) {
-        text += ', natural light, cinematic composition';
-      }
-      if (!/texture|material|skin|fabric|detail/i.test(text)) {
-        text += ', natural skin texture, clear material detail';
-      }
+    // Default: lead with strong photoreal rhetoric so anime-biased engines (e.g. Perchance) honor photo style.
+    // Enrichment is for the generator prompt only — never write this back into visible core/display fields.
+    var lead = 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture';
+    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
+      text = lead + ', ' + text;
+    } else if (!/^\s*photoreal/i.test(text)) {
+      text = 'photorealistic photograph of ' + text;
     }
-    if (!/not anime|no anime|非卡通|非动漫/i.test(text)) {
-      text += ', not anime, not manga, not cartoon, not illustration';
+    if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric|shallow depth/i.test(text)) {
+      text += ', natural light, cinematic still, shallow depth of field';
+    }
+    if (!/skin pores|subsurface|imperfection|fabric texture|material detail|sharp focus/i.test(text)) {
+      text += ', natural skin texture, clear material detail, sharp focus, real human';
+    }
+    if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(text)) {
+      text += ', not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading';
     }
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
@@ -428,16 +431,23 @@
     return engineLabel(eng) + ' 冷却中约 ' + sec + ' 秒';
   }
 
-  // Short cooldown after Perchance component failure/timeout so auto race prefers Turbo/Horde first.
+  // Short cooldown after *real* Perchance failure/timeout so auto race prefers Turbo/Horde first.
+  // Do NOT mark cool-down when we merely lost an auto-race (another engine already won).
   var perchanceCooldownUntil = 0;
-  var PERCHANCE_COOLDOWN_MS = 30000;
+  var PERCHANCE_COOLDOWN_MS = 15000;
 
-  function markPerchanceFailure() {
+  function markPerchanceFailure(reason) {
     perchanceCooldownUntil = Date.now() + PERCHANCE_COOLDOWN_MS;
+    try { window.__sushiPerchanceCoolReason = String(reason || 'failure'); } catch (e) {}
   }
 
   function isPerchanceCooling() {
     return Date.now() < perchanceCooldownUntil;
+  }
+
+  function perchanceCoolHint() {
+    var sec = Math.max(1, Math.ceil((perchanceCooldownUntil - Date.now()) / 1000));
+    return 'Perchance 短暂冷却中约 ' + sec + ' 秒（上次出图失败/超时后的短暂停用，避免空等）。可改选「自动抢出」或「Flux写实」，或稍后再试。';
   }
 
   function raceFailMessage(errors) {
@@ -486,18 +496,24 @@
   }
 
   async function generatePerchance(run, prompt, index) {
-    // Keep Perchance primary, but do not wait 45s again after a recent component failure.
-    if (isPerchanceCooling()) throw new Error('Perchance 短暂冷却中');
+    // Keep Perchance primary, but do not wait again after a recent real failure.
+    if (isPerchanceCooling()) throw new Error(perchanceCoolHint());
     // In-app Perchance/Perch only — never open perchance.org.
     // Enriched photoreal prompt goes ONLY into hidden 安全英文 — never decorate visible 英文描述/角色描述.
     var safeBox = $('安全英文');
     var prevSafe = safeBox ? safeBox.value : '';
+    var styleBox = $('艺术风格');
+    var prevStyle = styleBox ? styleBox.value : '';
     try {
       if (typeof window.update !== 'function') throw new Error('Perchance 组件未加载');
       var gallery = $('官方画廊');
       var trigger = $('执行生成');
       if (!gallery || !trigger) throw new Error('Perchance 界面未就绪');
       if (safeBox) safeBox.value = prompt;
+      // Also reinforce photoreal style token the plugin may read.
+      if (styleBox && !hasExplicitArtStyle(prompt)) {
+        styleBox.value = '写实摄影，电影剧照，自然皮肤质感，非卡通，非动漫，非插画，真实照片';
+      }
       gallery.hidden = false;
       var before = gallery.querySelectorAll('iframe, img, canvas').length;
       trigger.value = String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000)) + '-p' + String(index || 0);
@@ -509,6 +525,8 @@
       var deadline = Date.now() + 45000;
       while (Date.now() < deadline) {
         ensureActive(run);
+        // Another free-race engine already won — exit quietly, do NOT enter cool-down.
+        if (run && run._raceSettled) throw new Error('lost-race');
         var nodes = gallery.querySelectorAll('iframe, img, canvas');
         if (nodes.length > before) {
           var i = nodes.length - 1;
@@ -524,10 +542,14 @@
       }
       throw new Error('Perchance 出图超时');
     } catch (error) {
-      if (!error || !/已取消生成|短暂冷却中/.test(String(error.message || ''))) markPerchanceFailure();
+      var msg = String(error && error.message || error || '');
+      // Skip cool-down for cancel, already-cooling tip, or losing an auto-race (false positive).
+      if (!error || /已取消生成|短暂冷却中|lost-race/.test(msg)) throw error;
+      markPerchanceFailure(msg);
       throw error;
     } finally {
       if (safeBox) safeBox.value = prevSafe;
+      if (styleBox) styleBox.value = prevStyle;
     }
   }
 
@@ -614,6 +636,9 @@
     } catch (error) {
       throw new Error(raceFailMessage(error && error.errors));
     } finally {
+      // Signal losers (esp. Perchance poll loop) to stop without marking cool-down.
+      run._raceSettled = true;
+      if (run.wake) try { run.wake(); } catch (e) {}
       if (winner && winner.engine !== 'horde' && hordeJobId) {
         try { await api('/' + encodeURIComponent(hordeJobId), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
         run.job = null;
