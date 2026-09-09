@@ -70,7 +70,8 @@ test('the actual workshop initializes without Perchance runtime and generates on
   await f.w.开始生成();
   await first;
   assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 1);
-  assert.match(f.text(), /已生成 1 张/);
+  // Success hides the bulky 「已生成图片」 status card so the gallery sits under 「角色画廊」.
+  assert.equal(f.w.document.getElementById('状态提示').style.display, 'none');
   assert.equal(f.w.document.querySelectorAll('#状态提示 .加载动画').length, 0);
   assert.equal(f.w.document.getElementById('生成按钮').disabled, false);
   assert.equal(f.w.document.querySelectorAll('#图像输出 img').length, 1);
@@ -123,7 +124,9 @@ test('the current Chinese prompt is translated before submission, never replaced
   f.w.调用开源翻译 = async source => { assert.equal(source, '窗边的小猫'); return 'A small cat by the window'; };
   await f.w.开始生成();
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
-  assert.equal(payload.prompt, 'A small cat by the window');
+  assert.match(payload.prompt, /^A small cat by the window/);
+  assert.match(payload.prompt, /photoreal|not anime/i);
+  assert.doesNotMatch(payload.prompt, /A stale unrelated scene/);
 });
 
 test('failed translation preserves the current text, and perchance stays selectable in-app (no official redirect)', async t => {
@@ -133,7 +136,9 @@ test('failed translation preserves the current text, and perchance stays selecta
   // Force horde-only so unit test does not hit live Pollinations.
   f.w.document.getElementById('出图引擎').value = 'horde';
   await f.w.开始生成();
-  assert.equal(JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body).prompt, '窗边的小猫');
+  const failedPrompt = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body).prompt;
+  assert.match(failedPrompt, /^窗边的小猫/);
+  assert.match(failedPrompt, /photoreal|not anime/i);
   const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length;
   // Perchance must remain selectable and generate in-app — never window.open / official link.
   const box = f.w.document.getElementById('出图引擎');
@@ -192,6 +197,7 @@ test('manual platform selection is honored and not remapped to auto', async t =>
   box.disabled = false;
   const realFetch = f.w.fetch;
   const hits = [];
+  const imagePosts = [];
   f.w.fetch = async (url, options = {}) => {
     const href = String(url);
     if (href.includes('/api/workshop/image')) {
@@ -199,10 +205,13 @@ test('manual platform selection is honored and not remapped to auto', async t =>
       const bytes = Buffer.alloc(3200, 9);
       return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
     }
+    if (options.method === 'POST' && href.includes('/api/images')) imagePosts.push(href);
     return realFetch(url, options);
   };
   await f.w.开始生成();
   assert.ok(hits.some(h => h.includes('model=sana')), hits.join('\n'));
+  assert.equal(hits.every(h => h.includes('model=sana')), true, 'must not race other pollinations models when sana selected');
+  assert.equal(imagePosts.length, 0, 'must not also race Horde when sana selected');
   assert.equal(box.value, 'sana');
   assert.equal(box.disabled, false);
 });
@@ -260,6 +269,7 @@ test('random generate fills rich core while managed display stays simple two-lin
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.match(payload.prompt, /shallow depth of field|tungsten key|intimate half-body/i);
   assert.doesNotMatch(payload.prompt, /^photoreal photo of two fictional adults facing each other in warm indoor light$/);
+  assert.match(payload.prompt, /not anime|not manga|not cartoon|photoreal/i);
 });
 
 test('perch/perchance is selectable and included in the free race list', async t => {
@@ -273,21 +283,27 @@ test('perch/perchance is selectable and included in the free race list', async t
   assert.match(src, /name === 'perch'/);
   // Canonical select id is perchance; perch is accepted as an alias in normalizeEngineName.
   assert.match(src, /官方' \|\| name === 'perch'/);
+  assert.match(src, /never free-race fallback/);
+  assert.match(src, /function photorealPrompt/);
   const opened = [];
   f.w.open = (url) => { opened.push(String(url)); return null; };
   box.value = 'perchance';
   const realFetch = f.w.fetch;
+  const pollinationHits = [];
   f.w.fetch = async (url, options = {}) => {
     const href = String(url);
     if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
+      pollinationHits.push(href);
       const bytes = Buffer.alloc(3200, 7);
       return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
     }
     return realFetch(url, options);
   };
+  // Without in-app Perchance plugin, explicit selection should fail closed (no race / no window.open).
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must never open perchance.org');
   assert.equal(box.value, 'perchance');
+  assert.equal(pollinationHits.length, 0, 'explicit perchance must not fall back into free race');
 });
 
 

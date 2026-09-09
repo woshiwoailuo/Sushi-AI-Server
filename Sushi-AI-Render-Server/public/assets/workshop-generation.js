@@ -139,6 +139,36 @@
     return source;
   }
 
+  function photorealPrompt(prompt) {
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!text) {
+      text = 'photoreal cinematic photo of a fictional adult, natural light, DSLR';
+    }
+    // Soft-strip common anime/cartoon style tokens unless the user clearly wants illustration art.
+    if (!/\b(keep anime|anime style requested|manga style|cartoon style|pixar|disney)\b/i.test(text)) {
+      text = text.replace(/\b(anime[- ]style|manga[- ]style|cartoon[- ]style|anime|manga|cartoon|chibi|2d illustration|cel shading)\b/gi, ' ');
+      text = text.replace(/\s{2,}/g, ' ').trim();
+    }
+    if (!/photoreal|RAW photo|DSLR|cinematic still|real human/i.test(text)) {
+      text += ', photorealistic RAW photo, cinematic still, natural skin texture, sharp focus, real human';
+    }
+    if (!/not anime|no anime|非卡通|非动漫/i.test(text)) {
+      text += ', not anime, not manga, not cartoon, not illustration';
+    }
+    if (!/fictional adult|18\+|no minors/i.test(text)) {
+      text += ', fictional adult 18+ only, no minors';
+    }
+    return text.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  function hideStatusPanel() {
+    var box = $('状态提示');
+    if (!box) return;
+    box.style.display = 'none';
+    box.setAttribute('aria-busy', 'false');
+    box.replaceChildren();
+  }
+
   function progress(run, job) {
     var detail = '免费共享算力的等待时间会变化，最多等待 10 分钟。';
     if (job.queuePosition !== null && job.queuePosition !== undefined) detail = '当前排队位置：' + job.queuePosition + '。' + detail;
@@ -391,7 +421,7 @@
     return msgs.length ? msgs.join('；') : '自动抢出失败：各平台均未成功';
   }
 
-  var FREE_RACE_ENGINES = ['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'];
+  var FREE_RACE_ENGINES = ['flux-realism', 'turbo', 'flux', 'sana', 'horde', 'perchance'];
 
   function normalizeEngineName(raw) {
     var name = String(raw || '').trim().toLowerCase();
@@ -471,6 +501,8 @@
   async function generateOne(run, prompt, index) {
     var engine = resolveEngine();
     lastRateLimited = false;
+    prompt = photorealPrompt(prompt);
+    // Honor explicit platform selection: only race when engine === 'auto'.
     if (engine === 'horde') {
       if (isEngineCool('horde')) throw Object.assign(new Error(coolHint('horde') + '。限流冷却中，请稍后或换自动抢出。'), { status: 429, code: 'ENGINE_COOLDOWN' });
       try {
@@ -481,13 +513,12 @@
       }
     }
     if (engine === 'perchance') {
-      // Explicit Perch/Perchance: try in-app plugin first, then fall back to full free race.
-      try { return await generatePerchance(run, prompt, index); }
-      catch (e) { /* continue into shared race below */ }
+      // Explicit Perch/Perchance only — in-app plugin, never open perchance.org, never free-race fallback.
+      return await generatePerchance(run, prompt, index);
     }
-    if (engine !== 'auto' && engine !== 'perchance') return generatePollinations(run, prompt, index, engine);
+    if (engine !== 'auto') return generatePollinations(run, prompt, index, engine);
 
-    // auto / perchance(in-app): race free platforms; skip engines still in short cool-down after 429/5xx.
+    // auto only: race free platforms; skip engines still in short cool-down after 429/5xx.
     // Perchance stays in the race; generation never window.open's perchance.org.
     var activeEngines = FREE_RACE_ENGINES.filter(function (eng) { return !isEngineCool(eng); });
     var cooled = FREE_RACE_ENGINES.filter(isEngineCool);
@@ -495,7 +526,7 @@
       throw Object.assign(new Error('出图通道限流：本轮引擎都在短冷却中，请稍后再试（不是全部永久失败）。'), { status: 429, code: 'ALL_COOLDOWN' });
     }
     status(
-      (engine === 'perchance' ? 'Perch / Perchance 应用内 · 第 ' : '自动抢出 · 第 ') + (run.completed + 1) + '/' + run.total + ' 张',
+      '自动抢出 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张',
       (cooled.length
         ? ('已跳过冷却中：' + cooled.map(engineLabel).join('、') + '。')
         : '') + activeEngines.map(engineLabel).join(' / ') + ' 同时开跑，先到先得。',
@@ -590,7 +621,8 @@
         run.completed += 1;
         restored = false;
       }
-      status('已生成 ' + run.completed + ' 张图片', '图片已显示在下方。', false);
+      // Hide the bulky status card so images sit directly under 「角色画廊」.
+      hideStatusPanel();
     } catch (error) {
       if (active !== run) return;
       var cleanupError = '';
@@ -633,9 +665,15 @@
       }
     }
     var dimensions = value('图像比例').split('x');
+    var negative = value('负面提示');
+    if (!negative) {
+      negative = 'anime, manga, cartoon, illustration, cel shading, lowres, blurry, bad anatomy, extra limbs, child, minor, watermark, text';
+    } else if (!/anime|manga|cartoon|动漫|卡通/i.test(negative)) {
+      negative += ', anime, manga, cartoon, illustration';
+    }
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
-      negativePrompt: value('负面提示'), seed: value('随机种子'), cfgScale: Number(value('引导强度')) || 7,
+      negativePrompt: negative, seed: value('随机种子'), cfgScale: Number(value('引导强度')) || 7,
       sourceImage: value('参考图地址'), strength: Number(value('图生图强度')) || 0.45
     };
     active = run; controls(true);
