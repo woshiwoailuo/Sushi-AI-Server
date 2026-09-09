@@ -222,7 +222,7 @@
     status((job.state === 'processing' ? '正在生成' : '正在排队') + ' · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', detail, true);
   }
 
-  async function poll(run, job) {
+  async function poll(run, job, providerSignal) {
     var errors = 0;
     while (!['done', 'failed', 'cancelled'].includes(job.state)) {
       ensureActive(run);
@@ -231,7 +231,7 @@
       await pause(run, 2500);
       ensureActive(run);
       try {
-        job = await api('/' + encodeURIComponent(job.id), { signal: run.controller.signal });
+        job = await api('/' + encodeURIComponent(job.id), { signal: providerSignal || run.controller.signal });
         run.job = job;
         errors = 0;
       } catch (error) {
@@ -322,6 +322,70 @@
       + '&seed=' + seed;
   }
 
+  // A provider must either return a usable image within this budget or be
+  // removed from the current workshop session. This prevents one free
+  // upstream queue from holding the whole workshop open indefinitely.
+  var PROVIDER_RESULT_TIMEOUT_MS = 30000;
+  var disabledEngines = Object.create(null);
+
+  function disableEngine(engine, reason) {
+    engine = normalizeEngineName(engine);
+    if (!engine || engine === 'auto') return;
+    disabledEngines[engine] = String(reason || '30秒内未返回可用图片');
+    var select = $('出图引擎');
+    if (select) {
+      var option = select.querySelector('option[value="' + engine + '"]');
+      if (option) option.remove();
+      if (select.value === engine) {
+        select.value = 'auto';
+        window.__sushiPreferredProvider = 'auto';
+      }
+    }
+    var admin = $('管理默认平台');
+    if (admin) {
+      var adminOption = admin.querySelector('option[value="' + engine + '"]');
+      if (adminOption) adminOption.remove();
+      if (admin.value === engine) {
+        var fallback = admin.querySelector('option');
+        admin.value = fallback ? fallback.value : '';
+      }
+    }
+    try { window.__sushiDisabledImageEngines = Object.keys(disabledEngines); } catch (e) {}
+  }
+
+  function isEngineDisabled(engine) {
+    return !!disabledEngines[normalizeEngineName(engine)];
+  }
+
+  async function runWithProviderBudget(run, engine, task) {
+    engine = normalizeEngineName(engine);
+    var providerController = new AbortController();
+    // Do not use AbortSignal.any here: embedded WebViews and jsdom can expose
+    // incompatible AbortSignal implementations. Forward the run cancellation
+    // into one native controller instead.
+    var signal = providerController.signal;
+    var forwardAbort = function () { providerController.abort(); };
+    if (run.controller.signal.aborted) forwardAbort();
+    else run.controller.signal.addEventListener('abort', forwardAbort, { once: true });
+    var timedOut = false;
+    var timer = setTimeout(function () { timedOut = true; providerController.abort(); }, PROVIDER_RESULT_TIMEOUT_MS);
+    try {
+      return await task(signal);
+    } catch (error) {
+      if (timedOut && !run.cancelled) {
+        disableEngine(engine, '30秒内未返回图片');
+        var timeoutError = new Error(engineLabel(engine) + ' 30秒内未返回图片，已自动移除本次可选平台');
+        timeoutError.code = 'ENGINE_TIMEOUT';
+        timeoutError.engine = engine;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      run.controller.signal.removeEventListener('abort', forwardAbort);
+    }
+  }
+
   function turboUrl(prompt, width, height, seed) {
     return pollinationsProxyUrl('turbo', prompt, width, height, seed);
   }
@@ -366,7 +430,7 @@
     });
   }
 
-  async function generatePollinations(run, prompt, index, model) {
+  async function generatePollinations(run, prompt, index, model, providerSignal) {
     model = normalizeEngineName(model || 'turbo');
     if (isEngineCool(model)) {
       var coolErr = new Error(coolHint(model) + '（限流跳过）');
@@ -386,7 +450,7 @@
       ensureActive(run);
       var url = pollinationsProxyUrl(model, prompt, run.payload.width, run.payload.height, seed + attempt * 131);
       try {
-        var response = await fetch(url, { method: 'GET', credentials: 'include', cache: 'no-store', headers: authHeaders(), signal: run.controller.signal });
+        var response = await fetch(url, { method: 'GET', credentials: 'include', cache: 'no-store', headers: authHeaders(), signal: providerSignal || run.controller.signal });
         if (!response.ok) {
           var httpErr = new Error(label + (response.status === 429 ? ' 限流(429)' : (' HTTP ' + response.status)));
           httpErr.status = response.status;
@@ -422,13 +486,13 @@
     return generatePollinations(run, prompt, index, 'turbo');
   }
 
-  async function generateHorde(run, prompt, index) {
+  async function generateHorde(run, prompt, index, providerSignal) {
     var payload = Object.assign({}, run.payload, { prompt: prompt });
     if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
     status('正在提交 Horde · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '服务器如刚启动可能稍慢；重复点击不会创建新任务。', true);
-    run.job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: run.controller.signal });
+    run.job = await api('', { method: 'POST', body: payload, timeoutMs: PROVIDER_RESULT_TIMEOUT_MS, signal: providerSignal || run.controller.signal });
     ensureActive(run);
-    var done = await poll(run, run.job);
+    var done = await poll(run, run.job, providerSignal);
     return { url: done.image.url, engine: 'horde', job: done };
   }
 
@@ -567,7 +631,7 @@
     }
   }
 
-  async function generatePerchance(run, prompt, index) {
+  async function generatePerchance(run, prompt, index, providerSignal) {
     // Official plugin if present; otherwise same-origin Perch proxy.
     // Never window.open perchance.org (Cloudflare + X-Frame-Options block embeds).
     if (typeof window.update === 'function') {
@@ -583,8 +647,18 @@
       '应用内出图，不跳转官网。',
       true
     );
-    var result = await generatePollinations(run, prompt, index, 'perchance');
-    return { url: result.url, engine: 'perchance' };
+    try {
+      var result = await generatePollinations(run, prompt, index, 'perchance', providerSignal);
+      return { url: result.url, engine: 'perchance' };
+    } catch (error) {
+      if (error && (error.code === 'ENGINE_COOLDOWN' || error.status === 429 || error.status >= 500 || /取消/.test(String(error.message || '')))) throw error;
+      // Repair route: keep the user's Perch choice and core prompt, but use
+      // the stable Turbo model through the same-origin proxy if Flux写实 is
+      // temporarily unavailable. The user never leaves the workshop.
+      status('Perch 暂时无响应，正在自动修复', '保留核心描述，切换同源备用模型重试。', true);
+      var repaired = await generatePollinations(run, prompt, index, 'turbo', providerSignal);
+      return { url: repaired.url, engine: 'perchance' };
+    }
   }
 
   async function generateOne(run, prompt, index) {
@@ -602,7 +676,9 @@
     if (engine === 'horde') {
       if (isEngineCool('horde')) throw Object.assign(new Error(coolHint('horde') + '。限流冷却中，请稍后或换自动抢出。'), { status: 429, code: 'ENGINE_COOLDOWN' });
       try {
-        return await generateHorde(run, prompt, index);
+        return await runWithProviderBudget(run, engine, function (signal) {
+          return generateHorde(run, prompt, index, signal);
+        });
       } catch (error) {
         if (error && (error.status === 429 || error.status >= 500)) markEngineCool('horde', error.status);
         throw error;
@@ -610,20 +686,24 @@
     }
     if (engine === 'perchance') {
       // Explicit Perch: plugin if loaded, otherwise same-origin proxy. Never open perchance.org.
-      return await generatePerchance(run, prompt, index);
+      return await runWithProviderBudget(run, engine, function (signal) {
+        return generatePerchance(run, prompt, index, signal);
+      });
     }
-    if (engine !== 'auto') return generatePollinations(run, prompt, index, engine);
+    if (engine !== 'auto') return runWithProviderBudget(run, engine, function (signal) {
+      return generatePollinations(run, prompt, index, engine, signal);
+    });
 
     // auto only: race free platforms; skip engines still in short cool-down after 429/5xx.
     // Perchance always eligible (cool-down cancelled); generation never window.open's perchance.org.
     var activeEngines = FREE_RACE_ENGINES.filter(function (eng) {
       if (eng === 'perchance' && typeof window.update !== 'function') return false;
       if (eng === 'perchance' && isPerchanceCooling()) return false; // always false now
-      return !isEngineCool(eng);
+      return !isEngineCool(eng) && !isEngineDisabled(eng);
     });
     var cooled = FREE_RACE_ENGINES.filter(function (eng) {
       if (eng === 'perchance' && isPerchanceCooling()) return true;
-      return isEngineCool(eng);
+      return isEngineCool(eng) || isEngineDisabled(eng);
     });
     if (!activeEngines.length) {
       throw Object.assign(new Error('出图通道限流：本轮引擎都在短冷却中，请稍后再试（不是全部永久失败）。'), { status: 429, code: 'ALL_COOLDOWN' });
@@ -650,26 +730,33 @@
           var payload = Object.assign({}, run.payload, { prompt: prompt });
           if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
           try {
-            var job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: run.controller.signal });
+            var result = await runWithProviderBudget(run, eng, async function (signal) {
+              var job = await api('', { method: 'POST', body: payload, timeoutMs: PROVIDER_RESULT_TIMEOUT_MS, signal: signal });
+              hordeJobId = job.id;
+              run.job = job;
+              if (winner) {
+                try { await api('/' + encodeURIComponent(job.id), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
+                throw new Error('lost-race');
+              }
+              var done = await poll(run, job, signal);
+              if (winner) throw new Error('lost-race');
+              return { url: done.image.url, engine: 'horde', job: done };
+            });
+            return claim(result);
           } catch (error) {
             if (error && (error.status === 429 || error.status >= 500)) markEngineCool('horde', error.status);
             throw error;
           }
-          hordeJobId = job.id;
-          run.job = job;
-          if (winner) {
-            try { await api('/' + encodeURIComponent(job.id), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
-            throw new Error('lost-race');
-          }
-          var done = await poll(run, job);
-          if (winner) throw new Error('lost-race');
-          return claim({ url: done.image.url, engine: 'horde', job: done });
         })();
       }
       if (eng === 'perchance') {
-        return generatePerchance(run, prompt, index).then(claim);
+        return runWithProviderBudget(run, eng, function (signal) {
+          return generatePerchance(run, prompt, index, signal);
+        }).then(claim);
       }
-      return generatePollinations(run, prompt, index, eng).then(claim);
+      return runWithProviderBudget(run, eng, function (signal) {
+        return generatePollinations(run, prompt, index, eng, signal);
+      }).then(claim);
     });
 
     try {
@@ -689,6 +776,7 @@
 
   function resolveEngine() {
     var raw = normalizeEngineName(value('出图引擎') || window.__sushiPreferredProvider || 'perchance');
+    if (isEngineDisabled(raw)) return 'auto';
     if (raw === 'turbo' || raw === 'horde' || raw === 'flux' || raw === 'flux-realism' || raw === 'sana') return raw;
     // perchance: keep as selectable in-app path (free race under the hood; never open perchance.org)
     if (raw === 'perchance') return 'perchance';
