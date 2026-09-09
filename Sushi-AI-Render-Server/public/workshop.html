@@ -55,6 +55,7 @@
           <span class="核心标题左">
             <b>01 · 核心描述</b>
             <button type="button" class="文字钮" id="清空描述按钮" onclick="清空描述()" title="清空核心描述与相关出图描述">清空描述</button>
+            <button type="button" class="文字钮" id="智能修饰按钮" onclick="智能修饰()" title="智能追加写实或画风修饰词到核心描述；再点可换一版">智能修饰</button>
           </span>
           <span>必填</span>
         </div>
@@ -2185,12 +2186,101 @@
     return 项;
   }
 
+  // 「智能修饰」：把写实/画风修饰写入可见核心描述；再点替换上一版后缀，不无限堆叠。
+  var _智能修饰基座 = "";
+  var _智能修饰后缀 = "";
+  var _智能修饰序号 = 0;
+
+  function _智能修饰候选(基座) {
+    var 文 = String(基座 || "");
+    var 画风 = 显式画风(文);
+    var 中文 = /[\u4e00-\u9fff]/.test(文);
+    if (画风) {
+      if (中文) {
+        return [
+          "，二次元动漫插画风格，精致线稿与赛璐璐上色，鲜明色彩层次，清晰角色设计，虚构成年人，无未成年人",
+          "，日系动漫插画，干净线条，柔和光影，高完成度角色立绘，虚构成年人，18+",
+          "，漫画风插画，鲜明配色，动态构图，细腻表情与服饰细节，虚构成年角色，无未成年人"
+        ];
+      }
+      return [
+        ", anime illustration style, clean lineart, cel shading, vivid colors, detailed character design, fictional adult 18+ only, no minors",
+        ", manga illustration, soft lighting, high-finish character portrait, fictional adult 18+, no minors",
+        ", comic-style illustration, dynamic composition, crisp linework, fictional adult, no minors"
+      ];
+    }
+    if (中文) {
+      return [
+        "，写实摄影，单反拍摄，85mm，自然皮肤毛孔与织物材质，自然光，电影剧照，浅景深，真实照片，非动漫非卡通非插画，虚构成年人，无未成年人",
+        "，纪实人像摄影，自然光影，真实皮肤质感，清晰材质细节，浅景深，非二次元非卡通，虚构成年人，18+",
+        "，电影感写实照片，85mm镜头，柔和侧光，真实毛孔与布料纹理，非动漫非插画，虚构成年，无未成年人"
+      ];
+    }
+    return [
+      ", photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture, natural light, cinematic still, shallow depth of field, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
+      ", photoreal cinematic photograph, natural light, real human skin texture, sharp material detail, DSLR, not anime, not cartoon, fictional adult 18+, no minors",
+      ", realistic photography, 85mm lens, soft key light, pore-level skin, fabric weave visible, not 2d art, not cel shading, fictional adult, no minors"
+    ];
+  }
+
+  function 智能修饰() {
+    var 框 = document.getElementById("角色描述");
+    if (!框) return;
+    var 全文 = String(框.value || "");
+    var 文 = 全文.trim();
+    if (!文) {
+      alert("请先填写核心描述，再点智能修饰。");
+      框.focus();
+      return;
+    }
+    var 可替换 = false;
+    var 基座 = 全文;
+    if (_智能修饰后缀 && _智能修饰基座 !== "" && 全文.length >= _智能修饰后缀.length &&
+        全文.slice(全文.length - _智能修饰后缀.length) === _智能修饰后缀) {
+      var 前 = 全文.slice(0, 全文.length - _智能修饰后缀.length);
+      var 旧基 = String(_智能修饰基座);
+      var 相似度 = 前.trim() === 旧基.trim() ||
+        (前.trim().length > 8 && 旧基.trim().indexOf(前.trim().slice(0, Math.min(24, 前.trim().length))) === 0 &&
+          Math.abs(前.trim().length - 旧基.trim().length) <= Math.max(12, 旧基.trim().length * 0.35));
+      if (前 === 旧基 || 前.trim() === 旧基.trim() || 相似度) {
+        可替换 = true;
+        基座 = 前;
+      }
+    }
+    if (!可替换) {
+      _智能修饰序号 = 0;
+      基座 = 全文;
+    } else {
+      _智能修饰序号 += 1;
+    }
+    var 列表 = _智能修饰候选(基座.trim());
+    var 后缀 = 列表[_智能修饰序号 % 列表.length];
+    _智能修饰基座 = 基座;
+    _智能修饰后缀 = 后缀;
+    框.value = 基座 + 后缀;
+    try { 框.dispatchEvent(new Event("input", { bubbles: true })); } catch (e0) {}
+    try { localStorage.setItem("角色生成器_上次描述", 框.value); } catch (e1) {}
+    var 安 = document.getElementById("安全英文");
+    var 英 = document.getElementById("英文描述");
+    if (安) {
+      var 英文明 = 只留英文(去掉方括号((英 && 英.value) || ""));
+      if (!英文明) 英文明 = 只留英文(去掉方括号(框.value));
+      if (!英文明) 英文明 = 框.value;
+      安.value = 英文明;
+    }
+    if (typeof 刷新画面说明 === "function") 刷新画面说明();
+    框.focus();
+  }
+
   function 清空描述() {
     // 只清空核心描述与相关出图描述字段；不碰画廊/历史/参考图。
     ["角色描述", "中文译文", "英文描述", "安全英文"].forEach(function (id) {
       var 框 = document.getElementById(id);
       if (框) 框.value = "";
     });
+    _智能修饰基座 = "";
+    _智能修饰后缀 = "";
+    _智能修饰序号 = 0;
     try { localStorage.removeItem("角色生成器_上次描述"); } catch (e) {}
     上次译源 = "";
     if (typeof 刷新画面说明 === "function") 刷新画面说明();
@@ -3353,7 +3443,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.27" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.28" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

@@ -125,8 +125,8 @@ test('the current Chinese prompt is translated before submission, never replaced
   await f.w.开始生成();
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.match(payload.prompt, /A small cat by the window/);
-  assert.match(payload.prompt, /^photorealistic RAW photo/i);
-  assert.match(payload.prompt, /photoreal|not anime/i);
+  // Visible core is source of truth — no silent photoreal rewrite on generate.
+  assert.doesNotMatch(payload.prompt, /^photorealistic RAW photo/i);
   assert.doesNotMatch(payload.prompt, /A stale unrelated scene/);
 });
 
@@ -139,8 +139,7 @@ test('failed translation preserves the current text, and perchance stays selecta
   await f.w.开始生成();
   const failedPrompt = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body).prompt;
   assert.match(failedPrompt, /窗边的小猫/);
-  assert.match(failedPrompt, /^photorealistic RAW photo/i);
-  assert.match(failedPrompt, /photoreal|not anime/i);
+  assert.doesNotMatch(failedPrompt, /^photorealistic RAW photo/i);
   const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length;
   // Perchance must remain selectable and generate in-app — never window.open / official link.
   const box = f.w.document.getElementById('出图引擎');
@@ -271,7 +270,7 @@ test('random generate fills rich core while managed display stays simple two-lin
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.match(payload.prompt, /shallow depth of field|tungsten key|intimate half-body/i);
   assert.doesNotMatch(payload.prompt, /^photoreal photo of two fictional adults facing each other in warm indoor light$/);
-  assert.match(payload.prompt, /not anime|not manga|not cartoon|photoreal/i);
+  assert.match(payload.prompt, /photoreal|shallow depth of field/i);
 });
 
 test('perch/perchance is selectable and included in the free race list', async t => {
@@ -350,16 +349,16 @@ test('workshop source defaults to in-app perchance as the primary route', () => 
 });
 
 
-test('perchance failure enters a short cooldown without free-race fallback for explicit selection', async t => {
+test('perchance cool-down cancelled: explicit selection retries without UI gate or free-race fallback', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎');
   box.value = 'perchance';
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /PERCHANCE_COOLDOWN_MS = 15000/);
+  assert.match(src, /PERCHANCE_COOLDOWN_MS = 0/);
   assert.match(src, /markPerchanceFailure/);
-  assert.match(src, /isPerchanceCooling/);
-  assert.match(src, /Perchance 短暂冷却中/);
-  assert.match(src, /eng === 'perchance' && isPerchanceCooling\(\)/);
+  assert.match(src, /function isPerchanceCooling\(\) \{\s*return false;/);
+  assert.match(src, /cool-down cancelled|no cool-down gate/i);
+  assert.doesNotMatch(src, /Perchance 短暂冷却中/);
   assert.match(src, /never free-race fallback/);
   assert.equal(f.w.当前引擎(), 'perchance');
   const opened = [];
@@ -375,18 +374,18 @@ test('perchance failure enters a short cooldown without free-race fallback for e
     }
     return realFetch(url, options);
   };
-  // First explicit attempt fails closed (no plugin) and marks cooldown — never FREE_RACE.
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must never open perchance.org');
   assert.equal(box.value, 'perchance');
   assert.equal(pollinationHits.length, 0, 'explicit perchance must not fall back into free race');
-  // Second attempt while cooling should fail fast with the cooldown tip, still no race.
+  const tip1 = f.w.document.getElementById('状态提示').textContent || '';
+  assert.doesNotMatch(tip1, /冷却中/);
   await f.w.开始生成();
-  assert.equal(pollinationHits.length, 0, 'cooling explicit perchance must still not free-race');
-  const tip = f.w.document.getElementById('状态提示').textContent || '';
-  assert.match(tip, /Perchance 短暂冷却中/);
+  assert.equal(pollinationHits.length, 0, 'retry still must not free-race');
+  assert.equal(opened.length, 0);
+  const tip2 = f.w.document.getElementById('状态提示').textContent || '';
+  assert.doesNotMatch(tip2, /冷却中/);
 });
-
 
 test('photorealPrompt enriches by default but style-keyword bypass keeps anime/二次元/插画', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
@@ -433,7 +432,7 @@ test('style-keyword generation keeps managed display simple while gen prompt hon
   assert.doesNotMatch(beforeCap, /not anime|photorealistic RAW photo/i);
 });
 
-test('default generation enriches photoreal prompt without rewriting display fields', async t => {
+test('default generation uses visible core as-is without silent photoreal rewrite', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('角色描述').value = 'A fictional adult reading by a library window';
   f.w.document.getElementById('中文译文').value = '图书馆窗边的成年人';
@@ -446,9 +445,8 @@ test('default generation enriches photoreal prompt without rewriting display fie
   await f.w.开始生成();
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.match(payload.prompt, /A fictional adult reading by a library window/i);
-  assert.match(payload.prompt, /^photorealistic RAW photo/i);
-  assert.match(payload.prompt, /photoreal|natural light|texture|not anime|DSLR/i);
-  assert.notEqual(payload.prompt, beforeEn);
+  assert.doesNotMatch(payload.prompt, /^photorealistic RAW photo/i);
+  assert.doesNotMatch(payload.prompt, /not anime, not manga, not cartoon/i);
   assert.equal(f.w.document.getElementById('角色描述').value, beforeCore, '核心描述 must stay user text');
   assert.equal(f.w.document.getElementById('中文译文').value, beforeZh);
   assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
@@ -475,33 +473,58 @@ test('清空描述 clears core and linked prompt fields but not gallery', async 
 
 test('generatePerchance source does not assign enriched prompt into 英文描述', async t => {
   const src = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /Enriched photoreal prompt goes ONLY into hidden/);
+  assert.match(src, /only touch hidden 安全英文|source of truth/);
   assert.doesNotMatch(src, /engBox\.value\s*=\s*prompt/);
   assert.match(src, /safeBox\.value\s*=\s*prompt/);
 });
 
 
-test('auto-race loss must not mark Perchance cool-down (no false positive)', async t => {
+test('auto-race loss must not hang Perchance and cool-down remains cancelled', async t => {
   const src = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
   assert.match(src, /run\._raceSettled = true/);
   assert.match(src, /if \(run && run\._raceSettled\) throw new Error\('lost-race'\)/);
-  assert.match(src, /短暂冷却中\|lost-race/);
-  assert.match(src, /PERCHANCE_COOLDOWN_MS = 15000/);
+  assert.match(src, /lost-race/);
+  assert.match(src, /PERCHANCE_COOLDOWN_MS = 0/);
   assert.match(src, /perchanceCoolHint/);
+  assert.doesNotMatch(src, /PERCHANCE_COOLDOWN_MS = 15000/);
   assert.doesNotMatch(src, /PERCHANCE_COOLDOWN_MS = 30000/);
 });
 
-test('photorealPrompt lead-in reaches generator while display core stays plain', async t => {
+test('智能修饰 writes visible core modifiers and generation uses that text', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.ok(f.w.document.getElementById('智能修饰按钮'), '智能修饰 button present');
+  assert.equal(typeof f.w.智能修饰, 'function');
   f.w.document.getElementById('出图引擎').value = 'horde';
   f.w.document.getElementById('角色描述').value = '窗边看书的成年人';
   f.w.document.getElementById('中文译文').value = '窗边看书的成年人';
   f.w.document.getElementById('英文描述').value = 'an adult reading by the window';
-  const beforeCore = f.w.document.getElementById('角色描述').value;
+  f.w.智能修饰();
+  const afterFirst = f.w.document.getElementById('角色描述').value;
+  assert.match(afterFirst, /^窗边看书的成年人/);
+  assert.match(afterFirst, /写实摄影|单反|皮肤|非动漫/);
+  assert.ok(afterFirst.length > '窗边看书的成年人'.length);
+  f.w.智能修饰();
+  const afterSecond = f.w.document.getElementById('角色描述').value;
+  assert.match(afterSecond, /^窗边看书的成年人/);
+  assert.notEqual(afterSecond, afterFirst);
+  assert.ok(afterSecond.indexOf(afterFirst) === -1, 'must not stack previous full enriched text');
+  f.w.document.getElementById('角色描述').value = '动漫风格的窗边成年人';
+  f.w.智能修饰();
+  const animeCore = f.w.document.getElementById('角色描述').value;
+  assert.match(animeCore, /二次元|动漫|插画|赛璐璐|线稿/);
+  assert.doesNotMatch(animeCore, /写实摄影|非动漫非卡通/);
+  f.w.document.getElementById('角色描述').value = afterFirst;
+  f.w.document.getElementById('角色描述').dispatchEvent(new f.w.Event('input', { bubbles: true }));
   await f.w.开始生成();
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
-  assert.match(payload.prompt, /^photorealistic RAW photo/i);
-  assert.match(payload.prompt, /not anime|not manga|not cartoon/i);
-  assert.equal(f.w.document.getElementById('角色描述').value, beforeCore);
-  assert.doesNotMatch(beforeCore, /photorealistic RAW photo|85mm|not anime/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, afterFirst);
+  assert.ok(payload.prompt && payload.prompt.length > 8);
+  assert.doesNotMatch(payload.prompt, /^photorealistic RAW photo/i);
+});
+
+test('photorealPrompt helper still available for style-aware enrich logic', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
+  assert.match(plain, /^photorealistic RAW photo/i);
+  assert.match(plain, /not anime|not manga|not cartoon/i);
 });

@@ -431,23 +431,22 @@
     return engineLabel(eng) + ' 冷却中约 ' + sec + ' 秒';
   }
 
-  // Short cooldown after *real* Perchance failure/timeout so auto race prefers Turbo/Horde first.
-  // Do NOT mark cool-down when we merely lost an auto-race (another engine already won).
+  // Perchance cool-down cancelled: explicit Perchance and auto race may always try.
+  // Keep lost-race handling so auto-race losers exit without hanging; never gate on cooldown.
   var perchanceCooldownUntil = 0;
-  var PERCHANCE_COOLDOWN_MS = 15000;
+  var PERCHANCE_COOLDOWN_MS = 0;
 
   function markPerchanceFailure(reason) {
-    perchanceCooldownUntil = Date.now() + PERCHANCE_COOLDOWN_MS;
+    // no-op — cool-down UX removed; keep symbol for older callers/tests.
     try { window.__sushiPerchanceCoolReason = String(reason || 'failure'); } catch (e) {}
   }
 
   function isPerchanceCooling() {
-    return Date.now() < perchanceCooldownUntil;
+    return false;
   }
 
   function perchanceCoolHint() {
-    var sec = Math.max(1, Math.ceil((perchanceCooldownUntil - Date.now()) / 1000));
-    return 'Perchance 短暂冷却中约 ' + sec + ' 秒（上次出图失败/超时后的短暂停用，避免空等）。可改选「自动抢出」或「Flux写实」，或稍后再试。';
+    return '';
   }
 
   function raceFailMessage(errors) {
@@ -496,10 +495,8 @@
   }
 
   async function generatePerchance(run, prompt, index) {
-    // Keep Perchance primary, but do not wait again after a recent real failure.
-    if (isPerchanceCooling()) throw new Error(perchanceCoolHint());
-    // In-app Perchance/Perch only — never open perchance.org.
-    // Enriched photoreal prompt goes ONLY into hidden 安全英文 — never decorate visible 英文描述/角色描述.
+    // In-app Perchance/Perch only — never open perchance.org; no cool-down gate.
+    // Prompt comes from visible 核心描述 (source of truth); only touch hidden 安全英文 temporarily.
     var safeBox = $('安全英文');
     var prevSafe = safeBox ? safeBox.value : '';
     var styleBox = $('艺术风格');
@@ -543,7 +540,7 @@
       throw new Error('Perchance 出图超时');
     } catch (error) {
       var msg = String(error && error.message || error || '');
-      // Skip cool-down for cancel, already-cooling tip, or losing an auto-race (false positive).
+      // lost-race / cancel: exit quietly. Cool-down cancelled — markPerchanceFailure is a no-op.
       if (!error || /已取消生成|短暂冷却中|lost-race/.test(msg)) throw error;
       markPerchanceFailure(msg);
       throw error;
@@ -556,7 +553,14 @@
   async function generateOne(run, prompt, index) {
     var engine = resolveEngine();
     lastRateLimited = false;
-    prompt = photorealPrompt(prompt);
+    // Workshop: visible 核心描述 is source of truth after「智能修饰」.
+    // Do NOT silently re-apply photorealPrompt on top (avoids double enrich). Light 18+ pass-through only.
+    prompt = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (prompt && !/fictional adult|18\+|no minors|虚构成年|无未成年人/i.test(prompt)) {
+      prompt += /[\u4e00-\u9fff]/.test(prompt)
+        ? '，虚构成年人，18+，无未成年人'
+        : ', fictional adult 18+ only, no minors';
+    }
     // Honor explicit platform selection: only race when engine === 'auto'.
     if (engine === 'horde') {
       if (isEngineCool('horde')) throw Object.assign(new Error(coolHint('horde') + '。限流冷却中，请稍后或换自动抢出。'), { status: 429, code: 'ENGINE_COOLDOWN' });
@@ -569,15 +573,14 @@
     }
     if (engine === 'perchance') {
       // Explicit Perch/Perchance only — in-app plugin, never open perchance.org, never free-race fallback.
-      // If cooling after a recent failure, fail fast with tip (do not fall into FREE_RACE).
       return await generatePerchance(run, prompt, index);
     }
     if (engine !== 'auto') return generatePollinations(run, prompt, index, engine);
 
     // auto only: race free platforms; skip engines still in short cool-down after 429/5xx.
-    // Perchance stays in the race unless recently failed; generation never window.open's perchance.org.
+    // Perchance always eligible (cool-down cancelled); generation never window.open's perchance.org.
     var activeEngines = FREE_RACE_ENGINES.filter(function (eng) {
-      if (eng === 'perchance' && isPerchanceCooling()) return false;
+      if (eng === 'perchance' && isPerchanceCooling()) return false; // always false now
       return !isEngineCool(eng);
     });
     var cooled = FREE_RACE_ENGINES.filter(function (eng) {
