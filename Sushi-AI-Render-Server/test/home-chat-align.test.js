@@ -50,6 +50,13 @@ test('homepage chat channel picker honors explicit selection and auto race', () 
   assert.match(workshop, /id="AI通道"/);
   assert.match(workshop, /问免费模型\(文本, 本轮通道\)/);
   assert.match(workshop, /if \(指定 === "deepseek"\) return 问花粉/);
+  const wsPicker = workshop.slice(workshop.indexOf('id="AI通道"'), workshop.indexOf('</select>', workshop.indexOf('id="AI通道"')) + 9);
+  assert.match(wsPicker, /value="auto"/);
+  assert.match(wsPicker, /value="glm"/);
+  assert.match(wsPicker, /value="horde"/);
+  assert.doesNotMatch(wsPicker, /value="openai"/);
+  assert.doesNotMatch(wsPicker, /value="groq"/);
+  assert.doesNotMatch(wsPicker, /value="deepseek"/);
 });
 
 test('homepage and server wire Groq + Grok OpenAI-compatible chat', () => {
@@ -131,6 +138,7 @@ test('homepage enterGen uses authenticated /workshop path (no AES unlock race)',
   assert.ok(enter.length > 200);
   assert.match(enter, /正在打开工坊/);
   assert.match(enter, /iframe\.src\s*=\s*['"]\/workshop['"]/);
+  assert.match(server, /app\.get\('\/workshop\.html', sendWorkshopLoader\)/);
   assert.match(enter, /sushi_wrap_unlock/);
   assert.match(server, /function readWorkshopPlaintext/);
   assert.match(server, /workshopPlainCache/);

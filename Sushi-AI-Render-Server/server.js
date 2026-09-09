@@ -1746,6 +1746,7 @@ app.post('/api/workshop/img2img', async (req, res) => {
 
 app.get('/workshop', sendWorkshopLoader);
 app.get('/workshop/', sendWorkshopLoader);
+app.get('/workshop.html', sendWorkshopLoader);
 
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'admin', 'index.html'));
