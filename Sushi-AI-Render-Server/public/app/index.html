@@ -169,8 +169,7 @@
         <label for="chatChannel">回答通道</label>
         <select id="chatChannel" aria-label="AI 回答通道">
           <option value="auto" selected>自动抢答 · 推荐</option>
-          <option value="openai">快速对话 · OpenAI</option>
-          <option value="deepseek">DeepSeek</option>
+          <option value="grok">Grok · xAI</option>
           <option value="horde">Horde</option>
         </select>
       </div>
@@ -533,6 +532,7 @@
       } catch (err) {
         var msg = (err && err.message) || '通道失败';
         if (err && err.status === 402) msg = '快速对话通道暂时不可用（需付费额度）';
+        else if (err && err.status === 503 && /Grok/i.test(msg)) msg = 'Grok 未配置';
         else if (err && err.status === 503 && /DeepSeek/i.test(msg)) msg = 'DeepSeek 未配置';
         else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
         throw new Error(msg);
@@ -545,12 +545,14 @@
       if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
       return content;
     }
-    var CHAT_LABELS = { openai: '快速对话', deepseek: 'DeepSeek', horde: 'Horde', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
+    var CHAT_LABELS = { grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
     function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
     function normalizeChatChannel(raw) {
       var v = String(raw || 'auto').trim().toLowerCase();
-      if (v === 'turbo' || v === 'openai-fast' || v === 'fast') return 'openai';
-      if (v === 'openai' || v === 'deepseek' || v === 'horde' || v === 'auto') return v;
+      // Drop dead-end channels from picker (OpenAI 402 / DeepSeek 未配置); map stale localStorage to auto.
+      if (v === 'openai' || v === 'turbo' || v === 'openai-fast' || v === 'fast' || v === 'deepseek') return 'auto';
+      if (v === 'xai' || v === 'x-ai') return 'grok';
+      if (v === 'grok' || v === 'horde' || v === 'auto') return v;
       return 'auto';
     }
     function loadChatChannel() {
@@ -678,8 +680,8 @@
       // Explicit channel: answer only on that platform.
       if (channel && channel !== 'auto') return askOneChat(question, channel);
       var messages = buildMessages(question);
-      // auto：openai / deepseek / horde 多通道抢答；整体抢答上限 30s（与工坊一致）。
-      var models = ['openai', 'deepseek', 'horde'];
+      // auto：grok / horde 多通道抢答（已下架 402/未配置死胡同）；整体抢答上限 30s。
+      var models = ['grok', 'horde'];
       return await new Promise(function (resolve, reject) {
         var left = models.length;
         var failed = 0;
