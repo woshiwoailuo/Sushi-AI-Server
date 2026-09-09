@@ -55,8 +55,6 @@ test('normalizeChatModel maps groq/grok aliases and legacy pollinations ids', ()
   assert.equal(normalizeChatModel('openai-fast'), 'openai');
   assert.equal(normalizeChatModel('turbo'), 'openai');
   assert.equal(normalizeChatModel('deepseek'), 'deepseek');
-  assert.equal(normalizeChatModel('google-gemini'), 'gemini');
-  assert.equal(normalizeChatModel('open-router'), 'openrouter');
 });
 
 test('missingChatApiKeyMessage is clear for groq and grok', () => {

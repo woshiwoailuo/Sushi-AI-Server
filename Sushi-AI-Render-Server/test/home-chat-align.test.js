@@ -69,6 +69,14 @@ test('homepage and server wire Groq + Grok OpenAI-compatible chat', () => {
   assert.match(chatLib, /return 'grok'/);
 });
 
+test('free chat providers keep provider-specific errors and Gemini system instructions', () => {
+  assert.match(server, /const requestedRaw = String/);
+  assert.match(server, /const requested = requestedRaw\.toLowerCase\(\)/);
+  assert.match(server, /systemInstruction:\s*\{\s*parts:\s*\[\{\s*text:\s*geminiSystem/);
+  assert.match(server, /model === 'gemini'\s*\? 'Gemini'/);
+  assert.match(server, /model === 'openrouter'\s*\? 'OpenRouter'/);
+});
+
 test('homepage can generate images directly from chat intent', () => {
   assert.match(home, /function wantsImageGen/);
   assert.match(home, /function generateHomeImage/);

@@ -103,9 +103,7 @@ function normalizeChatPayload(raw, model) {
   const message = choice && choice.message;
   const content = contentText(
     (message && (message.content || message.reasoning_content)) ||
-    (payload && (payload.output_text || payload.response || payload.content)) ||
-    (payload && payload.candidates && payload.candidates[0] && payload.candidates[0].content &&
-      payload.candidates[0].content.parts && payload.candidates[0].content.parts.map((part) => part && part.text || '').join(''))
+    (payload && (payload.output_text || payload.response || payload.content))
   );
   if (!content) throw chatError('上游返回空回复');
   return openaiStyleChat(content, (payload && payload.model) || model);
@@ -132,8 +130,6 @@ function normalizeChatModel(raw) {
   if (model === 'deepseek') return 'deepseek';
   if (model === 'grok' || model === 'xai' || model === 'x-ai') return 'grok';
   if (model === 'groq' || model === 'groqcloud' || model === 'groq-cloud') return 'groq';
-  if (model === 'gemini' || model === 'google' || model === 'google-gemini') return 'gemini';
-  if (model === 'openrouter' || model === 'open-router') return 'openrouter';
   if (model === 'horde' || model === 'aihorde' || model === 'ai-horde') return 'horde';
   // Pollinations legacy ids: turbo is gone; openai-fast often 402s while alias "openai" still works anonymously.
   if (model === 'turbo' || model === 'openai-fast' || model === 'fast' || model === 'openai' || model === 'gpt-oss') {
@@ -148,8 +144,6 @@ function missingChatApiKeyMessage(model) {
   if (m === 'groq') return 'Groq 尚未配置（未设置 GROQ_API_KEY），请改用其他对话通道或稍后重试';
   if (m === 'grok') return 'Grok 尚未配置（未设置 XAI_API_KEY），请改用其他对话通道或稍后重试';
   if (m === 'deepseek') return 'DeepSeek 尚未配置，请改用其他对话通道或稍后重试';
-  if (m === 'gemini') return 'Gemini 尚未配置（未设置 GEMINI_API_KEY），请改用其他对话通道或稍后重试';
-  if (m === 'openrouter') return 'OpenRouter 尚未配置（未设置 OPENROUTER_API_KEY），请改用其他对话通道或稍后重试';
   return '对话通道尚未配置，请改用其他对话通道或稍后重试';
 }
 

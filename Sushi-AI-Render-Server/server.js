@@ -1347,8 +1347,9 @@ function normalizeImageModel(raw) {
 app.post('/api/workshop/chat', async (req, res) => {
   const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
-  const requested = String((req.body && req.body.model) || 'openai');
-  if (!CHAT_MODELS.has(requested) && requested !== 'openai' && requested !== 'horde' && requested !== 'grok' && requested !== 'groq') {
+  const requestedRaw = String((req.body && req.body.model) || 'openai').trim();
+  const requested = requestedRaw.toLowerCase();
+  if (!CHAT_MODELS.has(requested)) {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const model = normalizeChatModel(requested);
@@ -1403,12 +1404,21 @@ app.post('/api/workshop/chat', async (req, res) => {
             : model === 'openrouter'
               ? OPENROUTER_MODEL
           : 'openai';
+    const geminiMessages = messages.filter((item) => item && item.content);
+    const geminiSystem = geminiMessages
+      .filter((item) => String(item.role || '').toLowerCase() === 'system')
+      .map((item) => String(item.content).slice(0, 6000))
+      .join('\n\n')
+      .trim();
     const requestBody = model === 'gemini'
       ? {
-          contents: messages.filter((item) => item && item.content).map((item) => ({
-            role: item.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: String(item.content).slice(0, 6000) }],
-          })),
+          ...(geminiSystem ? { systemInstruction: { parts: [{ text: geminiSystem }] } } : {}),
+          contents: geminiMessages
+            .filter((item) => String(item.role || '').toLowerCase() !== 'system')
+            .map((item) => ({
+              role: String(item.role || '').toLowerCase() === 'assistant' ? 'model' : 'user',
+              parts: [{ text: String(item.content).slice(0, 6000) }],
+            })),
           generationConfig: { maxOutputTokens: 800, temperature: 0.7 },
         }
       : model === 'deepseek'
@@ -1475,10 +1485,30 @@ app.post('/api/workshop/chat', async (req, res) => {
         return workshopImageError(res, 402, '快速对话通道暂时需要付费额度，请改用 Horde 或其他通道');
       }
       if (upstream.status === 429) {
-        const busyLabel = model === 'deepseek' ? 'DeepSeek' : model === 'grok' ? 'Grok' : model === 'groq' ? 'Groq' : '快速对话';
+        const busyLabel = model === 'deepseek'
+          ? 'DeepSeek'
+          : model === 'grok'
+            ? 'Grok'
+            : model === 'groq'
+              ? 'Groq'
+              : model === 'gemini'
+                ? 'Gemini'
+                : model === 'openrouter'
+                  ? 'OpenRouter'
+                  : '快速对话';
         return workshopImageError(res, 429, busyLabel + '通道繁忙，请稍后重试');
       }
-      const label = model === 'deepseek' ? 'DeepSeek' : model === 'grok' ? 'Grok' : model === 'groq' ? 'Groq' : '快速对话';
+      const label = model === 'deepseek'
+        ? 'DeepSeek'
+        : model === 'grok'
+          ? 'Grok'
+          : model === 'groq'
+            ? 'Groq'
+            : model === 'gemini'
+              ? 'Gemini'
+              : model === 'openrouter'
+                ? 'OpenRouter'
+                : '快速对话';
       const status = upstream.status === 401 ? 401 : 502;
       return workshopImageError(res, status, `${label}暂时不可用${detail ? '：' + detail : ''}，请改用其他通道`);
     }
