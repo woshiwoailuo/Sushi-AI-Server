@@ -61,3 +61,15 @@ test('chat channel selection keeps the explicit free OpenAI route', () => {
   assert.match(source, /值 === "openai-fast".*return "openai"/);
   assert.match(source, /指定 === "openai"\) return 问花粉/);
 });
+
+
+test('workshop keeps chat selector active and hides configuration UI', () => {
+  assert.match(source, /AI通道/);
+  assert.match(source, /框\.disabled = false/);
+  assert.match(source, /#平台管理区, #管理面板, #工具区/);
+});
+
+test('Perch requests are fast-cancelled and upstream work stops on disconnect', () => {
+  assert.match(source, /runWithProviderBudget\(run, engine[\s\S]*?\}, 10000\)/);
+  assert.match(source, /runWithProviderBudget\(run, 'turbo'[\s\S]*?\}, 12000\)/);
+});
