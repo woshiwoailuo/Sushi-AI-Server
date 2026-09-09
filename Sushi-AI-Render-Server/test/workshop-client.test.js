@@ -284,7 +284,7 @@ test('perch/perchance is selectable and included in the free race list', async t
   assert.match(src, /name === 'perch'/);
   // Canonical select id is perchance; perch is accepted as an alias in normalizeEngineName.
   assert.match(src, /官方' \|\| name === 'perch'/);
-  assert.match(src, /never free-race fallback/);
+  assert.match(src, /pollinationsProxyUrl/);
   assert.match(src, /function photorealPrompt/);
   const opened = [];
   f.w.open = (url) => { opened.push(String(url)); return null; };
@@ -300,11 +300,13 @@ test('perch/perchance is selectable and included in the free race list', async t
     }
     return realFetch(url, options);
   };
-  // Without in-app Perchance plugin, explicit selection should fail closed (no race / no window.open).
+  // Plugin 未加载时，显式 Perch 走同源代理出图，绝不跳转官网、不改走 Horde 抢答。
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must never open perchance.org');
   assert.equal(box.value, 'perchance');
-  assert.equal(pollinationHits.length, 0, 'explicit perchance must not fall back into free race');
+  assert.ok(pollinationHits.length >= 1, 'explicit perchance uses in-app image proxy');
+  assert.match(pollinationHits[0], /model=perchance/);
+  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 0);
 });
 
 
@@ -348,8 +350,15 @@ test('workshop source defaults to in-app perchance as the primary route', () => 
   assert.match(client, /window\\.__sushiPreferredProvider \\|\\| 'perchance'/);
 });
 
+test('server maps perchance image model onto flux-realism same-origin proxy', () => {
+  const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+  assert.match(server, /IMAGE_MODELS = new Set\(\[[^\]]*['"]perchance['"]/);
+  assert.match(server, /if \(model === 'perch' \|\| model === '官方'\) return 'perchance'/);
+  assert.match(server, /if \(model === 'perchance'\) return 'flux-realism'/);
+});
 
-test('perchance cool-down cancelled: explicit selection retries without UI gate or free-race fallback', async t => {
+
+test('perchance cool-down cancelled: explicit selection retries in-app proxy without opening the official site', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎');
   box.value = 'perchance';
@@ -359,7 +368,7 @@ test('perchance cool-down cancelled: explicit selection retries without UI gate 
   assert.match(src, /function isPerchanceCooling\(\) \{\s*return false;/);
   assert.match(src, /cool-down cancelled|no cool-down gate/i);
   assert.doesNotMatch(src, /Perchance 短暂冷却中/);
-  assert.match(src, /never free-race fallback/);
+  assert.match(src, /Never open perchance\.org/);
   assert.equal(f.w.当前引擎(), 'perchance');
   const opened = [];
   f.w.open = (url) => { opened.push(String(url)); return null; };
@@ -377,11 +386,12 @@ test('perchance cool-down cancelled: explicit selection retries without UI gate 
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must never open perchance.org');
   assert.equal(box.value, 'perchance');
-  assert.equal(pollinationHits.length, 0, 'explicit perchance must not fall back into free race');
+  assert.ok(pollinationHits.length >= 1, 'explicit perchance uses in-app image proxy');
+  assert.match(pollinationHits[0], /model=perchance/);
   const tip1 = f.w.document.getElementById('状态提示').textContent || '';
   assert.doesNotMatch(tip1, /冷却中/);
   await f.w.开始生成();
-  assert.equal(pollinationHits.length, 0, 'retry still must not free-race');
+  assert.ok(pollinationHits.length >= 2, 'retry still uses in-app proxy');
   assert.equal(opened.length, 0);
   const tip2 = f.w.document.getElementById('状态提示').textContent || '';
   assert.doesNotMatch(tip2, /冷却中/);

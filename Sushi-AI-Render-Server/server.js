@@ -1235,7 +1235,7 @@ app.post('/api/workshop/unlock', authMiddleware, async (req, res) => {
   res.json({ key: ticket.key, iv: ticket.iv });
 });
 
-const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
+const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana', 'perchance']);
 const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai', 'groq', 'gemini', 'google', 'google-gemini', 'openrouter', 'open-router', 'glm', 'zhipu', 'zhipuai', 'chatglm', 'zai', 'z-ai']);
 const DEEPSEEK_API_KEY = String(process.env.DEEPSEEK_API_KEY || '').trim();
 const DEEPSEEK_MODEL = String(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim();
@@ -1345,6 +1345,13 @@ function normalizeImageModel(raw) {
   if (model === 'flux-real' || model === 'flux_realism') return 'flux-realism';
   if (model === 'zimage' || model === 'sdxl' || model === 'krea2' || model === 'liblib') return 'flux';
   if (model === 'anishort') return 'sana';
+  if (model === 'perch' || model === '官方') return 'perchance';
+  return model;
+}
+
+function pollinationsModelFor(model) {
+  // Perchance.org 被 Cloudflare + SAMEORIGIN 拦住，应用内 Perch 走 Flux 写实同源代理。
+  if (model === 'perchance') return 'flux-realism';
   return model;
 }
 
@@ -1477,7 +1484,7 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
   const timer = setTimeout(() => controller.abort(), 90_000);
   const tryOnce = async (attempt) => {
     const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
-    upstream.searchParams.set('model', model);
+    upstream.searchParams.set('model', pollinationsModelFor(model));
     upstream.searchParams.set('width', String(width));
     upstream.searchParams.set('height', String(height));
     upstream.searchParams.set('seed', String(seed + attempt * 97));
@@ -1564,7 +1571,7 @@ app.get('/api/workshop/image', async (req, res) => {
   const timer = setTimeout(() => controller.abort(), 90_000);
   const tryOnce = async (attempt) => {
     const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
-    upstream.searchParams.set('model', model);
+    upstream.searchParams.set('model', pollinationsModelFor(model));
     upstream.searchParams.set('width', String(width));
     upstream.searchParams.set('height', String(height));
     upstream.searchParams.set('seed', String(seed + attempt * 97));
@@ -1606,7 +1613,7 @@ app.get('/api/workshop/image', async (req, res) => {
         res.status(200);
         res.set('Content-Type', got.contentType);
         res.set('Cache-Control', 'no-store');
-        res.set('X-Sushi-Image-Proxy', 'pollinations');
+        res.set('X-Sushi-Image-Proxy', model === 'perchance' ? 'perchance' : 'pollinations');
         res.set('X-Sushi-Image-Model', model);
         return res.end(got.buf);
       } catch (error) {
