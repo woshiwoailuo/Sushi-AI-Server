@@ -52,7 +52,10 @@
       <div class="分区 重点">
 
         <div class="分区标题">
-          <b>01 · 核心描述</b>
+          <span class="核心标题左">
+            <b>01 · 核心描述</b>
+            <button type="button" class="文字钮" id="清空描述按钮" onclick="清空描述()" title="清空核心描述与相关出图描述">清空描述</button>
+          </span>
           <span>必填</span>
         </div>
 
@@ -2180,7 +2183,21 @@
     return 项;
   }
 
+  function 清空描述() {
+    // 只清空核心描述与相关出图描述字段；不碰画廊/历史/参考图。
+    ["角色描述", "中文译文", "英文描述", "安全英文"].forEach(function (id) {
+      var 框 = document.getElementById(id);
+      if (框) 框.value = "";
+    });
+    try { localStorage.removeItem("角色生成器_上次描述"); } catch (e) {}
+    上次译源 = "";
+    if (typeof 刷新画面说明 === "function") 刷新画面说明();
+    var 核 = document.getElementById("角色描述");
+    if (核) 核.focus();
+  }
+
   function 写出安全英文() {
+    // 写实增强只写入隐藏「安全英文」，绝不回写可见的角色描述/中文译文/英文描述。
     var 英 = document.getElementById("英文描述");
     var 核 = document.getElementById("角色描述");
     var 安 = document.getElementById("安全英文");
@@ -3334,7 +3351,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.25" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.26" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -3588,11 +3605,18 @@
   .分区标题 {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     margin-bottom: 11px;
     font-size: 12px;
   }
 
-  .分区标题 span {
+  .核心标题左 {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .分区标题 > span:last-child {
     color: var(--绿色);
   }
 

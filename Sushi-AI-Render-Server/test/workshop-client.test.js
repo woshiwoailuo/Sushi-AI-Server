@@ -435,6 +435,8 @@ test('default generation enriches photoreal prompt without rewriting display fie
   f.w.document.getElementById('中文译文').value = '图书馆窗边的成年人';
   f.w.document.getElementById('英文描述').value = 'A fictional adult reading by a library window';
   if (typeof f.w.刷新画面说明 === 'function') f.w.刷新画面说明();
+  const beforeCore = f.w.document.getElementById('角色描述').value;
+  const beforeZh = f.w.document.getElementById('中文译文').value;
   const beforeEn = f.w.document.getElementById('英文描述').value;
   const beforeCap = f.w.document.getElementById('说明英文').textContent;
   await f.w.开始生成();
@@ -442,6 +444,33 @@ test('default generation enriches photoreal prompt without rewriting display fie
   assert.match(payload.prompt, /^A fictional adult reading by a library window/i);
   assert.match(payload.prompt, /photoreal|natural light|texture|not anime/i);
   assert.notEqual(payload.prompt, beforeEn);
+  assert.equal(f.w.document.getElementById('角色描述').value, beforeCore, '核心描述 must stay user text');
+  assert.equal(f.w.document.getElementById('中文译文').value, beforeZh);
   assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
   assert.equal(f.w.document.getElementById('说明英文').textContent, beforeCap);
+  assert.doesNotMatch(f.w.document.getElementById('角色描述').value, /photorealistic RAW photo|not anime, not manga/i);
+});
+
+test('清空描述 clears core and linked prompt fields but not gallery', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.ok(f.w.document.getElementById('清空描述按钮'), '清空描述 button present');
+  assert.equal(typeof f.w.清空描述, 'function');
+  f.w.document.getElementById('角色描述').value = '窗边的小猫';
+  f.w.document.getElementById('中文译文').value = '窗边的小猫';
+  f.w.document.getElementById('英文描述').value = 'a cat by the window';
+  f.w.document.getElementById('安全英文').value = 'a cat by the window, photorealistic RAW photo';
+  f.w.document.getElementById('图像输出').innerHTML = '<img src="' + PNG + '" alt="keep">';
+  f.w.清空描述();
+  assert.equal(f.w.document.getElementById('角色描述').value, '');
+  assert.equal(f.w.document.getElementById('中文译文').value, '');
+  assert.equal(f.w.document.getElementById('英文描述').value, '');
+  assert.equal(f.w.document.getElementById('安全英文').value, '');
+  assert.equal(f.w.document.querySelectorAll('#图像输出 img').length, 1, 'gallery untouched');
+});
+
+test('generatePerchance source does not assign enriched prompt into 英文描述', async t => {
+  const src = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
+  assert.match(src, /Enriched photoreal prompt goes ONLY into hidden/);
+  assert.doesNotMatch(src, /engBox\.value\s*=\s*prompt/);
+  assert.match(src, /safeBox\.value\s*=\s*prompt/);
 });

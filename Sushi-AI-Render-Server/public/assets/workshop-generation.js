@@ -489,16 +489,14 @@
     // Keep Perchance primary, but do not wait 45s again after a recent component failure.
     if (isPerchanceCooling()) throw new Error('Perchance 短暂冷却中');
     // In-app Perchance/Perch only — never open perchance.org.
-    var engBox = $('英文描述');
+    // Enriched photoreal prompt goes ONLY into hidden 安全英文 — never decorate visible 英文描述/角色描述.
     var safeBox = $('安全英文');
-    var prevEng = engBox ? engBox.value : '';
     var prevSafe = safeBox ? safeBox.value : '';
     try {
       if (typeof window.update !== 'function') throw new Error('Perchance 组件未加载');
       var gallery = $('官方画廊');
       var trigger = $('执行生成');
       if (!gallery || !trigger) throw new Error('Perchance 界面未就绪');
-      if (engBox) engBox.value = prompt;
       if (safeBox) safeBox.value = prompt;
       gallery.hidden = false;
       var before = gallery.querySelectorAll('iframe, img, canvas').length;
@@ -529,7 +527,6 @@
       if (!error || !/已取消生成|短暂冷却中/.test(String(error.message || ''))) markPerchanceFailure();
       throw error;
     } finally {
-      if (engBox) engBox.value = prevEng;
       if (safeBox) safeBox.value = prevSafe;
     }
   }
