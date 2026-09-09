@@ -58,7 +58,7 @@ async function setup(t, handler, imageFails = false) {
   var engine = w.document.getElementById('出图引擎');
   if (engine) {
     engine.disabled = false;
-    engine.value = 'horde';
+    engine.value = 'horde-real';
   }
   return { w, calls, errors, text: () => w.document.getElementById('状态提示').textContent };
 }
@@ -135,7 +135,7 @@ test('failed translation preserves the current text, and perchance stays selecta
   f.w.document.getElementById('角色描述').value = '窗边的小猫';
   f.w.调用开源翻译 = async () => { throw new Error('translation offline'); };
   // Force horde-only so unit test does not hit live Pollinations.
-  f.w.document.getElementById('出图引擎').value = 'horde';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
   await f.w.开始生成();
   const failedPrompt = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body).prompt;
   assert.match(failedPrompt, /窗边的小猫/);
@@ -166,7 +166,7 @@ test('failed translation preserves the current text, and perchance stays selecta
 
 test('auto race prefers a free platform without requiring official redirect', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  f.w.document.getElementById('出图引擎').value = 'auto';
+  f.w.document.getElementById('出图引擎').value = 'auto-real';
   const realFetch = f.w.fetch;
   f.w.fetch = async (url, options = {}) => {
     const href = String(url);
@@ -186,7 +186,7 @@ test('auto race prefers a free platform without requiring official redirect', as
   assert.equal(opened.length, 0);
   assert.ok(f.w.document.querySelector('#图像输出 img'));
   const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.ok(['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'].includes(engine), 'engine=' + engine);
+  assert.ok(['sana', 'horde-real', 'horde-anime', 'perchance'].includes(engine), 'engine=' + engine);
   // Platform picker must remain selectable after a successful run.
   assert.equal(f.w.document.getElementById('出图引擎').disabled, false);
 });
@@ -280,7 +280,7 @@ test('perch/perchance is selectable and included in the free race list', async t
   box.value = 'perchance';
   assert.equal(f.w.当前引擎(), 'perchance');
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /FREE_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
+  assert.match(src, /REAL_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
   assert.match(src, /name === 'perch'/);
   // Canonical select id is perchance; perch is accepted as an alias in normalizeEngineName.
   assert.match(src, /官方' \|\| name === 'perch'/);
@@ -312,7 +312,7 @@ test('perch/perchance is selectable and included in the free race list', async t
 
 test('auto race skips rate-limited engines quickly and surfaces 限流 tip', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  f.w.document.getElementById('出图引擎').value = 'auto';
+  f.w.document.getElementById('出图引擎').value = 'auto-real';
   const hits = [];
   const realFetch = f.w.fetch;
   f.w.fetch = async (url, options = {}) => {
@@ -320,7 +320,7 @@ test('auto race skips rate-limited engines quickly and surfaces 限流 tip', asy
     if (href.includes('/api/workshop/image')) {
       hits.push(href);
       const model = new URL(href, 'https://app.example').searchParams.get('model');
-      if (model === 'turbo' || model === 'flux') {
+      if (model === 'perchance' || model === 'sana') {
         return { ok: false, status: 429, blob: async () => new f.w.Blob([]) };
       }
       const bytes = Buffer.alloc(3200, 11);
@@ -331,12 +331,9 @@ test('auto race skips rate-limited engines quickly and surfaces 限流 tip', asy
   await f.w.开始生成();
   assert.ok(f.w.document.querySelector('#图像输出 img'), 'another engine should win the race');
   const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.ok(!['turbo', 'flux'].includes(engine), 'winner should not be rate-limited engine, got ' + engine);
-  // turbo/flux should not be hammered with 3 retries each after 429
-  const turboHits = hits.filter(h => h.includes('model=turbo')).length;
-  const fluxHits = hits.filter(h => h.includes('model=flux&') || h.includes('model=flux"') || /model=flux(?:&|$)/.test(h)).length;
-  assert.ok(turboHits <= 1, 'turbo should fail fast on 429, hits=' + turboHits);
-  assert.ok(fluxHits <= 1, 'flux should fail fast on 429, hits=' + fluxHits);
+  assert.ok(!['perchance', 'sana'].includes(engine), 'winner should not be rate-limited engine, got ' + engine);
+  const perchHits = hits.filter(h => h.includes('model=perchance')).length;
+  assert.ok(perchHits <= 1, 'perchance should fail fast on 429, hits=' + perchHits);
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
   assert.match(src, /ENGINE_COOLDOWN_MS/);
   assert.match(src, /出图通道限流/);
@@ -344,17 +341,20 @@ test('auto race skips rate-limited engines quickly and surfaces 限流 tip', asy
 });
 
 
-test('workshop source defaults to in-app perchance as the primary route', () => {
-  assert.match(html, /<option value="perchance" selected>/);
-  assert.match(html, /var 用户选定平台 = "perchance";/);
-  assert.match(client, /window\\.__sushiPreferredProvider \\|\\| 'perchance'/);
+test('workshop source defaults to auto-real with perchance still selectable', () => {
+  assert.match(html, /<option value="auto-real" selected>/);
+  assert.match(html, /<option value="perchance">/);
+  assert.match(html, /var 用户选定平台 = "auto-real";/);
+  assert.match(client, /window\\.__sushiPreferredProvider \\|\\| 'auto-real'/);
 });
 
-test('server maps perchance image model onto flux-realism same-origin proxy', () => {
+test('server maps perchance and dead Pollinations aliases onto sana', () => {
   const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
   assert.match(server, /IMAGE_MODELS = new Set\(\[[^\]]*['"]perchance['"]/);
   assert.match(server, /if \(model === 'perch' \|\| model === '官方'\) return 'perchance'/);
-  assert.match(server, /if \(model === 'perchance'\) return 'flux-realism'/);
+  assert.match(server, /function pollinationsModelFor/);
+  assert.match(server, /return 'sana'/);
+  assert.doesNotMatch(server, /if \(model === 'perchance'\) return 'flux-realism'/);
 });
 
 
@@ -504,7 +504,7 @@ test('智能修饰 writes visible core modifiers and generation uses that text',
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.ok(f.w.document.getElementById('智能修饰按钮'), '智能修饰 button present');
   assert.equal(typeof f.w.智能修饰, 'function');
-  f.w.document.getElementById('出图引擎').value = 'horde';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
   f.w.document.getElementById('角色描述').value = '窗边看书的成年人';
   f.w.document.getElementById('中文译文').value = '窗边看书的成年人';
   f.w.document.getElementById('英文描述').value = 'an adult reading by the window';
@@ -537,4 +537,38 @@ test('photorealPrompt helper still available for style-aware enrich logic', asyn
   const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
   assert.match(plain, /^photorealistic RAW photo/i);
   assert.match(plain, /not anime|not manga|not cartoon/i);
+  const anime = f.w.animePrompt('a fictional adult standing by a rainy window');
+  assert.match(anime, /anime illustration/i);
+  assert.doesNotMatch(anime, /not anime|photorealistic RAW photo/i);
+  assert.equal(f.w.engineFamily('horde-anime'), 'anime');
+  assert.equal(f.w.engineFamily('perchance'), 'real');
+  assert.equal(f.w.engineFamily('turbo'), 'real');
 });
+
+test('horde-anime enriches with animePrompt and sends style=anime', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('出图引擎').value = 'horde-anime';
+  f.w.document.getElementById('角色描述').value = 'a fictional adult standing by a rainy window';
+  f.w.document.getElementById('英文描述').value = 'a fictional adult standing by a rainy window';
+  await f.w.开始生成();
+  const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
+  assert.equal(payload.style, 'anime');
+  assert.match(payload.prompt, /anime illustration/i);
+  assert.doesNotMatch(payload.prompt, /not anime|photorealistic RAW photo/i);
+  assert.doesNotMatch(payload.negativePrompt || '', /anime|manga|cartoon/i);
+});
+
+test('picker no longer lists dead turbo/flux/flux-realism platforms', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const box = f.w.document.getElementById('出图引擎');
+  assert.equal(box.querySelector('option[value="turbo"]'), null);
+  assert.equal(box.querySelector('option[value="flux"]'), null);
+  assert.equal(box.querySelector('option[value="flux-realism"]'), null);
+  assert.ok(box.querySelector('option[value="auto-real"]'));
+  assert.ok(box.querySelector('option[value="auto-anime"]'));
+  assert.ok(box.querySelector('option[value="horde-real"]'));
+  assert.ok(box.querySelector('option[value="horde-anime"]'));
+  assert.ok(box.querySelector('optgroup[label="写实"]'));
+  assert.ok(box.querySelector('optgroup[label="动漫"]'));
+});
+

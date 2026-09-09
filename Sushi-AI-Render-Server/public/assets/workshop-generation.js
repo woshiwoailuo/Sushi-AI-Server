@@ -36,7 +36,7 @@
   function lockImageProvider(name) {
     // Remember last successful engine for tips only — never lock/disable the picker.
     name = String(name || '').trim();
-    if (!name || name === 'auto') return;
+    if (!name || name === 'auto' || name === 'auto-real' || name === 'auto-anime') return;
     window.__sushiLastEngine = name;
     var box = $('出图引擎');
     if (box) {
@@ -208,6 +208,24 @@
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
+  function animePrompt(prompt) {
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!text) text = 'anime illustration of a fictional adult, clean lineart, cel shading';
+    if (hasExplicitArtStyle(text)) {
+      if (!/fictional adult|18\+|no minors|虚构成年/i.test(text)) {
+        text += ', fictional adult 18+ only, no minors';
+      }
+      return text.replace(/\s{2,}/g, ' ').trim();
+    }
+    if (!/anime|manga|二次元|动漫|插画|illustration/i.test(text)) {
+      text = 'anime illustration, clean lineart, cel shading, vivid colors, detailed character design, ' + text;
+    }
+    if (!/fictional adult|18\+|no minors|虚构成年/i.test(text)) {
+      text += ', fictional adult 18+ only, no minors';
+    }
+    return text.replace(/\s{2,}/g, ' ').trim();
+  }
+
   function hideStatusPanel() {
     var box = $('状态提示');
     if (!box) return;
@@ -317,7 +335,7 @@
   function pollinationsProxyUrl(model, prompt, width, height, seed) {
     return '/api/workshop/image'
       + '?k=' + encodeURIComponent(workshopTicket())
-      + '&model=' + encodeURIComponent(model || 'turbo')
+      + '&model=' + encodeURIComponent(model || 'sana')
       + '&prompt=' + encodeURIComponent(String(prompt || 'photo').slice(0, 1400))
       + '&width=' + (width || 512)
       + '&height=' + (height || 512)
@@ -332,12 +350,12 @@
 
   function disableEngine(engine, reason) {
     engine = normalizeEngineName(engine);
-    if (!engine || engine === 'auto') return;
+    if (!engine || engine === 'auto' || engine === 'auto-real' || engine === 'auto-anime') return;
     disabledEngines[engine] = String(reason || '30秒内未返回可用图片');
     var select = $('出图引擎');
     if (select && select.value === engine) {
-      select.value = 'auto';
-      window.__sushiPreferredProvider = 'auto';
+      select.value = engineFamily(engine) === 'anime' ? 'auto-anime' : 'auto-real';
+      window.__sushiPreferredProvider = select.value;
     }
     var admin = $('管理默认平台');
     if (admin) {
@@ -390,7 +408,7 @@
   }
 
   function turboUrl(prompt, width, height, seed) {
-    return pollinationsProxyUrl('turbo', prompt, width, height, seed);
+    return pollinationsProxyUrl('sana', prompt, width, height, seed);
   }
 
   function loadImageUrl(run, url, timeoutMs) {
@@ -434,9 +452,13 @@
   }
 
   async function generatePollinations(run, prompt, index, model, providerSignal) {
-    model = normalizeEngineName(model || 'turbo');
-    if (isEngineCool(model)) {
-      var coolErr = new Error(coolHint(model) + '（限流跳过）');
+    var requested = String(model || 'sana').trim().toLowerCase();
+    if (requested === 'perch' || requested === '官方') requested = 'perchance';
+    if (requested === 'turbo' || requested === 'flux' || requested === 'flux-realism' || requested === 'auto-real' || requested === 'auto') requested = 'sana';
+    if (requested === 'auto-anime') requested = 'sana';
+    var proxyModel = requested === 'perchance' ? 'perchance' : 'sana';
+    if (isEngineCool(proxyModel) || isEngineCool(requested)) {
+      var coolErr = new Error(coolHint(proxyModel) + '（限流跳过）');
       coolErr.status = 429;
       coolErr.code = 'ENGINE_COOLDOWN';
       throw coolErr;
@@ -446,20 +468,20 @@
       : Math.floor(Math.random() * 2147483646);
     if (!Number.isFinite(seedBase)) seedBase = Math.floor(Math.random() * 2147483646);
     var seed = seedBase + (index || 0) * 97;
-    var label = engineLabel(model);
+    var label = engineLabel(requested);
     status('正在用 ' + label + ' 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '同源代理出图；遇限流会立刻换引擎，不空等。', true);
     var lastError = null;
-    var maxAttempts = model === 'perchance' ? 1 : 3;
+    var maxAttempts = proxyModel === 'perchance' ? 1 : 3;
     for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
       ensureActive(run);
-      var url = pollinationsProxyUrl(model, prompt, run.payload.width, run.payload.height, seed + attempt * 131);
+      var url = pollinationsProxyUrl(proxyModel, prompt, run.payload.width, run.payload.height, seed + attempt * 131);
       try {
         var response = await fetch(url, { method: 'GET', credentials: 'include', cache: 'no-store', headers: authHeaders(), signal: providerSignal || run.controller.signal });
         if (!response.ok) {
           var httpErr = new Error(label + (response.status === 429 ? ' 限流(429)' : (' HTTP ' + response.status)));
           httpErr.status = response.status;
           if (response.status === 429 || response.status >= 500) {
-            markEngineCool(model, response.status);
+            markEngineCool(proxyModel, response.status);
             throw httpErr; // fail fast — skip this engine for the rest of the round
           }
           throw httpErr;
@@ -475,7 +497,7 @@
           reader.onerror = function () { reject(new Error(label + ' 读图失败')); };
           reader.readAsDataURL(blob);
         });
-        return { url: dataUrl, engine: model };
+        return { url: dataUrl, engine: requested === 'perchance' ? 'perchance' : 'sana' };
       } catch (error) {
         if (run.cancelled || (error && error.name === 'AbortError')) throw new Error('已取消生成');
         lastError = error;
@@ -487,17 +509,21 @@
   }
 
   async function generateTurbo(run, prompt, index) {
-    return generatePollinations(run, prompt, index, 'turbo');
+    return generatePollinations(run, prompt, index, 'sana');
   }
 
-  async function generateHorde(run, prompt, index, providerSignal) {
-    var payload = Object.assign({}, run.payload, { prompt: prompt });
+  async function generateHorde(run, prompt, index, providerSignal, engineName) {
+    engineName = engineName === 'horde-anime' ? 'horde-anime' : 'horde-real';
+    var payload = Object.assign({}, run.payload, {
+      prompt: prompt,
+      style: engineName === 'horde-anime' ? 'anime' : 'real'
+    });
     if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
-    status('正在提交 Horde · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '服务器如刚启动可能稍慢；重复点击不会创建新任务。', true);
+    status('正在提交 ' + engineLabel(engineName) + ' · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '服务器如刚启动可能稍慢；重复点击不会创建新任务。', true);
     run.job = await api('', { method: 'POST', body: payload, timeoutMs: PROVIDER_RESULT_TIMEOUT_MS, signal: providerSignal || run.controller.signal });
     ensureActive(run);
     var done = await poll(run, run.job, providerSignal);
-    return { url: done.image.url, engine: 'horde', job: done };
+    return { url: done.image.url, engine: engineName, job: done };
   }
 
   // Workshop image generation never imposes an application-side cool-down.
@@ -544,21 +570,32 @@
     return msgs.length ? msgs.join('；') : '自动抢出失败：各平台均未成功';
   }
 
-  var FREE_RACE_ENGINES = [ 'turbo', 'flux', 'sana', 'horde', 'perchance'];
+  var REAL_RACE_ENGINES = ['perchance', 'horde-real'];
+  var ANIME_RACE_ENGINES = ['sana', 'horde-anime'];
+  var FREE_RACE_ENGINES = REAL_RACE_ENGINES;
 
   function normalizeEngineName(raw) {
     var name = String(raw || '').trim().toLowerCase();
     if (name === '官方' || name === 'perch') return 'perchance';
-    if (name === 'flux-real' || name === 'flux_realism') return 'flux-realism';
-    if (name === 'zimage' || name === 'sdxl' || name === 'krea2' || name === 'liblib') return 'flux';
+    if (name === 'flux-real' || name === 'flux_realism' || name === 'turbo' || name === 'flux' || name === 'flux-realism') return 'auto-real';
+    if (name === 'zimage' || name === 'sdxl' || name === 'krea2' || name === 'liblib') return 'auto-real';
     if (name === 'anishort') return 'sana';
-    return name || 'auto';
+    if (name === 'horde') return 'horde-real';
+    if (name === 'auto') return 'auto-real';
+    return name || 'auto-real';
+  }
+
+  function engineFamily(name) {
+    name = normalizeEngineName(name);
+    if (name === 'auto-anime' || name === 'horde-anime' || name === 'sana') return 'anime';
+    return 'real';
   }
 
   function engineLabel(name) {
     var map = {
-      auto: '自动抢出', turbo: 'Turbo', horde: 'Horde', flux: 'Flux',
-      'flux-realism': 'Flux写实', sana: 'Sana', perchance: 'Perch / Perchance'
+      auto: '自动抢出 · 写实', 'auto-real': '自动抢出 · 写实', 'auto-anime': '自动抢出 · 动漫',
+      turbo: 'Sana', horde: 'Horde · 写实', 'horde-real': 'Horde · 写实', 'horde-anime': 'Horde · 动漫',
+      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perch · 写实'
     };
     return map[name] || name;
   }
@@ -652,25 +689,27 @@
 
   async function generateOne(run, prompt, index) {
     var engine = resolveEngine();
+    var family = engineFamily(engine);
     lastRateLimited = false;
     // Workshop: visible 核心描述 remains the source of truth and is never rewritten.
-    // Enrich only the private generation prompt so default output favors real photography.
+    // Enrich only the private generation prompt: 写实 uses photoreal, 动漫 uses illustration rhetoric.
     prompt = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (prompt && !/fictional adult|18\+|no minors|虚构成年|无未成年人/i.test(prompt)) {
       prompt += /[\u4e00-\u9fff]/.test(prompt)
         ? '，虚构成年人，18+，无未成年人'
         : ', fictional adult 18+ only, no minors';
     }
-    prompt = photorealPrompt(prompt);
-    // Honor explicit platform selection: only race when engine === 'auto'.
-    if (engine === 'horde') {
-      if (isEngineCool('horde')) throw Object.assign(new Error(coolHint('horde') + '。限流冷却中，请稍后或换自动抢出。'), { status: 429, code: 'ENGINE_COOLDOWN' });
+    prompt = family === 'anime' ? animePrompt(prompt) : photorealPrompt(prompt);
+    run.payload.style = family;
+    run.payload.prompt = prompt;
+    if (engine === 'horde' || engine === 'horde-real' || engine === 'horde-anime') {
+      var hordeName = engine === 'horde-anime' ? 'horde-anime' : 'horde-real';
       try {
-        return await runWithProviderBudget(run, engine, function (signal) {
-          return generateHorde(run, prompt, index, signal);
+        return await runWithProviderBudget(run, hordeName, function (signal) {
+          return generateHorde(run, prompt, index, signal, hordeName);
         });
       } catch (error) {
-        if (error && (error.status === 429 || error.status >= 500)) markEngineCool('horde', error.status);
+        if (error && (error.status === 429 || error.status >= 500)) markEngineCool(hordeName, error.status);
         throw error;
       }
     }
@@ -684,23 +723,26 @@
         if (run.cancelled || /取消|lost-race|已取消生成/.test(String(error && error.message || ''))) throw error;
         ensureActive(run);
         status('Perch 暂时无响应，正在自动修复', '保留核心描述，切换同源写实备用模型重试。', true);
-        var repaired = await runWithProviderBudget(run, 'turbo', function (signal) {
-          return generatePollinations(run, prompt, index, 'turbo', signal);
+        var repaired = await runWithProviderBudget(run, 'sana', function (signal) {
+          return generatePollinations(run, prompt, index, 'sana', signal);
         }, 12000);
         return { url: repaired.url, engine: 'perchance' };
       }
     }
-    if (engine !== 'auto') return runWithProviderBudget(run, engine, function (signal) {
-      return generatePollinations(run, prompt, index, engine, signal);
-    });
+    if (engine !== 'auto' && engine !== 'auto-real' && engine !== 'auto-anime') {
+      return runWithProviderBudget(run, engine, function (signal) {
+        return generatePollinations(run, prompt, index, engine, signal);
+      });
+    }
 
-    // auto only: race free platforms; skip engines still in short cool-down after 429/5xx.
+    // auto-real / auto-anime: race same-family platforms. Dead turbo/flux/flux-realism are gone.
     // Perchance always eligible (cool-down cancelled); generation never window.open's perchance.org.
-    var activeEngines = FREE_RACE_ENGINES.filter(function (eng) {
+    var raceList = family === 'anime' ? ANIME_RACE_ENGINES : FREE_RACE_ENGINES;
+    var activeEngines = raceList.filter(function (eng) {
       if (eng === 'perchance' && isPerchanceCooling()) return false; // always false now
       return !isEngineCool(eng) && !isEngineDisabled(eng);
     });
-    var cooled = FREE_RACE_ENGINES.filter(function (eng) {
+    var cooled = raceList.filter(function (eng) {
       if (eng === 'perchance' && isPerchanceCooling()) return true;
       return isEngineCool(eng) || isEngineDisabled(eng);
     });
@@ -708,7 +750,7 @@
       throw Object.assign(new Error('当前没有可用的生图通道，请立即重试或更换平台。'), { status: 429, code: 'ALL_COOLDOWN' });
     }
     status(
-      '自动抢出 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张',
+      (family === 'anime' ? '自动抢出 · 动漫' : '自动抢出 · 写实') + ' · 第 ' + (run.completed + 1) + '/' + run.total + ' 张',
       (cooled.length
         ? ('已跳过冷却中：' + cooled.map(engineLabel).join('、') + '。')
         : '') + activeEngines.map(engineLabel).join(' / ') + ' 同时开跑，先到先得。',
@@ -723,10 +765,17 @@
       return result;
     }
 
+    function isHordeEngine(eng) {
+      return eng === 'horde' || eng === 'horde-real' || eng === 'horde-anime';
+    }
+
     var tasks = activeEngines.map(function (eng) {
-      if (eng === 'horde') {
+      if (isHordeEngine(eng)) {
         return (async function () {
-          var payload = Object.assign({}, run.payload, { prompt: prompt });
+          var payload = Object.assign({}, run.payload, {
+            prompt: prompt,
+            style: engineFamily(eng) === 'anime' ? 'anime' : 'real'
+          });
           if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
           try {
             var result = await runWithProviderBudget(run, eng, async function (signal) {
@@ -739,11 +788,11 @@
               }
               var done = await poll(run, job, signal);
               if (winner) throw new Error('lost-race');
-              return { url: done.image.url, engine: 'horde', job: done };
+              return { url: done.image.url, engine: eng, job: done };
             });
             return claim(result);
           } catch (error) {
-            if (error && (error.status === 429 || error.status >= 500)) markEngineCool('horde', error.status);
+            if (error && (error.status === 429 || error.status >= 500)) markEngineCool(eng, error.status);
             throw error;
           }
         })();
@@ -766,7 +815,7 @@
       // Signal losers (esp. Perchance poll loop) to stop without marking cool-down.
       run._raceSettled = true;
       if (run.wake) try { run.wake(); } catch (e) {}
-      if (winner && winner.engine !== 'horde' && hordeJobId) {
+      if (winner && String(winner.engine || '').indexOf('horde') !== 0 && hordeJobId) {
         try { await api('/' + encodeURIComponent(hordeJobId), { method: 'DELETE', timeoutMs: 15000 }); } catch (e) {}
         run.job = null;
       }
@@ -774,13 +823,10 @@
   }
 
   function resolveEngine() {
-    var raw = normalizeEngineName(value('出图引擎') || window.__sushiPreferredProvider || 'perchance');
-    if (isEngineDisabled(raw)) return 'auto';
-    if (raw === 'turbo' || raw === 'horde' || raw === 'flux' || raw === 'flux-realism' || raw === 'sana') return raw;
-    // perchance: keep as selectable in-app path (free race under the hood; never open perchance.org)
-    if (raw === 'perchance') return 'perchance';
-    // auto / unknown → full free race
-    return 'auto';
+    var raw = normalizeEngineName(value('出图引擎') || window.__sushiPreferredProvider || 'auto-real');
+    if (isEngineDisabled(raw)) return engineFamily(raw) === 'anime' ? 'auto-anime' : 'auto-real';
+    if (raw === 'auto-real' || raw === 'auto-anime' || raw === 'perchance' || raw === 'sana' || raw === 'horde-real' || raw === 'horde-anime') return raw;
+    return engineFamily(raw) === 'anime' ? 'auto-anime' : 'auto-real';
   }
 
   async function execute(run, restored) {
@@ -866,7 +912,8 @@
     }
     var dimensions = value('图像比例').split('x');
     var negative = value('负面提示');
-    var styleAware = hasExplicitArtStyle(description + ' ' + (value('英文描述') || '') + ' ' + (value('角色描述') || ''));
+    var family = engineFamily(resolveEngine());
+    var styleAware = family === 'anime' || hasExplicitArtStyle(description + ' ' + (value('英文描述') || '') + ' ' + (value('角色描述') || ''));
     if (!negative) {
       negative = styleAware
         ? 'lowres, blurry, bad anatomy, extra limbs, child, minor, watermark, text'
@@ -941,18 +988,24 @@
 
   window.当前引擎 = function () { return resolveEngine(); };
   window.photorealPrompt = photorealPrompt;
+  window.animePrompt = animePrompt;
   window.hasExplicitArtStyle = hasExplicitArtStyle;
+  window.engineFamily = engineFamily;
   window.设平台提示 = function (engine) {
     var tip = $('平台提示');
     if (!tip) return;
     engine = normalizeEngineName(engine);
-    if (engine === 'turbo') tip.textContent = 'Turbo · Pollinations 极速免费通道';
-    else if (engine === 'horde') tip.textContent = 'AI Horde · 免费共享算力，繁忙时需要排队';
-    else if (engine === 'flux') tip.textContent = 'Flux · 通用高质量免费通道';
-    else if (engine === 'flux-realism') tip.textContent = 'Flux写实 · 人像优先免费通道';
-    else if (engine === 'sana') tip.textContent = 'Sana · 中文友好免费通道';
-    else if (engine === 'perchance') tip.textContent = 'Perch / Perchance · 应用内出图（不跳转官网）';
-    else tip.textContent = '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得';
+    var tips = {
+      'auto-real': '自动抢出 · 写实：Perch 与 Horde 写实同时开跑，先到先得',
+      'auto-anime': '自动抢出 · 动漫：Sana 与 Horde 动漫同时开跑，先到先得',
+      auto: '自动抢出 · 写实：Perch 与 Horde 写实同时开跑，先到先得',
+      perchance: 'Perch · 写实 · 应用内出图（不跳转官网）',
+      'horde-real': 'Horde · 写实 · 免费共享算力，繁忙时需要排队',
+      horde: 'Horde · 写实 · 免费共享算力，繁忙时需要排队',
+      'horde-anime': 'Horde · 动漫 · 免费共享算力，繁忙时需要排队',
+      sana: 'Sana · 动漫/插画 · Pollinations 目前唯一可用模型'
+    };
+    tip.textContent = tips[engine] || (engineLabel(engine) + ' · 应用内免费通道');
   };
 
   async function init() {
@@ -965,27 +1018,17 @@
     });
     var engineSelect = $('出图引擎');
     if (engineSelect) {
-      if (!engineSelect.querySelector('option[value="auto"]')) {
-        var autoOpt = document.createElement('option');
-        autoOpt.value = 'auto'; autoOpt.textContent = '自动抢出 · 全平台';
-        engineSelect.insertBefore(autoOpt, engineSelect.firstChild);
-      }
-      ['turbo','horde','flux','flux-realism','sana','perchance'].forEach(function (id) {
-        if (engineSelect.querySelector('option[value="' + id + '"]')) return;
-        var opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = id === 'perchance' ? 'Perch / Perchance · 应用内生成' : engineLabel(id);
-        engineSelect.appendChild(opt);
+      ['turbo', 'flux', 'flux-real', 'flux-realism', 'horde', 'auto', 'zimage', 'sdxl', 'krea2', 'liblib', 'anishort'].forEach(function (dead) {
+        var deadOpt = engineSelect.querySelector('option[value="' + dead + '"]');
+        if (deadOpt && deadOpt.parentNode) deadOpt.parentNode.removeChild(deadOpt);
       });
-      // Normalize flux-real alias option if patch injected it.
-      var fluxReal = engineSelect.querySelector('option[value="flux-real"]');
-      if (fluxReal) fluxReal.value = 'flux-realism';
       engineSelect.disabled = false;
       engineSelect.removeAttribute('disabled');
-      if (!engineSelect.value) engineSelect.value = 'perchance';
+      engineSelect.value = normalizeEngineName(engineSelect.value || 'auto-real');
+      if (!engineSelect.querySelector('option[value="' + engineSelect.value + '"]')) engineSelect.value = 'auto-real';
       engineSelect.addEventListener('change', function () {
-        if (engineSelect.value === 'flux-real') engineSelect.value = 'flux-realism';
-        // Keep explicit perchance selection; generation stays in-app and never opens perchance.org.
+        engineSelect.value = normalizeEngineName(engineSelect.value);
+        if (!engineSelect.querySelector('option[value="' + engineSelect.value + '"]')) engineSelect.value = 'auto-real';
         window.__sushiPreferredProvider = engineSelect.value;
         try { localStorage.setItem('角色生成器_默认平台', engineSelect.value); } catch (e) {}
         window.设平台提示(window.当前引擎());
@@ -1004,7 +1047,7 @@
         run.promise = execute(run, true);
         return;
       }
-      status('生图服务已就绪', '可以开始生成图片（自动抢出：全平台）。', false);
+      status('生图服务已就绪', '可以开始生成图片（写实 / 动漫通道已分开）。', false);
     } catch (error) {
       status('暂时无法准备生图', error.message + ' 可稍后直接再次点击生成。', false);
     }

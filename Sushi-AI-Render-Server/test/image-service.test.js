@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createImageService, imageSource, generationPayload } = require('../lib/image-service');
+const { createImageService, imageSource, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('../lib/image-service');
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6JkAAAAASUVORK5CYII=';
 const response = (data, status = 200) => new Response(JSON.stringify(data), { status });
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
@@ -33,6 +33,21 @@ test('validates input, preserves the prompt and sends reference images and guida
   for (const input of [null, [], {}, { prompt: 'x', width: 513 }, { prompt: 'x', width: 0 }, { prompt: 'x', cfgScale: 40 }, { prompt: 'x', seed: '-1' }, { prompt: 'x', sourceImage: 'https://example.com/photo.jpg' }]) {
     assert.throws(() => generationPayload(input), e => e.status === 400);
   }
+});
+
+test('style pins Horde models for 写实 vs 动漫 without changing prompt text', () => {
+  const real = generationPayload({ prompt: 'A cat by a window', style: 'real', width: 512, height: 512 });
+  const anime = generationPayload({ prompt: 'A cat by a window', style: 'anime', width: 512, height: 512 });
+  const plain = generationPayload({ prompt: 'A cat by a window', width: 512, height: 512 });
+  assert.deepEqual(real.models, HORDE_REAL_MODELS);
+  assert.deepEqual(anime.models, HORDE_ANIME_MODELS);
+  assert.equal(plain.models, undefined);
+  assert.equal(real.prompt, 'A cat by a window');
+  assert.equal(anime.prompt, 'A cat by a window');
+  assert.equal(real.nsfw, true);
+  assert.equal(anime.censor_nsfw, false);
+  assert.ok(HORDE_REAL_MODELS.includes('AlbedoBase XL (SDXL)'));
+  assert.ok(HORDE_ANIME_MODELS.includes('WAI-NSFW-illustrious-SDXL'));
 });
 
 test('accepts HTTPS, data URLs and raw base64; rejects HTML and unsafe URL schemes', () => {
