@@ -47,3 +47,17 @@ test('generation prompt favors realistic output without rewriting the visible co
   assert.match(source, /visible 核心描述 remains the source of truth/);
   assert.match(source, /同源写实备用模型重试/);
 });
+
+
+test('Perch timeout uses a fresh fallback and repeated attempts keep realistic routing', () => {
+  assert.match(source, /runWithProviderBudget\(run, engine, function \(signal\) \{[\s\S]*?\}, 15000\)/);
+  assert.match(source, /runWithProviderBudget\(run, 'turbo'/);
+  assert.match(source, /generatePerchancePlugin\(run, prompt, index, 5000\)/);
+  assert.match(source, /Negative phrases.*must not be mistaken/);
+});
+
+test('chat channel selection keeps the explicit free OpenAI route', () => {
+  assert.match(source, /value="openai">快速对话/);
+  assert.match(source, /值 === "openai-fast".*return "openai"/);
+  assert.match(source, /指定 === "openai"\) return 问花粉/);
+});
