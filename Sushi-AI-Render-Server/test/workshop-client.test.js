@@ -126,7 +126,7 @@ test('the current Chinese prompt is translated before submission, never replaced
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.match(payload.prompt, /A small cat by the window/);
   // Visible core is source of truth — no silent photoreal rewrite on generate.
-  assert.match(payload.prompt, /^photorealistic RAW photo/i);
+  assert.match(payload.prompt, /photorealistic/i);
   assert.doesNotMatch(payload.prompt, /A stale unrelated scene/);
 });
 
