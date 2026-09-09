@@ -678,14 +678,14 @@
       try {
         return await runWithProviderBudget(run, engine, function (signal) {
           return generatePerchance(run, prompt, index, signal);
-        }, 15000);
+        }, 10000);
       } catch (error) {
         if (run.cancelled || /取消|lost-race|已取消生成/.test(String(error && error.message || ''))) throw error;
         ensureActive(run);
         status('Perch 暂时无响应，正在自动修复', '保留核心描述，切换同源写实备用模型重试。', true);
         var repaired = await runWithProviderBudget(run, 'turbo', function (signal) {
           return generatePollinations(run, prompt, index, 'turbo', signal);
-        }, 15000);
+        }, 12000);
         return { url: repaired.url, engine: 'perchance' };
       }
     }
