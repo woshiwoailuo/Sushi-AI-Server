@@ -38,7 +38,7 @@
   }
   async function post(url, body) {
     const controller = new AbortController();
-    const timer = setTimeout(function () { controller.abort(); }, 25000);
+    const timer = setTimeout(function () { controller.abort(); }, 45000);
     try {
       const response = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
       const data = await response.json();
@@ -95,7 +95,7 @@
       if (data.key) await unlock(data.key, data.iv);
     } catch (ignored) { /* Android supplies its key after the page finishes loading. */ }
   }
-  setTimeout(function () { showError('打开工坊超时，请返回后重新进入。'); }, 45000);
+  setTimeout(function () { showError('打开工坊超时，请返回后重新进入。'); }, 90000);
   boot().catch(function () { showError('工坊加载失败，请重新进入。'); });
 })();
 </script>
