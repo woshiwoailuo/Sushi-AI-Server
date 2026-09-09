@@ -78,7 +78,44 @@
       return false;
     });
   };
+  // Parent→iframe unlock for Mobile Safari when hash/sessionStorage do not reach the loader.
+  var parentUnlock = null;
+  var parentUnlockWaiters = [];
+  function takeParentUnlock() {
+    return parentUnlock;
+  }
+  function waitParentUnlock(ms) {
+    if (parentUnlock) return Promise.resolve(parentUnlock);
+    return new Promise(function (resolve) {
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        resolve(null);
+      }, ms);
+      parentUnlockWaiters.push(function (payload) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(payload);
+      });
+    });
+  }
+  window.addEventListener('message', function (event) {
+    var data = event && event.data;
+    if (!data || data.type !== 'sushi_wrap_unlock') return;
+    if (data.ticket && wrap.k && String(data.ticket) !== String(wrap.k)) return;
+    if (!data.key) return;
+    parentUnlock = { key: String(data.key), iv: data.iv ? String(data.iv) : wrap.iv };
+    var waiters = parentUnlockWaiters.splice(0, parentUnlockWaiters.length);
+    for (var i = 0; i < waiters.length; i++) waiters[i](parentUnlock);
+    window.__sushiUnlock(parentUnlock.key, parentUnlock.iv);
+  });
   async function boot() {
+    const early = takeParentUnlock();
+    if (early) {
+      try { if (await unlock(early.key, early.iv)) return; } catch (ignored) {}
+    }
     const hash = location.hash.replace(/^#/, '').split('.');
     if (hash[0]) {
       try { if (await unlock(hash[0], hash[1] || wrap.iv)) return; } catch (ignored) {}
@@ -90,6 +127,11 @@
         try { if (await unlock(key, sessionStorage.getItem('sushi_wrap_iv'))) return; } catch (ignored) {}
       }
     } catch (ignored) {}
+    // Brief wait for late parent postMessage before calling unlock API.
+    const fromParent = await waitParentUnlock(400);
+    if (fromParent) {
+      try { if (await unlock(fromParent.key, fromParent.iv)) return; } catch (ignored) {}
+    }
     try {
       const data = await post('/api/workshop/unlock', { ticket: wrap.k });
       if (data.key) {
@@ -108,7 +150,7 @@
         showError(msg);
         return;
       }
-      // Soft failure: keep waiting briefly for Android __sushiUnlock, then surface.
+      // Soft failure: keep waiting briefly for Android __sushiUnlock / parent postMessage.
       setTimeout(function () {
         if (!window.__sushiReady && !window.__sushiLoadError) {
           showError(msg || '工坊解锁失败，请返回重新进入。');

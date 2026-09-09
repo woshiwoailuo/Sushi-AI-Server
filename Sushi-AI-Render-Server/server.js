@@ -271,6 +271,18 @@ async function migrate() {
       created_by INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_app_releases_code ON app_releases(version_code);
+    CREATE TABLE IF NOT EXISTS workshop_tickets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      key_hex TEXT NOT NULL,
+      iv_hex TEXT NOT NULL,
+      ciphertext TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      exp_ms INTEGER NOT NULL,
+      key_used INTEGER NOT NULL DEFAULT 0,
+      unlocks INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_workshop_tickets_exp ON workshop_tickets(exp_ms);
   `);
 }
 
@@ -1023,23 +1035,97 @@ function encryptWorkshopHtml() {
   return { key, iv, ct, tag };
 }
 
-function getLiveTicket(id) {
+function rowToTicket(row) {
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    userId: row.user_id,
+    key: row.key_hex,
+    iv: row.iv_hex,
+    ciphertext: row.ciphertext,
+    tag: row.tag,
+    exp: Number(row.exp_ms),
+    keyUsed: !!Number(row.key_used),
+    unlocks: Number(row.unlocks) || 0,
+  };
+}
+
+async function persistTicket(ticket) {
+  workshopTickets.set(String(ticket.id), ticket);
+  try {
+    await db.prepare(
+      `INSERT INTO workshop_tickets
+        (id, user_id, key_hex, iv_hex, ciphertext, tag, exp_ms, key_used, unlocks)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         user_id = excluded.user_id,
+         key_hex = excluded.key_hex,
+         iv_hex = excluded.iv_hex,
+         ciphertext = excluded.ciphertext,
+         tag = excluded.tag,
+         exp_ms = excluded.exp_ms,
+         key_used = excluded.key_used,
+         unlocks = excluded.unlocks`
+    ).run(
+      String(ticket.id),
+      String(ticket.userId),
+      ticket.key,
+      ticket.iv,
+      ticket.ciphertext,
+      ticket.tag,
+      ticket.exp,
+      ticket.keyUsed ? 1 : 0,
+      ticket.unlocks || 0
+    );
+  } catch (err) {
+    // Persistence is best-effort; in-memory still works on single-instance hosts.
+    console.warn('[workshop-ticket] persist failed:', err && err.message ? err.message : err);
+  }
+}
+
+async function touchTicket(ticket) {
+  workshopTickets.set(String(ticket.id), ticket);
+  try {
+    await db.prepare(
+      'UPDATE workshop_tickets SET unlocks = ?, key_used = ? WHERE id = ?'
+    ).run(ticket.unlocks || 0, ticket.keyUsed ? 1 : 0, String(ticket.id));
+  } catch (err) {
+    console.warn('[workshop-ticket] touch failed:', err && err.message ? err.message : err);
+  }
+}
+
+async function getLiveTicket(id) {
   if (!id) return null;
   sweepTickets();
-  const ticket = workshopTickets.get(String(id));
-  if (!ticket || ticket.exp <= Date.now()) {
-    if (ticket) workshopTickets.delete(String(id));
-    return null;
+  const key = String(id);
+  let ticket = workshopTickets.get(key);
+  if (ticket && ticket.exp <= Date.now()) {
+    workshopTickets.delete(key);
+    ticket = null;
   }
-  return ticket;
+  if (!ticket) {
+    try {
+      const row = await db.prepare('SELECT * FROM workshop_tickets WHERE id = ?').get(key);
+      ticket = rowToTicket(row);
+      if (ticket && ticket.exp <= Date.now()) {
+        await db.prepare('DELETE FROM workshop_tickets WHERE id = ?').run(key);
+        ticket = null;
+      } else if (ticket) {
+        workshopTickets.set(key, ticket);
+      }
+    } catch (err) {
+      ticket = null;
+    }
+  }
+  return ticket || null;
 }
 
 
-function createWorkshopTicket(userId) {
+async function createWorkshopTicket(userId) {
   sweepTickets();
   const enc = encryptWorkshopHtml();
   const id = crypto.randomBytes(32).toString('hex');
-  workshopTickets.set(id, {
+  const ticket = {
     id,
     userId,
     key: enc.key.toString('hex'),
@@ -1049,29 +1135,40 @@ function createWorkshopTicket(userId) {
     exp: Date.now() + TICKET_TTL_MS,
     keyUsed: false,
     unlocks: 0,
-  });
-  return workshopTickets.get(id);
+  };
+  await persistTicket(ticket);
+  return ticket;
 }
 
-function getWorkshopAccess(req, ticketId) {
-  const ticket = getLiveTicket(ticketId);
+async function getWorkshopAccess(req, ticketId) {
+  const ticket = await getLiveTicket(ticketId);
   if (ticket) return ticket;
   // WebView/browser image requests cannot add the Android Bearer header after
   // the page is loaded. A valid login cookie is therefore a safe fallback for
   // an expired or lost query-string ticket; public requests remain blocked.
-  const user = userFromToken(extractToken(req));
+  const user = await userFromToken(extractToken(req));
   if (user && !user.banned) return { userId: user.id, authFallback: true };
   return null;
 }
 
-function sendWorkshopLoader(req, res) {
+async function sendWorkshopLoader(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
   const k = String((req.query && req.query.k) || '');
-  const ticket = getLiveTicket(k);
+  const user = await userFromToken(extractToken(req));
+
+  // Best reliability for logged-in web: serve plaintext workshop.html directly.
+  // Encrypted ticket loader remains available when ?k= is present and valid
+  // (Android WebView / legacy clients).
+  if (user && !user.banned && !k) {
+    res.status(200).type('html').send(readWorkshopPlaintext());
+    return;
+  }
+
+  const ticket = k ? await getLiveTicket(k) : null;
   if (!ticket) {
-    const user = userFromToken(extractToken(req));
     if (user && !user.banned) {
-      const fresh = createWorkshopTicket(user.id);
-      res.redirect(302, '/workshop?k=' + encodeURIComponent(fresh.id));
+      // Cross-instance / expired ticket but session still valid → open without AES.
+      res.status(200).type('html').send(readWorkshopPlaintext());
       return;
     }
     res.status(401).type('html').send(WORKSHOP_401);
@@ -1080,9 +1177,9 @@ function sendWorkshopLoader(req, res) {
   res.status(200).type('html').send(workshopLoaderHtml(ticket));
 }
 
-app.post('/api/workshop/ticket', authMiddleware, (req, res) => {
+app.post('/api/workshop/ticket', authMiddleware, async (req, res) => {
   if (req.user.banned) return res.status(403).json({ error: '账号已被封禁' });
-  const ticket = createWorkshopTicket(req.user.id);
+  const ticket = await createWorkshopTicket(req.user.id);
   res.json({
     ticket: ticket.id,
     key: ticket.key,
@@ -1091,15 +1188,15 @@ app.post('/api/workshop/ticket', authMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/workshop/blob', (req, res) => {
-  const ticket = getLiveTicket(String((req.query && req.query.k) || ''));
+app.get('/api/workshop/blob', async (req, res) => {
+  const ticket = await getLiveTicket(String((req.query && req.query.k) || ''));
   if (!ticket) return res.status(404).json({ error: 'not found' });
   res.json({ iv: ticket.iv, ct: ticket.ciphertext, tag: ticket.tag });
 });
 
 app.post('/api/workshop/session', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  const ticket = getLiveTicket(String((req.body && req.body.ticket) || ''));
+  const ticket = await getLiveTicket(String((req.body && req.body.ticket) || ''));
   const key = String((req.body && req.body.key) || '');
   if (!ticket || !/^[0-9a-f]{64}$/i.test(key)) {
     return res.status(401).json({ error: '进入凭证已过期，请返回后重新进入' });
@@ -1118,14 +1215,18 @@ app.post('/api/workshop/session', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/workshop/unlock', authMiddleware, (req, res) => {
+app.post('/api/workshop/unlock', authMiddleware, async (req, res) => {
   const id = String((req.body && req.body.ticket) || '');
-  const ticket = getLiveTicket(id);
+  const ticket = await getLiveTicket(id);
   if (!ticket) return res.status(404).json({ error: '工坊票据无效或已过期' });
-  if (ticket.userId !== req.user.id) return res.status(403).json({ error: '无权解锁' });
+  // Postgres BIGINT ids may arrive as string while JWT/other paths use number.
+  if (String(ticket.userId) !== String(req.user.id)) {
+    return res.status(403).json({ error: '无权解锁' });
+  }
   if (ticket.unlocks >= 3) return res.status(403).json({ error: '解锁次数已用尽' });
   ticket.unlocks += 1;
   ticket.keyUsed = true;
+  await touchTicket(ticket);
   res.json({ key: ticket.key, iv: ticket.iv });
 });
 
@@ -1242,7 +1343,7 @@ function normalizeImageModel(raw) {
 }
 
 app.post('/api/workshop/chat', async (req, res) => {
-  const access = getWorkshopAccess(req, String((req.body && req.body.k) || ''));
+  const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
   const requested = String((req.body && req.body.model) || 'openai');
   if (!CHAT_MODELS.has(requested) && requested !== 'openai' && requested !== 'horde') {
@@ -1419,7 +1520,7 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
 // the server avoids WebView CORS/referrer failures and prevents the browser
 // from talking to an arbitrary URL supplied by page input.
 app.get('/api/workshop/image', async (req, res) => {
-  const access = getWorkshopAccess(req, String((req.query && req.query.k) || ''));
+  const access = await getWorkshopAccess(req, String((req.query && req.query.k) || ''));
   if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
 
   const model = normalizeImageModel(req.query.model || 'turbo');
@@ -1500,7 +1601,7 @@ app.get('/api/workshop/image', async (req, res) => {
 });
 
 app.post('/api/workshop/horde-image', async (req, res) => {
-  const access = getWorkshopAccess(req, String((req.body && req.body.k) || ''));
+  const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
   const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
@@ -1539,7 +1640,7 @@ function decodeImageDataUrl(value) {
 }
 
 app.post('/api/workshop/img2img', async (req, res) => {
-  const access = getWorkshopAccess(req, String((req.body && req.body.k) || ''));
+  const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
 
   const sourceImage = decodeImageDataUrl(req.body && req.body.image);
