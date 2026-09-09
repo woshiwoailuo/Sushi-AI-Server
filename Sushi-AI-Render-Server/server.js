@@ -1519,7 +1519,8 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
   };
   try {
     let lastError = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const maxAttempts = model === 'perchance' ? 1 : 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         const got = await tryOnce(attempt);
         const mime = got.contentType.split(';')[0].trim() || 'image/jpeg';
@@ -1568,6 +1569,8 @@ app.get('/api/workshop/image', async (req, res) => {
   let seed = Number.isFinite(Number(req.query.seed)) ? Math.trunc(Number(req.query.seed)) : Math.floor(Math.random() * 2147483646);
 
   const controller = new AbortController();
+  const abortOnDisconnect = () => controller.abort();
+  req.once('close', abortOnDisconnect);
   const timer = setTimeout(() => controller.abort(), 30_000);
   const tryOnce = async (attempt) => {
     const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
@@ -1631,6 +1634,7 @@ app.get('/api/workshop/image', async (req, res) => {
     else res.destroy(error);
   } finally {
     clearTimeout(timer);
+    req.removeListener('close', abortOnDisconnect);
   }
 });
 
