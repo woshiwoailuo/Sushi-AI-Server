@@ -496,29 +496,21 @@
     return { url: done.image.url, engine: 'horde', job: done };
   }
 
-  // Short cool-down after 429/5xx so race skips that engine for the rest of this round.
-  var ENGINE_COOLDOWN_MS = 25000;
-  var engineCooldownUntil = Object.create(null);
+  // Workshop image generation never imposes an application-side cool-down.
+  // Upstream 429/5xx responses end the current attempt immediately; the user may retry.
+  var ENGINE_COOLDOWN_MS = 0;
   var lastRateLimited = false;
 
   function markEngineCool(eng, statusCode) {
-    eng = normalizeEngineName(eng);
-    if (!eng || eng === 'auto') return;
-    engineCooldownUntil[eng] = Date.now() + ENGINE_COOLDOWN_MS;
     if (statusCode === 429) lastRateLimited = true;
   }
 
-  function isEngineCool(eng) {
-    eng = normalizeEngineName(eng);
-    var until = engineCooldownUntil[eng];
-    return !!(until && Date.now() < until);
+  function isEngineCool() {
+    return false;
   }
 
-  function coolHint(eng) {
-    var until = engineCooldownUntil[normalizeEngineName(eng)];
-    if (!until) return '';
-    var sec = Math.max(1, Math.ceil((until - Date.now()) / 1000));
-    return engineLabel(eng) + ' 冷却中约 ' + sec + ' 秒';
+  function coolHint() {
+    return '';
   }
 
   // Perchance cool-down cancelled: explicit Perchance and auto race may always try.
@@ -543,12 +535,12 @@
     var msgs = (errors || []).map(function (e) { return e && e.message; }).filter(Boolean);
     var rate = lastRateLimited || msgs.some(function (m) { return /429|限流|繁忙|冷却/.test(String(m)); });
     if (rate) {
-      return '出图通道限流：已跳过繁忙引擎（短冷却）。请稍后重试或手动换通道；不是全部永久失败。';
+      return '出图通道繁忙，本次请求已结束，未设置冷却，可立即重试或手动换通道。';
     }
     return msgs.length ? msgs.join('；') : '自动抢出失败：各平台均未成功';
   }
 
-  var FREE_RACE_ENGINES = ['flux-realism', 'turbo', 'flux', 'sana', 'horde', 'perchance'];
+  var FREE_RACE_ENGINES = [ 'turbo', 'flux', 'sana', 'horde', 'perchance'];
 
   function normalizeEngineName(raw) {
     var name = String(raw || '').trim().toLowerCase();
@@ -697,7 +689,6 @@
     // auto only: race free platforms; skip engines still in short cool-down after 429/5xx.
     // Perchance always eligible (cool-down cancelled); generation never window.open's perchance.org.
     var activeEngines = FREE_RACE_ENGINES.filter(function (eng) {
-      if (eng === 'perchance' && typeof window.update !== 'function') return false;
       if (eng === 'perchance' && isPerchanceCooling()) return false; // always false now
       return !isEngineCool(eng) && !isEngineDisabled(eng);
     });
@@ -706,7 +697,7 @@
       return isEngineCool(eng) || isEngineDisabled(eng);
     });
     if (!activeEngines.length) {
-      throw Object.assign(new Error('出图通道限流：本轮引擎都在短冷却中，请稍后再试（不是全部永久失败）。'), { status: 429, code: 'ALL_COOLDOWN' });
+      throw Object.assign(new Error('当前没有可用的生图通道，请立即重试或更换平台。'), { status: 429, code: 'ALL_COOLDOWN' });
     }
     status(
       '自动抢出 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张',
@@ -830,7 +821,7 @@
       var detail = run.cancelled ? '已保留已完成的图片。' : String(error && error.message || error || '');
       if (!run.cancelled && (error && (error.status === 429 || error.code === 'ENGINE_COOLDOWN' || error.code === 'ALL_COOLDOWN' || /限流|冷却|429/.test(detail)))) {
         title = run.completed ? title : '出图通道限流';
-        if (!/限流|冷却/.test(detail)) detail = '免费通道繁忙（限流），已跳过该引擎短冷却；请稍后重试或换通道。';
+        if (!/限流|冷却/.test(detail)) detail = '免费通道繁忙，本次请求已结束且未设置冷却；可立即重试或更换平台。';
       } else if (!run.cancelled && /各平台均未成功|自动抢出失败/.test(detail)) {
         title = run.completed ? title : '各通道均未成功';
       }
