@@ -186,7 +186,7 @@
         <button class="btn btn-ghost" type="button" id="toImageTools" style="margin:0;background:var(--card);border:1px solid var(--line);color:var(--text)">图生图 / 换背景</button>
       </div>
       <details style="margin-top:12px">
-        <summary class="muted" style="cursor:pointer">文生图快捷模板（会跳转工坊）</summary>
+        <summary class="muted" style="cursor:pointer">文生图快捷模板（填入对话后发送，首页直出图）</summary>
         <div class="tpl-grid" id="tplGrid"></div>
       </details>
     </div>
@@ -585,54 +585,71 @@
       }
       return t.slice(0, 1200);
     }
+    function homeImageError(err) {
+      var status = err && err.status;
+      var msg = (err && err.message) || '';
+      if (status === 401 || /未登录|401/.test(msg)) return '请先登录后再出图';
+      if (status === 402 || /额度|用尽/.test(msg)) return '今日出图额度已用尽，请明天再试或升级会员';
+      if (status === 429 || /繁忙|频繁|rate/i.test(msg)) return '生图通道繁忙，请稍后再试';
+      if (status === 403 || /封禁/.test(msg)) return '账号不可用，无法出图';
+      if (err && err.name === 'AbortError') return '出图超时，请稍后重试';
+      return msg || '出图失败，请换描述再试';
+    }
     async function generateHomeImage(promptText) {
+      // Stay on homepage chat: authenticated API only. Never open /workshop or mint workshop HTML tickets.
       var prompt = photorealHomePrompt(promptText);
-      var ticket = '';
       try {
-        var wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', timeoutMs: 8000 });
-        ticket = wrap && wrap.ticket || '';
-      } catch (e) { ticket = ''; }
-      if (ticket) {
-        var url = '/api/workshop/image?k=' + encodeURIComponent(ticket)
-          + '&model=flux-realism&width=768&height=768&seed=' + Math.floor(Math.random() * 1e9)
-          + '&prompt=' + encodeURIComponent(prompt.slice(0, 1400));
-        var res = await fetch(url, { credentials: 'include', cache: 'no-store' });
-        if (!res.ok) throw new Error(res.status === 401 ? '请先登录后再出图' : ('出图失败(' + res.status + ')'));
-        var blob = await res.blob();
-        if (!blob || blob.size < 2500) throw new Error('图片无效，请换描述再试');
-        var dataUrl = await new Promise(function (resolve, reject) {
-          var r = new FileReader();
-          r.onload = function () { resolve(r.result); };
-          r.onerror = function () { reject(new Error('读图失败')); };
-          r.readAsDataURL(blob);
+        var direct = await api('/api/chat/image', {
+          method: 'POST',
+          body: JSON.stringify({
+            prompt: prompt,
+            model: 'flux-realism',
+            width: 768,
+            height: 768,
+            seed: Math.floor(Math.random() * 1e9),
+            negativePrompt: 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text'
+          }),
+          timeoutMs: 95000
         });
-        return { url: dataUrl, channel: 'Flux写实' };
-      }
-      var created = await api('/api/images', {
-        method: 'POST',
-        body: JSON.stringify({
-          prompt: prompt,
-          width: 768,
-          height: 768,
-          negativePrompt: 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text'
-        }),
-        timeoutMs: 90000
-      });
-      var job = created && (created.job || created);
-      if (!job || !job.id) throw new Error('未能创建出图任务');
-      var deadline = Date.now() + 180000;
-      while (Date.now() < deadline) {
-        var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
-        var cur = st && (st.job || st);
-        if (cur && cur.state === 'done' && cur.image && cur.image.url) {
-          return { url: cur.image.url, channel: 'Horde' };
+        if (direct && direct.url && String(direct.url).indexOf('data:image') === 0) {
+          return { url: direct.url, channel: direct.channel || 'Flux写实' };
         }
-        if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
-          throw new Error((cur && cur.error) || '出图失败');
+        throw new Error('图片无效，请换描述再试');
+      } catch (err) {
+        if (err && (err.status === 401 || err.status === 403 || err.status === 402)) {
+          throw new Error(homeImageError(err));
         }
-        await new Promise(function (r) { setTimeout(r, 2500); });
+        // Fallback: authenticated Horde job API (still no workshop page).
+        try {
+          var created = await api('/api/images', {
+            method: 'POST',
+            body: JSON.stringify({
+              prompt: prompt,
+              width: 768,
+              height: 768,
+              negativePrompt: 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text'
+            }),
+            timeoutMs: 90000
+          });
+          var job = created && (created.job || created);
+          if (!job || !job.id) throw err;
+          var deadline = Date.now() + 180000;
+          while (Date.now() < deadline) {
+            var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
+            var cur = st && (st.job || st);
+            if (cur && cur.state === 'done' && cur.image && cur.image.url) {
+              return { url: cur.image.url, channel: 'Horde' };
+            }
+            if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
+              throw new Error((cur && cur.error) || '出图失败');
+            }
+            await new Promise(function (r) { setTimeout(r, 2500); });
+          }
+          throw new Error('出图超时，请稍后重试');
+        } catch (fallbackErr) {
+          throw new Error(homeImageError(fallbackErr || err));
+        }
       }
-      throw new Error('出图超时，请稍后重试');
     }
     async function askOneChat(question, model) {
       var messages = buildMessages(question);
@@ -842,8 +859,11 @@
         b.className = 'tpl-btn';
         b.textContent = item[0];
         b.onclick = function () {
-          try { localStorage.setItem('sushi_pending_prompt', item[1]); } catch (e) {}
-          document.querySelector('[data-tab="gen"]').click();
+          var input = $('chatInput');
+          if (input) {
+            input.value = '画一张：' + item[1];
+            input.focus();
+          }
         };
         g.appendChild(b);
       });

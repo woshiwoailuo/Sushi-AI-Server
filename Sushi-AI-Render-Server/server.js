@@ -1323,6 +1323,87 @@ app.post('/api/workshop/chat', async (req, res) => {
   }
 });
 
+
+// Homepage chat image: auth cookie/JWT only — never requires opening /workshop or minting an HTML ticket.
+app.post('/api/chat/image', authMiddleware, async (req, res) => {
+  if (req.user.banned) return workshopImageError(res, 403, '账号已被封禁');
+  const model = normalizeImageModel((req.body && req.body.model) || 'flux-realism');
+  if (!IMAGE_MODELS.has(model)) return workshopImageError(res, 400, '不支持的生图模型');
+  const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
+  if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
+  const width = Math.min(1024, Math.max(256, Number(req.body && req.body.width) || 768));
+  const height = Math.min(1024, Math.max(256, Number(req.body && req.body.height) || 768));
+  let seed = Number.isFinite(Number(req.body && req.body.seed)) ? Math.trunc(Number(req.body.seed)) : Math.floor(Math.random() * 2147483646);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90_000);
+  const tryOnce = async (attempt) => {
+    const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
+    upstream.searchParams.set('model', model);
+    upstream.searchParams.set('width', String(width));
+    upstream.searchParams.set('height', String(height));
+    upstream.searchParams.set('seed', String(seed + attempt * 97));
+    upstream.searchParams.set('nologo', 'true');
+    upstream.searchParams.set('enhance', 'false');
+    upstream.searchParams.set('safe', 'false');
+    const upstreamResponse = await fetch(upstream, {
+      signal: controller.signal,
+      headers: {
+        Accept: 'image/*',
+        Referer: 'https://sushi-ai-server.vercel.app/',
+      },
+    });
+    if (!upstreamResponse.ok || !upstreamResponse.body) {
+      const err = new Error(upstreamResponse.status === 429 ? '生图通道繁忙，请稍后重试' : (`上游生图服务返回 ${upstreamResponse.status}`));
+      err.status = upstreamResponse.status === 429 ? 429 : (upstreamResponse.status || 502);
+      throw err;
+    }
+    const contentType = String(upstreamResponse.headers.get('content-type') || '');
+    if (contentType && !contentType.includes('image/')) {
+      const err = new Error('上游未返回图片');
+      err.status = 502;
+      throw err;
+    }
+    const buf = Buffer.from(await upstreamResponse.arrayBuffer());
+    if (!buf.length || buf.length < 2500) {
+      const err = new Error('上游图片过小或无效');
+      err.status = 502;
+      throw err;
+    }
+    return { buf, contentType: contentType || 'image/jpeg' };
+  };
+  try {
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const got = await tryOnce(attempt);
+        const mime = got.contentType.split(';')[0].trim() || 'image/jpeg';
+        return res.status(200).json({
+          ok: true,
+          model,
+          channel: model === 'flux-realism' ? 'Flux写实' : model,
+          contentType: mime,
+          url: 'data:' + mime + ';base64,' + got.buf.toString('base64'),
+        });
+      } catch (error) {
+        lastError = error;
+        if (error && error.name === 'AbortError') break;
+        if (error && error.status === 429) {
+          return workshopImageError(res, 429, '生图通道繁忙，请稍后重试');
+        }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 450 + attempt * 350));
+      }
+    }
+    if (lastError && lastError.name === 'AbortError') {
+      return workshopImageError(res, 504, '生图超时，请稍后重试');
+    }
+    return workshopImageError(res, (lastError && lastError.status) || 502, (lastError && lastError.message) || '生图失败，请换描述再试');
+  } catch (error) {
+    return workshopImageError(res, 504, error && error.name === 'AbortError' ? '生图超时，请稍后重试' : '生图服务连接失败');
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 // Same-origin image proxy for the workshop fallback engines. Keeping this on
 // the server avoids WebView CORS/referrer failures and prevents the browser
 // from talking to an arbitrary URL supplied by page input.
