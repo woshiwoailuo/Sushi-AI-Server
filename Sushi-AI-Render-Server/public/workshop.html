@@ -405,6 +405,10 @@
             <option value="openai">OpenAI 兼容模型</option>
             <option value="openai-fast">快速模型</option>
             <option value="deepseek">DeepSeek · 需配置密钥</option>
+            <option value="groq">Groq · 免费额度（需配置密钥）</option>
+            <option value="gemini">Gemini · 免费层（需配置密钥）</option>
+            <option value="openrouter">OpenRouter · 免费模型（需配置密钥）</option>
+            <option value="grok">Grok · 需配置密钥</option>
             <option value="turbo">Turbo 备用</option>
             <option value="horde">Horde</option>
           </select>
@@ -1154,6 +1158,10 @@
     if (通道 === "fast") return "快答";
     if (通道 === "horde") return "Horde";
     if (通道 === "deepseek") return "DeepSeek";
+    if (通道 === "groq") return "Groq · 免费额度";
+    if (通道 === "gemini") return "Gemini · 免费层";
+    if (通道 === "openrouter") return "OpenRouter · 免费模型";
+    if (通道 === "grok") return "Grok";
     if (通道 === "auto") return "自动抢答";
     return 通道 || "";
   }
@@ -1393,6 +1401,10 @@
 
   function 花粉通道名(模型) {
     if (模型 === "deepseek") return "deepseek";
+    if (模型 === "groq") return "groq";
+    if (模型 === "gemini") return "gemini";
+    if (模型 === "openrouter") return "openrouter";
+    if (模型 === "grok") return "grok";
     if (模型 === "openai-fast" || 模型 === "openai" || 模型 === "fast") return "fast";
     return "turbo";
   }
@@ -1480,7 +1492,7 @@
     } catch (e) {
       内容 = "";
     }
-    if (!内容 && 模型 !== "deepseek") {
+    if (!内容 && ["openai", "openai-fast", "fast", "turbo"].indexOf(模型) >= 0) {
       try {
         var getResp = await 限时拉取("https://text.pollinations.ai/" + encodeURIComponent(组装群体提示(问句).slice(0, 1200)), {
           method: "GET",
@@ -1572,12 +1584,15 @@
   async function 问免费模型(问句, 模型) {
     var 指定 = 模型 || "";
     if (指定 === "deepseek") return 问花粉(问句, "deepseek");
+    if (指定 === "groq" || 指定 === "gemini" || 指定 === "openrouter" || 指定 === "grok") return 问花粉(问句, 指定);
     if (指定 === "horde") return 问群体模型(问句);
     if (指定 === "fast" || 指定 === "openai-fast" || 指定 === "openai" || 指定 === "turbo") return 问花粉(问句, "openai");
     if (指定 && 指定 !== "auto") return 问花粉(问句, "openai");
     var 赛道 = [
-      问花粉(问句, "openai"),
-      问花粉(问句, "deepseek"),
+      问花粉(问句, "groq"),
+      问花粉(问句, "gemini"),
+      问花粉(问句, "openrouter"),
+      问花粉(问句, "grok"),
       问群体模型(问句)
     ];
     return new Promise(function (成功, 失败) {
