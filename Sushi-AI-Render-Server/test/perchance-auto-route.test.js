@@ -26,3 +26,10 @@ test('auto mode does not race Perchance against its Flux写实 proxy twice', () 
   assert.match(race[1], /['"]perchance['"]/);
   assert.doesNotMatch(race[1], /['"]flux-realism['"]/);
 });
+
+test('workshop image providers have no application-side cool-down', () => {
+  assert.match(source, /ENGINE_COOLDOWN_MS = 0/);
+  assert.match(source, /function isEngineCool\(\) \{\s*return false;/);
+  assert.doesNotMatch(source, /Date\.now\(\) \+ ENGINE_COOLDOWN_MS/);
+  assert.match(source, /可立即重试|未设置冷却/);
+});
