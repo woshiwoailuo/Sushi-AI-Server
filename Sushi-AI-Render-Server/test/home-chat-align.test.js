@@ -28,7 +28,9 @@ test('homepage chat channel picker honors explicit selection and auto race', () 
   assert.match(home, /if \(channel && channel !== 'auto'\) return askOneChat\(question, channel\);/);
   assert.match(home, /localStorage\.setItem\(chatChannelKey\(\), v\)/);
   assert.match(home, /value="grok"/);
-  assert.match(home, /var models = \['grok', 'horde'\]/);
+  assert.match(home, /var models = \['horde', 'grok'\]/);
+  assert.match(home, /XAI_API_KEY/);
+  assert.match(home, /Grok · xAI（需配置密钥）/);
   // Broken OpenAI(402) / DeepSeek(未配置) removed from homepage picker (not grayed).
   const picker = home.slice(home.indexOf('id="chatChannel"'), home.indexOf('</select>', home.indexOf('id="chatChannel"')) + 9);
   assert.match(picker, /value="auto"/);
