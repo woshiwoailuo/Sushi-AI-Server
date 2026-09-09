@@ -92,8 +92,29 @@
     } catch (ignored) {}
     try {
       const data = await post('/api/workshop/unlock', { ticket: wrap.k });
-      if (data.key) await unlock(data.key, data.iv);
-    } catch (ignored) { /* Android supplies its key after the page finishes loading. */ }
+      if (data.key) {
+        await unlock(data.key, data.iv);
+        return;
+      }
+      showError('未能取得解锁密钥，请返回后重新进入。');
+    } catch (error) {
+      // Definitive auth/ticket errors: surface soon. Network/cold-start may still get a native key.
+      const msg = (error && error.message) || '';
+      if (error && error.name === 'AbortError') {
+        showError('恢复登录超时，请返回后重试。');
+        return;
+      }
+      if (/未登录|凭证|过期|无权|封禁|验证邮箱|无效|用尽|401|403|404|请先登录|请返回/i.test(msg)) {
+        showError(msg);
+        return;
+      }
+      // Soft failure: keep waiting briefly for Android __sushiUnlock, then surface.
+      setTimeout(function () {
+        if (!window.__sushiReady && !window.__sushiLoadError) {
+          showError(msg || '工坊解锁失败，请返回重新进入。');
+        }
+      }, 8000);
+    }
   }
   setTimeout(function () { showError('打开工坊超时，请返回后重新进入。'); }, 90000);
   boot().catch(function () { showError('工坊加载失败，请重新进入。'); });

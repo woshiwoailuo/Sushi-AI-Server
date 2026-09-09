@@ -74,3 +74,17 @@ test('homepage photoreal enrichment honors style-keyword bypass', () => {
   assert.match(gen, /styleAware/);
   assert.match(gen, /negativePrompt: negative/);
 });
+
+
+test('homepage enterGen waits long enough for cold-start ticket mint', () => {
+  const enter = home.slice(home.indexOf('async function enterGen'), home.indexOf('setTimeout(async () => {'));
+  assert.ok(enter.length > 200);
+  assert.match(enter, /正在打开工坊/);
+  assert.match(enter, /\/api\/workshop\/ticket/);
+  assert.match(enter, /60000/);
+  assert.doesNotMatch(enter, /,\s*8000\)/);
+  assert.match(enter, /打开工坊超时|冷启动/);
+  assert.match(server, /function readWorkshopPlaintext/);
+  assert.match(server, /workshopPlainCache/);
+  assert.match(server, /encryptWorkshopHtml/);
+});

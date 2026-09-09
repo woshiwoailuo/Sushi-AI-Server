@@ -59,3 +59,39 @@ test('a fresh URL key takes precedence over stale session storage', async t => {
   assert.equal(w.location.hash, '');
   assert.equal(w.sessionStorage.getItem('sushi_wrap_key'), null);
 });
+
+
+test('cookie unlock auth failures surface instead of waiting silently until total timeout', async t => {
+  const key = crypto.randomBytes(32), iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update('<p>Gate</p>'), cipher.final()]);
+  const html = render({ id: 'ticket-auth', iv: iv.toString('hex'), ciphertext: ciphertext.toString('base64'), tag: cipher.getAuthTag().toString('base64') });
+  assert.match(html, /未能取得解锁密钥|未登录|凭证|恢复登录超时|工坊解锁失败/);
+  assert.match(html, /\/api\/workshop\/unlock/);
+  const dom = new JSDOM(html, { url: 'https://app.example/workshop?k=ticket-auth', runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const w = dom.window;
+  Object.defineProperty(w, 'crypto', { value: crypto.webcrypto });
+  w.TextDecoder = TextDecoder;
+  w.AbortController = AbortController;
+  // Speed up soft-failure timer in boot catch
+  const realTimeout = w.setTimeout.bind(w);
+  w.setTimeout = (fn, ms, ...args) => realTimeout(fn, Math.min(ms, 20), ...args);
+  w.fetch = async (url) => {
+    if (String(url).includes('/unlock')) {
+      return { ok: false, json: async () => ({ error: '未登录，请先登录后再进入工坊' }) };
+    }
+    return { ok: true, json: async () => ({ ok: true }) };
+  };
+  w.document.open = () => {};
+  w.document.write = () => { throw new Error('must not decrypt without key'); };
+  w.document.close = () => {};
+  w.eval(w.document.querySelector('script').textContent);
+  const deadline = Date.now() + 2000;
+  while (!w.__sushiLoadError && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.match(String(w.__sushiLoadError || ''), /未登录/);
+  assert.equal(w.document.getElementById('loaderTitle').textContent, '工坊未能打开');
+  assert.equal(w.document.getElementById('loaderBack').hidden, false);
+});

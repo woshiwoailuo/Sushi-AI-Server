@@ -942,12 +942,18 @@
         } catch (e) {}
         return;
       }
-      body.innerHTML = '<div class="card paywall" id="genGate"><h3>正在打开工坊…</h3></div>';
+      // Ticket mint encrypts ~150KB HTML; cold start often exceeds the old 8s abort.
+      body.innerHTML = '<div class="card paywall" id="genGate"><h3>正在打开工坊…</h3><p class="muted" id="genGateDetail" style="margin:8px 0 0">正在准备加密页面，冷启动时可能需要约一分钟，请稍候。</p></div>';
+      var progressTimer = setTimeout(function () {
+        var d = $('genGateDetail');
+        if (d) d.textContent = '仍在打开工坊…服务器可能刚从休眠醒来，请继续等待。';
+      }, 12000);
       try {
         const ctrl = new AbortController();
-        const to = setTimeout(function () { ctrl.abort(); }, 8000);
-        const wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', signal: ctrl.signal });
+        const to = setTimeout(function () { ctrl.abort(); }, 60000);
+        const wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', signal: ctrl.signal, timeoutMs: 60000 });
         clearTimeout(to);
+        clearTimeout(progressTimer);
         refreshQuota().catch(function () {});
         try {
           sessionStorage.setItem('sushi_wrap_key', wrap.key);
@@ -962,12 +968,15 @@
         body.appendChild(iframe);
         genLoaded = true;
       } catch (err) {
+        clearTimeout(progressTimer);
         genLoaded = false;
         const pay = err.status === 402;
+        const abort = err && (err.name === 'AbortError' || /aborted|abort/i.test(String(err.message || '')));
         body.innerHTML = '<div class="card paywall"><h3>' +
-          (pay ? '今日次数已用尽' : (err.name === 'AbortError' ? '暂时无法连接' : err.message)) +
-          '</h3><p class="muted" style="margin:8px 0 18px">请稍后重试进入创作。</p>' +
-          '<button class="btn btn-lime" type="button" id="retryGen">重试</button></div>';
+          (pay ? '今日次数已用尽' : (abort ? '打开工坊超时' : err.message)) +
+          '</h3><p class="muted" style="margin:8px 0 18px">' +
+          (abort ? '冷启动较慢时可能超时，请再点一次重试。' : '请稍后重试进入创作。') +
+          '</p><button class="btn btn-lime" type="button" id="retryGen">重试</button></div>';
         const r = $('retryGen');
         if (r) r.onclick = function () { genLoaded = false; enterGen(); };
       }
