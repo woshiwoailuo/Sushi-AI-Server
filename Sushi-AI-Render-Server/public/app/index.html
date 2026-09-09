@@ -170,10 +170,12 @@
         <select id="chatChannel" aria-label="AI 回答通道">
           <option value="auto" selected>自动抢答 · 推荐</option>
           <option value="groq">Groq · 免费额度</option>
+          <option value="gemini">Gemini · 免费层</option>
+          <option value="openrouter">OpenRouter · 免费模型</option>
           <option value="horde">Horde · 免费可用</option>
           <option value="grok">Grok · xAI（需配置密钥）</option>
         </select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答：Groq + Horde 免费通道并行。Groq 需 Vercel 设置 <code>GROQ_API_KEY</code>（可选 <code>GROQ_MODEL</code>，默认 <code>openai/gpt-oss-20b</code>）。Grok 仍需 <code>XAI_API_KEY</code>，未配置时请勿选 Grok。</p>
+        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答：已配置的 Groq、Gemini、OpenRouter 与 Horde 并行，未配置密钥的通道自动跳过。Groq 用 <code>GROQ_API_KEY</code>，Gemini 用 <code>GEMINI_API_KEY</code>，OpenRouter 用 <code>OPENROUTER_API_KEY</code>。</p>
       </div>
     </div>
     <div class="chat-shell">
@@ -550,7 +552,7 @@
       if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
       return content;
     }
-    var CHAT_LABELS = { groq: 'Groq', grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
+    var CHAT_LABELS = { groq: 'Groq', gemini: 'Gemini', openrouter: 'OpenRouter', grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
     function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
     function normalizeChatChannel(raw) {
       var v = String(raw || 'auto').trim().toLowerCase();
@@ -558,7 +560,9 @@
       if (v === 'openai' || v === 'turbo' || v === 'openai-fast' || v === 'fast' || v === 'deepseek') return 'auto';
       if (v === 'xai' || v === 'x-ai') return 'grok';
       if (v === 'groq' || v === 'groqcloud' || v === 'groq-cloud') return 'groq';
-      if (v === 'grok' || v === 'horde' || v === 'groq' || v === 'auto') return v;
+      if (v === 'gemini' || v === 'google' || v === 'google-gemini') return 'gemini';
+      if (v === 'openrouter' || v === 'open-router') return 'openrouter';
+      if (v === 'grok' || v === 'horde' || v === 'groq' || v === 'gemini' || v === 'openrouter' || v === 'auto') return v;
       return 'auto';
     }
     function loadChatChannel() {
@@ -687,7 +691,7 @@
       if (channel && channel !== 'auto') return askOneChat(question, channel);
       var messages = buildMessages(question);
       // auto：免费通道 Groq + Horde 并行（Grok 需密钥，不进抢答以免 503 噪声）；整体抢答上限 30s。
-      var models = ['groq', 'horde'];
+      var models = ['groq', 'gemini', 'openrouter', 'horde'];
       return await new Promise(function (resolve, reject) {
         var left = models.length;
         var failed = 0;
