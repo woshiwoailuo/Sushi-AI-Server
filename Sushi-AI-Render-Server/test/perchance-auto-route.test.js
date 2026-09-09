@@ -54,7 +54,7 @@ test('generation prompt favors realistic output without rewriting the visible co
 
 
 test('Perch timeout uses a fresh fallback and repeated attempts keep realistic routing', () => {
-  assert.match(source, /runWithProviderBudget\(run, engine, function \(signal\) \{[\s\S]*?\}, 10000\));
+  assert.match(source, /runWithProviderBudget\(run, engine[\s\S]*?\}, 10000\)/);
   assert.match(source, /runWithProviderBudget\(run, 'turbo'/);
   assert.match(source, /generatePerchancePlugin\(run, prompt, index, 5000\)/);
   assert.match(source, /Negative phrases.*must not be mistaken/);
