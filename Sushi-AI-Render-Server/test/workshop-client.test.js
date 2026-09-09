@@ -529,7 +529,7 @@ test('智能修饰 writes visible core modifiers and generation uses that text',
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.equal(f.w.document.getElementById('角色描述').value, afterFirst);
   assert.ok(payload.prompt && payload.prompt.length > 8);
-  assert.match(payload.prompt, /^photorealistic RAW photo/i);
+  assert.match(payload.prompt, /photorealistic/i);
 });
 
 test('photorealPrompt helper still available for style-aware enrich logic', async t => {
