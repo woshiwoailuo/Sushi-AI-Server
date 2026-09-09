@@ -17,7 +17,7 @@ const {
   migratePostgres,
   persistenceFromMode,
 } = require('./lib/db-postgres');
-const { normalizeChatPayload, collapseRepeatedText } = require('./lib/chat-response');
+const { normalizeChatPayload, collapseRepeatedText, normalizeChatModel, missingChatApiKeyMessage } = require('./lib/chat-response');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -1235,28 +1235,19 @@ app.post('/api/workshop/unlock', authMiddleware, async (req, res) => {
 });
 
 const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
-const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai']);
+const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai', 'groq']);
 const DEEPSEEK_API_KEY = String(process.env.DEEPSEEK_API_KEY || '').trim();
 const DEEPSEEK_MODEL = String(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim();
 const XAI_API_KEY = String(process.env.XAI_API_KEY || process.env.GROK_API_KEY || '').trim();
 const GROK_MODEL = String(process.env.GROK_MODEL || process.env.XAI_MODEL || 'grok-4-fast').trim() || 'grok-4-fast';
+// Groq free-tier friendly default: openai/gpt-oss-20b (llama-3.1-8b-instant shut down for free/dev Aug 2026).
+const GROQ_API_KEY = String(process.env.GROQ_API_KEY || '').trim();
+const GROQ_MODEL = String(process.env.GROQ_MODEL || 'openai/gpt-oss-20b').trim() || 'openai/gpt-oss-20b';
 const HORDE_TEXT_API_KEY = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
 const HORDE_TEXT_CLIENT = 'sushi-club:1.1.21:https://aihorde.net';
 
 function workshopImageError(res, status, error) {
   res.status(status).json({ error });
-}
-
-function normalizeChatModel(raw) {
-  const model = String(raw || 'openai').trim().toLowerCase();
-  if (model === 'deepseek') return 'deepseek';
-  if (model === 'grok' || model === 'xai' || model === 'x-ai') return 'grok';
-  if (model === 'horde' || model === 'aihorde' || model === 'ai-horde') return 'horde';
-  // Pollinations legacy ids: turbo is gone; openai-fast often 402s while alias "openai" still works anonymously.
-  if (model === 'turbo' || model === 'openai-fast' || model === 'fast' || model === 'openai' || model === 'gpt-oss') {
-    return 'openai';
-  }
-  return model;
 }
 
 function messagesToHordePrompt(messages) {
@@ -1353,20 +1344,23 @@ app.post('/api/workshop/chat', async (req, res) => {
   const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
   const requested = String((req.body && req.body.model) || 'openai');
-  if (!CHAT_MODELS.has(requested) && requested !== 'openai' && requested !== 'horde' && requested !== 'grok') {
+  if (!CHAT_MODELS.has(requested) && requested !== 'openai' && requested !== 'horde' && requested !== 'grok' && requested !== 'groq') {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const model = normalizeChatModel(requested);
-  if (model !== 'deepseek' && model !== 'openai' && model !== 'horde' && model !== 'grok') {
+  if (model !== 'deepseek' && model !== 'openai' && model !== 'horde' && model !== 'grok' && model !== 'groq') {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-48) : [];
   if (!messages.length) return workshopImageError(res, 400, '对话内容不能为空');
   if (model === 'deepseek' && !DEEPSEEK_API_KEY) {
-    return workshopImageError(res, 503, 'DeepSeek 尚未配置，请改用其他对话通道或稍后重试');
+    return workshopImageError(res, 503, missingChatApiKeyMessage('deepseek'));
   }
   if (model === 'grok' && !XAI_API_KEY) {
-    return workshopImageError(res, 503, 'Grok 尚未配置（未设置 XAI_API_KEY），请改用其他对话通道或稍后重试');
+    return workshopImageError(res, 503, missingChatApiKeyMessage('grok'));
+  }
+  if (model === 'groq' && !GROQ_API_KEY) {
+    return workshopImageError(res, 503, missingChatApiKeyMessage('groq'));
   }
 
   const controller = new AbortController();
@@ -1381,12 +1375,16 @@ app.post('/api/workshop/chat', async (req, res) => {
       ? 'https://api.deepseek.com/chat/completions'
       : model === 'grok'
         ? 'https://api.x.ai/v1/chat/completions'
-        : 'https://text.pollinations.ai/openai';
+        : model === 'groq'
+          ? 'https://api.groq.com/openai/v1/chat/completions'
+          : 'https://text.pollinations.ai/openai';
     const upstreamModel = model === 'deepseek'
       ? DEEPSEEK_MODEL
       : model === 'grok'
         ? GROK_MODEL
-        : 'openai';
+        : model === 'groq'
+          ? GROQ_MODEL
+          : 'openai';
     const requestBody = model === 'deepseek'
       ? {
           model: upstreamModel,
@@ -1395,7 +1393,7 @@ app.post('/api/workshop/chat', async (req, res) => {
           temperature: 0.7,
           thinking: { type: 'disabled' },
         }
-      : model === 'grok'
+      : (model === 'grok' || model === 'groq')
         ? {
             model: upstreamModel,
             messages,
@@ -1407,7 +1405,9 @@ app.post('/api/workshop/chat', async (req, res) => {
       ? { Authorization: 'Bearer ' + DEEPSEEK_API_KEY }
       : model === 'grok'
         ? { Authorization: 'Bearer ' + XAI_API_KEY }
-        : {};
+        : model === 'groq'
+          ? { Authorization: 'Bearer ' + GROQ_API_KEY }
+          : {};
     let upstream = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
@@ -1447,10 +1447,10 @@ app.post('/api/workshop/chat', async (req, res) => {
         return workshopImageError(res, 402, '快速对话通道暂时需要付费额度，请改用 Horde 或其他通道');
       }
       if (upstream.status === 429) {
-        const busyLabel = model === 'deepseek' ? 'DeepSeek' : model === 'grok' ? 'Grok' : '快速对话';
+        const busyLabel = model === 'deepseek' ? 'DeepSeek' : model === 'grok' ? 'Grok' : model === 'groq' ? 'Groq' : '快速对话';
         return workshopImageError(res, 429, busyLabel + '通道繁忙，请稍后重试');
       }
-      const label = model === 'deepseek' ? 'DeepSeek' : model === 'grok' ? 'Grok' : '快速对话';
+      const label = model === 'deepseek' ? 'DeepSeek' : model === 'grok' ? 'Grok' : model === 'groq' ? 'Groq' : '快速对话';
       const status = upstream.status === 401 ? 401 : 502;
       return workshopImageError(res, status, `${label}暂时不可用${detail ? '：' + detail : ''}，请改用其他通道`);
     }

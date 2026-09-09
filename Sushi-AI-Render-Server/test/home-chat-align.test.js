@@ -8,6 +8,7 @@ const path = require('node:path');
 const home = fs.readFileSync(path.join(__dirname, '../public/app/index.html'), 'utf8');
 const workshop = fs.readFileSync(path.join(__dirname, '../public/workshop.html'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+const chatLib = fs.readFileSync(path.join(__dirname, '../lib/chat-response.js'), 'utf8');
 
 test('homepage chat timeouts and short-reply match workshop #14 values', () => {
   assert.match(home, /model === 'horde' \? 38000 : 20000/);
@@ -27,14 +28,17 @@ test('homepage chat channel picker honors explicit selection and auto race', () 
   assert.match(home, /function raceChat\(question, channel\)/);
   assert.match(home, /if \(channel && channel !== 'auto'\) return askOneChat\(question, channel\);/);
   assert.match(home, /localStorage\.setItem\(chatChannelKey\(\), v\)/);
+  assert.match(home, /value="groq"/);
   assert.match(home, /value="grok"/);
-  assert.match(home, /var models = \['horde', 'grok'\]/);
-  assert.match(home, /XAI_API_KEY/);
+  assert.match(home, /var models = \['groq', 'horde'\]/);
+  assert.match(home, /GROQ_API_KEY/);
+  assert.match(home, /Groq · 免费额度/);
   assert.match(home, /Grok · xAI（需配置密钥）/);
   // Broken OpenAI(402) / DeepSeek(未配置) removed from homepage picker (not grayed).
   const picker = home.slice(home.indexOf('id="chatChannel"'), home.indexOf('</select>', home.indexOf('id="chatChannel"')) + 9);
   assert.match(picker, /value="auto"/);
   assert.match(picker, /value="horde"/);
+  assert.match(picker, /value="groq"/);
   assert.doesNotMatch(picker, /value="openai"/);
   assert.doesNotMatch(picker, /value="deepseek"/);
   assert.match(workshop, /id="AI通道"/);
@@ -42,14 +46,25 @@ test('homepage chat channel picker honors explicit selection and auto race', () 
   assert.match(workshop, /if \(指定 === "deepseek"\) return 问花粉/);
 });
 
-test('homepage and server wire Grok via xAI OpenAI-compatible chat', () => {
+test('homepage and server wire Groq + Grok OpenAI-compatible chat', () => {
+  assert.match(home, /CHAT_LABELS[\s\S]*groq:\s*'Groq'/);
   assert.match(home, /CHAT_LABELS[\s\S]*grok:\s*'Grok'/);
+  assert.match(home, /Groq 未配置/);
   assert.match(home, /Grok 未配置/);
+  assert.match(server, /GROQ_API_KEY/);
+  assert.match(server, /api\.groq\.com\/openai\/v1\/chat\/completions/);
+  assert.match(server, /openai\/gpt-oss-20b/);
+  assert.match(server, /model === 'groq'/);
+  assert.match(server, /missingChatApiKeyMessage\('groq'\)/);
   assert.match(server, /XAI_API_KEY|GROK_API_KEY/);
   assert.match(server, /api\.x\.ai\/v1\/chat\/completions/);
   assert.match(server, /model === 'grok'/);
-  assert.match(server, /Grok 尚未配置/);
-  assert.match(server, /normalizeChatModel[\s\S]*return 'grok'/);
+  assert.match(server, /missingChatApiKeyMessage\('grok'\)/);
+  assert.match(chatLib, /Groq 尚未配置/);
+  assert.match(chatLib, /GROQ_API_KEY/);
+  assert.match(chatLib, /Grok 尚未配置/);
+  assert.match(chatLib, /return 'groq'/);
+  assert.match(chatLib, /return 'grok'/);
 });
 
 test('homepage can generate images directly from chat intent', () => {
