@@ -4,6 +4,16 @@
   var active = null;
   var lastEdited = '角色描述';
   var randomPair = null;
+  var perchanceCooldownUntil = 0;
+  var PERCHANCE_COOLDOWN_MS = 30000;
+
+  function markPerchanceFailure() {
+    perchanceCooldownUntil = Date.now() + PERCHANCE_COOLDOWN_MS;
+  }
+
+  function isPerchanceCooling() {
+    return Date.now() < perchanceCooldownUntil;
+  }
   var lockedImageProvider = '';
   window.__sushiImageProviderLock = '';
   var $ = function (id) { return document.getElementById(id); };
@@ -428,6 +438,8 @@
   }
 
   async function generatePerchance(run, prompt, index) {
+    // Keep Perchance primary, but do not wait 45s again after a recent component failure.
+    if (isPerchanceCooling()) throw new Error('Perchance 组件短暂冷却中，正在使用备用线路');
     // In-app Perchance/Perch only — never open perchance.org.
     if (typeof window.update !== 'function') throw new Error('Perchance 组件未加载');
     var gallery = $('官方画廊');
@@ -456,7 +468,10 @@
           var i = nodes.length - 1;
           for (; i >= before; i -= 1) {
             var url = nodeImageUrl(nodes[i]);
-            if (url && String(url).length > 32) return { url: url, engine: 'perchance' };
+            if (url && String(url).length > 32) {
+              perchanceCooldownUntil = 0;
+              return { url: url, engine: 'perchance' };
+            }
           }
         }
         await pause(run, 600);
@@ -483,7 +498,7 @@
     if (engine === 'perchance') {
       // Explicit Perch/Perchance: try in-app plugin first, then fall back to full free race.
       try { return await generatePerchance(run, prompt, index); }
-      catch (e) { /* continue into shared race below */ }
+      catch (e) { markPerchanceFailure(); /* continue into shared race below */ }
     }
     if (engine !== 'auto' && engine !== 'perchance') return generatePollinations(run, prompt, index, engine);
 
