@@ -170,14 +170,9 @@
         <select id="chatChannel" aria-label="AI 回答通道">
           <option value="auto" selected>自动抢答 · 推荐</option>
           <option value="glm">GLM · 智谱</option>
-          <option value="deepseek">DeepSeek</option>
-          <option value="groq">Groq · 免费额度</option>
-          <option value="gemini">Gemini · 免费层</option>
-          <option value="openrouter">OpenRouter · 免费模型</option>
           <option value="horde">Horde · 免费可用</option>
-          <option value="grok">Grok · xAI（需配置密钥）</option>
         </select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答只并行<strong>已配置</strong>的 GLM / DeepSeek / Groq / Gemini / OpenRouter，并始终带上 Horde；未配置密钥的通道不会发起请求、不会空等。在 Vercel 设置 <code>GLM_API_KEY</code>、<code>DEEPSEEK_API_KEY</code>、<code>GROQ_API_KEY</code>、<code>GEMINI_API_KEY</code>、<code>OPENROUTER_API_KEY</code> 后重新部署即可加入抢答。Grok 需 <code>XAI_API_KEY</code>，仅显式选择时使用。</p>
+        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答只并行已配置通道。未填写密钥的通道已隐藏。</p>
       </div>
     </div>
     <div class="chat-shell">
@@ -590,6 +585,33 @@
       return normalizeChatChannel(box && box.value ? box.value : loadChatChannel());
     }
     var chatReady = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
+    var CHAT_PICKER = [
+      { id: 'glm', label: 'GLM · 智谱' },
+      { id: 'deepseek', label: 'DeepSeek' },
+      { id: 'groq', label: 'Groq · 免费额度' },
+      { id: 'gemini', label: 'Gemini · 免费层' },
+      { id: 'openrouter', label: 'OpenRouter · 免费模型' },
+      { id: 'grok', label: 'Grok · xAI' }
+    ];
+    function syncChatPicker() {
+      var box = $('chatChannel');
+      if (!box) return;
+      var horde = box.querySelector('option[value="horde"]');
+      CHAT_PICKER.forEach(function (item) {
+        var opt = box.querySelector('option[value="' + item.id + '"]');
+        if (chatReady[item.id]) {
+          if (!opt) {
+            opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.label;
+            box.insertBefore(opt, horde);
+          }
+        } else if (opt) {
+          opt.remove();
+        }
+      });
+      if (box.value && !box.querySelector('option[value="' + box.value + '"]')) saveChatChannel('auto');
+    }
     function autoRaceList() {
       var list = [];
       if (chatReady.glm) list.push('glm');
@@ -610,7 +632,7 @@
       if (chatReady.gemini) ready.push('Gemini');
       if (chatReady.openrouter) ready.push('OpenRouter');
       ready.push('Horde');
-      el.innerHTML = '自动抢答只并行已配置通道：<strong>' + ready.join('、') + '</strong>。未配置密钥的通道不会发起请求。在 Vercel 设置 <code>GLM_API_KEY</code> / <code>DEEPSEEK_API_KEY</code> / <code>GROQ_API_KEY</code> / <code>GEMINI_API_KEY</code> / <code>OPENROUTER_API_KEY</code> 后重新部署即可加入抢答。Grok 需 <code>XAI_API_KEY</code>，仅显式选择时使用。';
+      el.innerHTML = '自动抢答：<strong>' + ready.join('、') + '</strong>。未填写密钥的通道已隐藏。';
     }
     async function loadChatReady() {
       try {
@@ -625,6 +647,7 @@
           chatReady.horde = true;
         }
       } catch (e) {}
+      syncChatPicker();
       updateChatHint();
       return chatReady;
     }

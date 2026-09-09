@@ -402,15 +402,7 @@
             回答通道（选定后只用这一路；自动抢答才多路赛跑）
           <select id="AI通道" onchange="对话通道已改()">
             <option value="auto" selected>自动抢答 · 推荐</option>
-            <option value="openai">OpenAI 兼容模型</option>
-            <option value="openai-fast">快速模型</option>
-            <option value="deepseek">DeepSeek · 需配置密钥</option>
-            <option value="glm">GLM · 智谱（需配置密钥）</option>
-            <option value="groq">Groq · 免费额度（需配置密钥）</option>
-            <option value="gemini">Gemini · 免费层（需配置密钥）</option>
-            <option value="openrouter">OpenRouter · 免费模型（需配置密钥）</option>
-            <option value="grok">Grok · 需配置密钥</option>
-            <option value="turbo">Turbo 备用</option>
+            <option value="glm">GLM · 智谱</option>
             <option value="horde">Horde</option>
           </select>
         </label>
@@ -1091,6 +1083,15 @@
   var 对话末通道 = "";
   var 已配置通道 = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
 
+  var 对话通道选项 = [
+    { id: "glm", label: "GLM · 智谱" },
+    { id: "deepseek", label: "DeepSeek" },
+    { id: "groq", label: "Groq · 免费额度" },
+    { id: "gemini", label: "Gemini · 免费层" },
+    { id: "openrouter", label: "OpenRouter · 免费模型" },
+    { id: "grok", label: "Grok · xAI" }
+  ];
+
   async function 载入已配置通道() {
     try {
       var resp = await fetch("/api/health", { credentials: "same-origin", cache: "no-store" });
@@ -1105,6 +1106,31 @@
         已配置通道.horde = true;
       }
     } catch (e) {}
+    同步对话通道选项();
+  }
+
+  function 同步对话通道选项() {
+    var 框 = document.getElementById("AI通道");
+    if (!框) return;
+    var horde = 框.querySelector('option[value="horde"]');
+    var i = 0;
+    for (i = 0; i < 对话通道选项.length; i++) {
+      var 项 = 对话通道选项[i];
+      var opt = 框.querySelector('option[value="' + 项.id + '"]');
+      if (已配置通道[项.id]) {
+        if (!opt) {
+          opt = document.createElement("option");
+          opt.value = 项.id;
+          opt.textContent = 项.label;
+          框.insertBefore(opt, horde);
+        }
+      } else if (opt) {
+        opt.remove();
+      }
+    }
+    if (框.value && !框.querySelector('option[value="' + 框.value + '"]')) {
+      保存对话通道("auto", false);
+    }
   }
 
   function 读取登录邮箱() {
