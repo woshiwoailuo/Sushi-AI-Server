@@ -125,6 +125,18 @@ async function migratePostgres(db) {
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_email_codes_email ON email_codes(email);
     CREATE INDEX IF NOT EXISTS idx_app_releases_code ON app_releases(version_code);
+    CREATE TABLE IF NOT EXISTS workshop_tickets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      key_hex TEXT NOT NULL,
+      iv_hex TEXT NOT NULL,
+      ciphertext TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      exp_ms BIGINT NOT NULL,
+      key_used INTEGER NOT NULL DEFAULT 0,
+      unlocks INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_workshop_tickets_exp ON workshop_tickets(exp_ms);
   `);
 
   // Idempotent column adds for databases created before optional fields existed.

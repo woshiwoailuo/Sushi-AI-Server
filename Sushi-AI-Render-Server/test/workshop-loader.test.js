@@ -95,3 +95,48 @@ test('cookie unlock auth failures surface instead of waiting silently until tota
   assert.equal(w.document.getElementById('loaderTitle').textContent, '工坊未能打开');
   assert.equal(w.document.getElementById('loaderBack').hidden, false);
 });
+
+
+test('parent postMessage sushi_wrap_unlock decrypts without unlock API', async t => {
+  const key = crypto.randomBytes(32), iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const content = '<!doctype html><p>From parent</p>';
+  const ciphertext = Buffer.concat([cipher.update(content), cipher.final()]);
+  const html = render({
+    id: 'ticket-pm',
+    iv: iv.toString('hex'),
+    ciphertext: ciphertext.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+  });
+  assert.match(html, /sushi_wrap_unlock/);
+  const dom = new JSDOM(html, { url: 'https://app.example/workshop?k=ticket-pm', runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const w = dom.window;
+  Object.defineProperty(w, 'crypto', { value: crypto.webcrypto });
+  w.TextDecoder = TextDecoder;
+  w.AbortController = AbortController;
+  const calls = [];
+  w.fetch = async (url) => {
+    calls.push(url);
+    if (String(url).includes('/unlock')) {
+      return { ok: false, json: async () => ({ error: 'should not unlock via API' }) };
+    }
+    return { ok: true, json: async () => ({ ok: true }) };
+  };
+  let resolve;
+  const rendered = new Promise((r) => { resolve = r; });
+  w.document.open = () => {};
+  w.document.write = (htmlText) => { assert.equal(htmlText, content); resolve(); };
+  w.document.close = () => {};
+  w.eval(w.document.querySelector('script').textContent);
+  w.dispatchEvent(new w.MessageEvent('message', {
+    data: {
+      type: 'sushi_wrap_unlock',
+      key: key.toString('hex'),
+      iv: iv.toString('hex'),
+      ticket: 'ticket-pm',
+    },
+  }));
+  await rendered;
+  assert.deepEqual(calls, ['/api/workshop/session']);
+});

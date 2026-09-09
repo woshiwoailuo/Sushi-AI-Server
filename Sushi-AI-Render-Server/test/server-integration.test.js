@@ -80,4 +80,20 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   assert.equal((await request('/api/images', 'POST', { prompt: 'A bird' }, cookie)).status, 503);
   assert.equal(await quota(), 1, 'failed submission does not consume quota');
   assert.equal((await request('/assets/workshop-generation.js')).status, 200);
+
+  // Authenticated GET /workshop serves plaintext workshop.html (no AES loader).
+  const direct = await request('/workshop', 'GET', undefined, auth);
+  assert.equal(direct.status, 200);
+  const directHtml = await direct.text();
+  assert.match(directHtml, /角色描述|生成按钮/);
+  assert.doesNotMatch(directHtml, /api\/workshop\/unlock/);
+  assert.doesNotMatch(directHtml, /正在打开工坊/);
+
+  // Unlock tolerates string vs number userId (Postgres BIGINT shape).
+  const ticket2 = await (await request('/api/workshop/ticket', 'POST', {}, auth)).json();
+  const unlock = await request('/api/workshop/unlock', 'POST', { ticket: ticket2.ticket }, auth);
+  assert.equal(unlock.status, 200);
+  const unlocked = await unlock.json();
+  assert.equal(unlocked.key, ticket2.key);
+  assert.equal(unlocked.iv, ticket2.iv);
 });

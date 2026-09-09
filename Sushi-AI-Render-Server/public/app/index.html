@@ -942,33 +942,72 @@
         } catch (e) {}
         return;
       }
-      // Ticket mint encrypts ~150KB HTML; cold start often exceeds the old 8s abort.
-      body.innerHTML = '<div class="card paywall" id="genGate"><h3>正在打开工坊…</h3><p class="muted" id="genGateDetail" style="margin:8px 0 0">正在准备加密页面，冷启动时可能需要约一分钟，请稍候。</p></div>';
-      var progressTimer = setTimeout(function () {
-        var d = $('genGateDetail');
-        if (d) d.textContent = '仍在打开工坊…服务器可能刚从休眠醒来，请继续等待。';
-      }, 12000);
+      // Logged-in web: open /workshop with auth cookie — server serves workshop.html
+      // directly (no AES ticket / cross-instance unlock). Keep ticket+postMessage
+      // only as a fallback if the auth path fails (e.g. cookie missing).
+      body.innerHTML = '<div class="card paywall" id="genGate"><h3>正在打开工坊…</h3><p class="muted" id="genGateDetail" style="margin:8px 0 0">正在载入创作页，请稍候。</p></div>';
       try {
-        const ctrl = new AbortController();
-        const to = setTimeout(function () { ctrl.abort(); }, 60000);
-        const wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', signal: ctrl.signal, timeoutMs: 60000 });
-        clearTimeout(to);
-        clearTimeout(progressTimer);
-        refreshQuota().catch(function () {});
-        try {
-          sessionStorage.setItem('sushi_wrap_key', wrap.key);
-          sessionStorage.setItem('sushi_wrap_iv', wrap.iv);
-          sessionStorage.setItem('sushi_wrap_ticket', wrap.ticket);
-        } catch (e) {}
         body.innerHTML = '';
         const iframe = document.createElement('iframe');
-        iframe.src = workshopUrl(wrap.ticket, wrap.key, wrap.iv);
+        iframe.src = '/workshop';
         iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
         iframe.style.borderRadius = '12px';
+        iframe.addEventListener('load', function () {
+          try {
+            var doc = iframe.contentDocument;
+            if (doc && doc.getElementById('loaderTitle') && /未能打开/.test(doc.getElementById('loaderTitle').textContent || '')) {
+              genLoaded = false;
+            }
+          } catch (e) {}
+        });
         body.appendChild(iframe);
         genLoaded = true;
+        refreshQuota().catch(function () {});
       } catch (err) {
-        clearTimeout(progressTimer);
+        // Fallback: legacy encrypted ticket path + postMessage for Safari iframe.
+        try {
+          const ctrl = new AbortController();
+          const to = setTimeout(function () { ctrl.abort(); }, 60000);
+          const wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', signal: ctrl.signal, timeoutMs: 60000 });
+          clearTimeout(to);
+          try {
+            sessionStorage.setItem('sushi_wrap_key', wrap.key);
+            sessionStorage.setItem('sushi_wrap_iv', wrap.iv);
+            sessionStorage.setItem('sushi_wrap_ticket', wrap.ticket);
+          } catch (e) {}
+          body.innerHTML = '';
+          const iframe = document.createElement('iframe');
+          iframe.src = workshopUrl(wrap.ticket, wrap.key, wrap.iv);
+          iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
+          iframe.style.borderRadius = '12px';
+          iframe.addEventListener('load', function () {
+            try {
+              iframe.contentWindow.postMessage({
+                type: 'sushi_wrap_unlock',
+                key: wrap.key,
+                iv: wrap.iv,
+                ticket: wrap.ticket
+              }, '*');
+            } catch (e) {}
+          });
+          body.appendChild(iframe);
+          // Also post shortly after insert in case load already fired.
+          setTimeout(function () {
+            try {
+              iframe.contentWindow && iframe.contentWindow.postMessage({
+                type: 'sushi_wrap_unlock',
+                key: wrap.key,
+                iv: wrap.iv,
+                ticket: wrap.ticket
+              }, '*');
+            } catch (e) {}
+          }, 50);
+          genLoaded = true;
+          refreshQuota().catch(function () {});
+          return;
+        } catch (err2) {
+          err = err2;
+        }
         genLoaded = false;
         const pay = err.status === 402;
         const abort = err && (err.name === 'AbortError' || /aborted|abort/i.test(String(err.message || '')));
