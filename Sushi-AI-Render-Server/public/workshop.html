@@ -402,9 +402,18 @@
             回答通道（选定后只用这一路；自动抢答才多路赛跑）
           <select id="AI通道" onchange="对话通道已改()">
             <option value="auto" selected>自动抢答 · 推荐</option>
-            <option value="glm">GLM · 智谱</option>
+            <option value="openai">OpenAI 兼容模型</option>
+            <option value="openai-fast">快速模型</option>
+            <option value="deepseek">DeepSeek · 需配置密钥</option>
+            <option value="glm">GLM · 智谱（需配置密钥）</option>
+            <option value="groq">Groq · 免费额度（需配置密钥）</option>
+            <option value="gemini">Gemini · 免费层（需配置密钥）</option>
+            <option value="openrouter">OpenRouter · 免费模型（需配置密钥）</option>
+            <option value="grok">Grok · 需配置密钥</option>
+            <option value="turbo">Turbo 备用</option>
             <option value="horde">Horde</option>
           </select>
+          <span id="对话通道状态" class="说明文字" role="status">可直接选择通道；带“需配置密钥”的通道需要先在服务器配置。</span>
         </label>
         <label class="换背景行">
           <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
@@ -1083,15 +1092,6 @@
   var 对话末通道 = "";
   var 已配置通道 = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
 
-  var 对话通道选项 = [
-    { id: "glm", label: "GLM · 智谱" },
-    { id: "deepseek", label: "DeepSeek" },
-    { id: "groq", label: "Groq · 免费额度" },
-    { id: "gemini", label: "Gemini · 免费层" },
-    { id: "openrouter", label: "OpenRouter · 免费模型" },
-    { id: "grok", label: "Grok · xAI" }
-  ];
-
   async function 载入已配置通道() {
     try {
       var resp = await fetch("/api/health", { credentials: "same-origin", cache: "no-store" });
@@ -1105,32 +1105,21 @@
         已配置通道.grok = !!data.chat.grok;
         已配置通道.horde = true;
       }
+      刷新对话通道状态();
     } catch (e) {}
-    同步对话通道选项();
   }
 
-  function 同步对话通道选项() {
+  function 刷新对话通道状态() {
     var 框 = document.getElementById("AI通道");
-    if (!框) return;
-    var horde = 框.querySelector('option[value="horde"]');
-    var i = 0;
-    for (i = 0; i < 对话通道选项.length; i++) {
-      var 项 = 对话通道选项[i];
-      var opt = 框.querySelector('option[value="' + 项.id + '"]');
-      if (已配置通道[项.id]) {
-        if (!opt) {
-          opt = document.createElement("option");
-          opt.value = 项.id;
-          opt.textContent = 项.label;
-          框.insertBefore(opt, horde);
-        }
-      } else if (opt) {
-        opt.remove();
-      }
+    var 状态 = document.getElementById("对话通道状态");
+    if (!框 || !状态) return;
+    var 值 = 框.value || "auto";
+    if (值 === "auto" || 值 === "openai" || 值 === "openai-fast" || 值 === "turbo" || 值 === "horde") {
+      状态.textContent = 值 === "auto" ? "自动抢答：已配置的通道同时尝试，先返回的答案生效。" : ("当前仅使用：" + 通道显示名(值));
+      return;
     }
-    if (框.value && !框.querySelector('option[value="' + 框.value + '"]')) {
-      保存对话通道("auto", false);
-    }
+    var 状态名 = 已配置通道[值] ? "已配置，可直接使用。" : "尚未检测到密钥，选择仍保留；发送时会显示具体原因。";
+    状态.textContent = 通道显示名(值) + "：" + 状态名;
   }
 
   function 读取登录邮箱() {
@@ -1299,6 +1288,7 @@
     对话抢出通道 = "";
     var 选 = document.getElementById("AI通道");
     保存对话通道((选 && 选.value) || "auto", true);
+    刷新对话通道状态();
   }
 
   function 滚到对话() {
@@ -1519,6 +1509,7 @@
     模型 = 模型 || "turbo";
     if (模型 === "fast") 模型 = "openai-fast";
     var 内容 = "";
+    var 最后错误 = null;
     try {
       var 体 = new Object();
       体.model = 模型;
@@ -1544,6 +1535,7 @@
         : "";
       内容 = 可用对话文(内容);
     } catch (e) {
+      最后错误 = e;
       内容 = "";
     }
     if (!内容 && ["openai", "openai-fast", "fast", "turbo"].indexOf(模型) >= 0) {
@@ -1561,9 +1553,9 @@
             ? getData.choices[0].message.content : "";
         }
         内容 = 可用对话文(getText);
-      } catch (e2) {}
+      } catch (e2) { 最后错误 = 最后错误 || e2; }
     }
-    if (!内容) throw new Error("空回复");
+    if (!内容) throw (最后错误 || new Error("空回复"));
     对话末通道 = 花粉通道名(模型);
     return 内容;
   }
@@ -3519,7 +3511,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.30" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.31" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
