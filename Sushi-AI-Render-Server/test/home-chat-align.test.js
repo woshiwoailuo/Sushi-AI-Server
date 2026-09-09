@@ -59,3 +59,32 @@ test('homepage image path uses auth API and never opens workshop loader', () => 
   assert.match(server, /app\.post\('\/api\/chat\/image'/);
   assert.match(server, /Homepage chat image: auth cookie\/JWT only/);
 });
+
+
+test('homepage photoreal enrichment honors style-keyword bypass', () => {
+  assert.match(home, /function hasExplicitArtStyle/);
+  assert.match(home, /function photorealHomePrompt/);
+  assert.match(home, /二次元\|动漫\|卡通\|漫画\|插画/);
+  assert.match(home, /photorealistic RAW photo/);
+  assert.match(home, /not anime, not manga, not cartoon/);
+  const fn = home.slice(home.indexOf('function photorealHomePrompt'), home.indexOf('function homeImageError'));
+  assert.match(fn, /hasExplicitArtStyle\(t\)/);
+  assert.doesNotMatch(fn, /t\.replace\(\/\\b\(anime\|manga\|cartoon\|chibi\)\\b\/gi/);
+  const gen = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
+  assert.match(gen, /styleAware/);
+  assert.match(gen, /negativePrompt: negative/);
+});
+
+
+test('homepage enterGen waits long enough for cold-start ticket mint', () => {
+  const enter = home.slice(home.indexOf('async function enterGen'), home.indexOf('setTimeout(async () => {'));
+  assert.ok(enter.length > 200);
+  assert.match(enter, /正在打开工坊/);
+  assert.match(enter, /\/api\/workshop\/ticket/);
+  assert.match(enter, /60000/);
+  assert.doesNotMatch(enter, /,\s*8000\)/);
+  assert.match(enter, /打开工坊超时|冷启动/);
+  assert.match(server, /function readWorkshopPlaintext/);
+  assert.match(server, /workshopPlainCache/);
+  assert.match(server, /encryptWorkshopHtml/);
+});

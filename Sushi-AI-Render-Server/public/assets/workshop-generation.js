@@ -139,18 +139,34 @@
     return source;
   }
 
+  // Explicit art-style keywords: honor anime/manga/cartoon/二次元/插画 instead of forcing photoreal.
+  var ART_STYLE_RE = /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i;
+  function hasExplicitArtStyle(text) {
+    return ART_STYLE_RE.test(String(text || ''));
+  }
+
   function photorealPrompt(prompt) {
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (!text) {
       text = 'photoreal cinematic photo of a fictional adult, natural light, DSLR';
     }
-    // Soft-strip common anime/cartoon style tokens unless the user clearly wants illustration art.
-    if (!/\b(keep anime|anime style requested|manga style|cartoon style|pixar|disney)\b/i.test(text)) {
-      text = text.replace(/\b(anime[- ]style|manga[- ]style|cartoon[- ]style|anime|manga|cartoon|chibi|2d illustration|cel shading)\b/gi, ' ');
-      text = text.replace(/\s{2,}/g, ' ').trim();
+    // Keep the user's core intent. If they named an art style, do not strip or override it.
+    if (hasExplicitArtStyle(text)) {
+      if (!/fictional adult|18\+|no minors|虚构成年/i.test(text)) {
+        text += ', fictional adult 18+ only, no minors';
+      }
+      return text.replace(/\s{2,}/g, ' ').trim();
     }
-    if (!/photoreal|RAW photo|DSLR|cinematic still|real human/i.test(text)) {
-      text += ', photorealistic RAW photo, cinematic still, natural skin texture, sharp focus, real human';
+    // Default rhetoric: photoreal — enrich lighting / camera / materials for the generator only.
+    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影/i.test(text)) {
+      text += ', photorealistic RAW photo, cinematic still, natural light, shallow depth of field, detailed fabric and skin texture, sharp focus, real human';
+    } else {
+      if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric/i.test(text)) {
+        text += ', natural light, cinematic composition';
+      }
+      if (!/texture|material|skin|fabric|detail/i.test(text)) {
+        text += ', natural skin texture, clear material detail';
+      }
     }
     if (!/not anime|no anime|非卡通|非动漫/i.test(text)) {
       text += ', not anime, not manga, not cartoon, not illustration';
@@ -626,11 +642,16 @@
         }
       }
       ensureActive(run);
-      if ($('说明标题')) {
-        $('说明标题').textContent = (randomPair && randomPair.displayChinese) || run.description || '恢复上次任务';
-      }
-      if ($('说明英文')) {
-        $('说明英文').textContent = (randomPair && randomPair.displayEnglish) || run.payload.prompt || '';
+      // Managed display under the image stays simple — never overwrite with generator-enriched prompt.
+      if (typeof window.刷新画面说明 === 'function') {
+        window.刷新画面说明();
+      } else {
+        if ($('说明标题')) {
+          $('说明标题').textContent = (randomPair && randomPair.displayChinese) || value('中文译文') || '当前画面';
+        }
+        if ($('说明英文')) {
+          $('说明英文').textContent = (randomPair && randomPair.displayEnglish) || value('英文描述') || '';
+        }
       }
       while (run.completed < run.total) {
         ensureActive(run);
@@ -693,8 +714,20 @@
     }
     var dimensions = value('图像比例').split('x');
     var negative = value('负面提示');
+    var styleAware = hasExplicitArtStyle(description + ' ' + (value('英文描述') || '') + ' ' + (value('角色描述') || ''));
     if (!negative) {
-      negative = 'anime, manga, cartoon, illustration, cel shading, lowres, blurry, bad anatomy, extra limbs, child, minor, watermark, text';
+      negative = styleAware
+        ? 'lowres, blurry, bad anatomy, extra limbs, child, minor, watermark, text'
+        : 'anime, manga, cartoon, illustration, cel shading, lowres, blurry, bad anatomy, extra limbs, child, minor, watermark, text';
+    } else if (styleAware) {
+      // User asked for anime/illustration — strip style bans from the default negative box.
+      negative = negative
+        .replace(/\b(anime|manga|cartoon|illustration|cel\s*shading|chibi)\b/gi, ' ')
+        .replace(/卡通|动漫|插画|二次元|漫画|数字绘画|赛璐璐|手绘/g, ' ')
+        .replace(/[，,]\s*[，,]/g, ',')
+        .replace(/^[，,\s]+|[，,\s]+$/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
     } else if (!/anime|manga|cartoon|动漫|卡通/i.test(negative)) {
       negative += ', anime, manga, cartoon, illustration';
     }
@@ -754,6 +787,8 @@
   };
 
   window.当前引擎 = function () { return resolveEngine(); };
+  window.photorealPrompt = photorealPrompt;
+  window.hasExplicitArtStyle = hasExplicitArtStyle;
   window.设平台提示 = function (engine) {
     var tip = $('平台提示');
     if (!tip) return;

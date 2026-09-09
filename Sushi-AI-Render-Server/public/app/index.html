@@ -574,12 +574,22 @@
     function wantsImageGen(text) {
       return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|给我.*(图|照片)|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)|txt2img|text.?to.?image/i.test(String(text || ''));
     }
+    function hasExplicitArtStyle(text) {
+      return /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i.test(String(text || ''));
+    }
     function photorealHomePrompt(text) {
       var t = String(text || '').trim();
+      // Strip only the intent prefix; keep the user's core description for the generator.
       t = t.replace(/^(请)?(帮我)?(生成|画|做)(一)?[张幅]?(图|图片|照片)?[：:\s]*/i, '').trim() || t;
-      t = t.replace(/\b(anime|manga|cartoon|chibi)\b/gi, ' ').replace(/\s{2,}/g, ' ').trim();
-      if (!/photoreal|写实|摄影|RAW photo|DSLR/i.test(t)) {
-        t += ', photorealistic RAW photo, cinematic still, natural light, real human, fictional adult 18+, not anime, not manga, not cartoon';
+      if (hasExplicitArtStyle(t)) {
+        if (!/fictional adult|18\+|no minors|虚构成年/i.test(t)) {
+          t += ', fictional adult 18+ only, no minors';
+        }
+        return t.slice(0, 1200);
+      }
+      // Default photoreal rhetoric — enrich scene for generators only (chat bubble text stays original).
+      if (!/photoreal|写实|摄影|RAW photo|DSLR|cinematic still/i.test(t)) {
+        t += ', photorealistic RAW photo, cinematic still, natural light, shallow depth of field, detailed fabric and skin texture, sharp focus, real human, fictional adult 18+, not anime, not manga, not cartoon';
       } else if (!/not anime|no anime/i.test(t)) {
         t += ', not anime, not manga, not cartoon';
       }
@@ -597,7 +607,12 @@
     }
     async function generateHomeImage(promptText) {
       // Stay on homepage chat: authenticated API only. Never open /workshop or mint workshop HTML tickets.
+      // Enrich only the generator prompt; user chat text / captions stay as typed.
       var prompt = photorealHomePrompt(promptText);
+      var styleAware = hasExplicitArtStyle(promptText);
+      var negative = styleAware
+        ? 'blurry, child, minor, watermark, text, lowres'
+        : 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text';
       try {
         var direct = await api('/api/chat/image', {
           method: 'POST',
@@ -607,7 +622,7 @@
             width: 768,
             height: 768,
             seed: Math.floor(Math.random() * 1e9),
-            negativePrompt: 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text'
+            negativePrompt: negative
           }),
           timeoutMs: 95000
         });
@@ -627,7 +642,7 @@
               prompt: prompt,
               width: 768,
               height: 768,
-              negativePrompt: 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text'
+              negativePrompt: negative
             }),
             timeoutMs: 90000
           });
@@ -710,7 +725,7 @@
           if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
           chatHistory.push({
             role: 'assistant',
-            text: '已按你的描述生成图片（写实向）。还可继续描述微调，或去工坊做图生图/换背景。',
+            text: '已按你的描述生成图片。还可继续描述微调，或去工坊做图生图/换背景。',
             image: imgResult.url,
             channel: imgResult.channel,
             at: Date.now()
@@ -927,12 +942,18 @@
         } catch (e) {}
         return;
       }
-      body.innerHTML = '<div class="card paywall" id="genGate"><h3>正在打开工坊…</h3></div>';
+      // Ticket mint encrypts ~150KB HTML; cold start often exceeds the old 8s abort.
+      body.innerHTML = '<div class="card paywall" id="genGate"><h3>正在打开工坊…</h3><p class="muted" id="genGateDetail" style="margin:8px 0 0">正在准备加密页面，冷启动时可能需要约一分钟，请稍候。</p></div>';
+      var progressTimer = setTimeout(function () {
+        var d = $('genGateDetail');
+        if (d) d.textContent = '仍在打开工坊…服务器可能刚从休眠醒来，请继续等待。';
+      }, 12000);
       try {
         const ctrl = new AbortController();
-        const to = setTimeout(function () { ctrl.abort(); }, 8000);
-        const wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', signal: ctrl.signal });
+        const to = setTimeout(function () { ctrl.abort(); }, 60000);
+        const wrap = await api('/api/workshop/ticket', { method: 'POST', body: '{}', signal: ctrl.signal, timeoutMs: 60000 });
         clearTimeout(to);
+        clearTimeout(progressTimer);
         refreshQuota().catch(function () {});
         try {
           sessionStorage.setItem('sushi_wrap_key', wrap.key);
@@ -947,12 +968,15 @@
         body.appendChild(iframe);
         genLoaded = true;
       } catch (err) {
+        clearTimeout(progressTimer);
         genLoaded = false;
         const pay = err.status === 402;
+        const abort = err && (err.name === 'AbortError' || /aborted|abort/i.test(String(err.message || '')));
         body.innerHTML = '<div class="card paywall"><h3>' +
-          (pay ? '今日次数已用尽' : (err.name === 'AbortError' ? '暂时无法连接' : err.message)) +
-          '</h3><p class="muted" style="margin:8px 0 18px">请稍后重试进入创作。</p>' +
-          '<button class="btn btn-lime" type="button" id="retryGen">重试</button></div>';
+          (pay ? '今日次数已用尽' : (abort ? '打开工坊超时' : err.message)) +
+          '</h3><p class="muted" style="margin:8px 0 18px">' +
+          (abort ? '冷启动较慢时可能超时，请再点一次重试。' : '请稍后重试进入创作。') +
+          '</p><button class="btn btn-lime" type="button" id="retryGen">重试</button></div>';
         const r = $('retryGen');
         if (r) r.onclick = function () { genLoaded = false; enterGen(); };
       }

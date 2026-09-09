@@ -384,3 +384,64 @@ test('perchance failure enters a short cooldown without free-race fallback for e
   const tip = f.w.document.getElementById('状态提示').textContent || '';
   assert.match(tip, /Perchance 短暂冷却中/);
 });
+
+
+test('photorealPrompt enriches by default but style-keyword bypass keeps anime/二次元/插画', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.photorealPrompt, 'function');
+  assert.equal(typeof f.w.hasExplicitArtStyle, 'function');
+
+  const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
+  assert.match(plain, /a fictional adult standing by a rainy window/i);
+  assert.match(plain, /photoreal|cinematic|natural light|texture/i);
+  assert.match(plain, /not anime|not manga|not cartoon/i);
+  assert.ok(plain.length > 'a fictional adult standing by a rainy window'.length);
+
+  const anime = f.w.photorealPrompt('anime style girl with red hair under cherry blossoms');
+  assert.match(anime, /anime style girl with red hair under cherry blossoms/i);
+  assert.doesNotMatch(anime, /not anime|not manga|not cartoon|photorealistic RAW photo/i);
+  assert.equal(f.w.hasExplicitArtStyle('二次元插画 夜市少女'), true);
+  assert.equal(f.w.hasExplicitArtStyle('窗边的小猫'), false);
+  const cn = f.w.photorealPrompt('二次元插画，夜市里的成年少女吃章鱼烧');
+  assert.match(cn, /二次元插画/);
+  assert.doesNotMatch(cn, /not anime|photorealistic RAW photo/i);
+});
+
+test('style-keyword generation keeps managed display simple while gen prompt honors anime', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('角色描述').value = 'anime style fictional adult in neon alley';
+  f.w.document.getElementById('中文译文').value = '霓虹巷弄里的动漫成年角色';
+  f.w.document.getElementById('英文描述').value = 'anime style fictional adult in neon alley';
+  if (typeof f.w.刷新画面说明 === 'function') f.w.刷新画面说明();
+  const beforeZh = f.w.document.getElementById('中文译文').value;
+  const beforeEn = f.w.document.getElementById('英文描述').value;
+  const beforeTitle = f.w.document.getElementById('说明标题').textContent;
+  const beforeCap = f.w.document.getElementById('说明英文').textContent;
+  await f.w.开始生成();
+  const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
+  assert.match(payload.prompt, /anime style fictional adult in neon alley/i);
+  assert.doesNotMatch(payload.prompt, /not anime|not manga|photorealistic RAW photo/i);
+  assert.doesNotMatch(payload.negativePrompt || '', /anime|manga|cartoon|illustration/i);
+  assert.equal(f.w.document.getElementById('中文译文').value, beforeZh);
+  assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
+  assert.equal(f.w.document.getElementById('说明标题').textContent, beforeTitle);
+  assert.equal(f.w.document.getElementById('说明英文').textContent, beforeCap);
+  assert.doesNotMatch(beforeCap, /not anime|photorealistic RAW photo/i);
+});
+
+test('default generation enriches photoreal prompt without rewriting display fields', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('角色描述').value = 'A fictional adult reading by a library window';
+  f.w.document.getElementById('中文译文').value = '图书馆窗边的成年人';
+  f.w.document.getElementById('英文描述').value = 'A fictional adult reading by a library window';
+  if (typeof f.w.刷新画面说明 === 'function') f.w.刷新画面说明();
+  const beforeEn = f.w.document.getElementById('英文描述').value;
+  const beforeCap = f.w.document.getElementById('说明英文').textContent;
+  await f.w.开始生成();
+  const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
+  assert.match(payload.prompt, /^A fictional adult reading by a library window/i);
+  assert.match(payload.prompt, /photoreal|natural light|texture|not anime/i);
+  assert.notEqual(payload.prompt, beforeEn);
+  assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
+  assert.equal(f.w.document.getElementById('说明英文').textContent, beforeCap);
+});

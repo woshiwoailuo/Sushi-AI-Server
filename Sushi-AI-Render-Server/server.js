@@ -1002,8 +1002,19 @@ function sweepTickets() {
   }
 }
 
+// Memoize workshop.html bytes by mtime so ticket mint does not re-read ~150KB on every open.
+let workshopPlainCache = { mtimeMs: -1, buf: null };
+
+function readWorkshopPlaintext() {
+  const st = fs.statSync(WORKSHOP_FILE);
+  if (!workshopPlainCache.buf || workshopPlainCache.mtimeMs !== st.mtimeMs) {
+    workshopPlainCache = { mtimeMs: st.mtimeMs, buf: fs.readFileSync(WORKSHOP_FILE) };
+  }
+  return workshopPlainCache.buf;
+}
+
 function encryptWorkshopHtml() {
-  const plaintext = fs.readFileSync(WORKSHOP_FILE);
+  const plaintext = readWorkshopPlaintext();
   const key = crypto.randomBytes(32);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);

@@ -690,8 +690,8 @@
     var 英文区 = document.getElementById("说明英文");
     var 核心 = ((document.getElementById("角色描述") || {}).value || "").trim();
     var 中文 = ((document.getElementById("中文译文") || {}).value || "").trim();
-    var 英文 = ((document.getElementById("英文描述") || {}).value || "").trim()
-      || ((document.getElementById("安全英文") || {}).value || "").trim();
+    // 画面说明只读托管展示字段，不回落生成用「安全英文」（避免写实增强泄漏到图下描述）。
+    var 英文 = ((document.getElementById("英文描述") || {}).value || "").trim();
     var 展示中文 = 去重描述(含中文(中文) ? 中文 : (含中文(核心) ? 核心 : ""));
     if (!英文 && 核心 && !含中文(核心)) 英文 = 核心;
     英文 = 只留英文(去掉方括号(英文));
@@ -1871,15 +1871,30 @@
     }
   }
 
+  function 显式画风(文) {
+    return /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i.test(String(文 || ""));
+  }
+
   function 强制写实英文(英文) {
     var 文 = String(英文 || "").replace(/\s+/g, " ").trim();
     if (!文) 文 = "photoreal cinematic photo of a fictional adult, natural light, DSLR";
-    if (!/\b(keep anime|anime style requested|manga style|cartoon style)\b/i.test(文)) {
-      文 = 文.replace(/\b(anime[- ]style|manga[- ]style|cartoon[- ]style|anime|manga|cartoon|chibi|2d illustration|cel shading)\b/gi, " ");
-      文 = 文.replace(/\s{2,}/g, " ").trim();
+    // 用户点名动漫/插画等画风时按文字生成，不强制写实、不剥离风格词。
+    if (显式画风(文)) {
+      if (!/fictional adult|18\+|no minors|虚构成年/i.test(文)) {
+        文 += ", fictional adult 18+ only, no minors";
+      }
+      return 文.replace(/\s{2,}/g, " ").trim();
     }
-    if (!/photoreal|RAW photo|DSLR|cinematic still|real human/i.test(文)) {
-      文 += ", photorealistic RAW photo, cinematic still, natural skin texture, sharp focus, real human";
+    // 默认写实：保留核心意图，向生成器补充光影/镜头/材质（不写回展示字段）。
+    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影/i.test(文)) {
+      文 += ", photorealistic RAW photo, cinematic still, natural light, shallow depth of field, detailed fabric and skin texture, sharp focus, real human";
+    } else {
+      if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric/i.test(文)) {
+        文 += ", natural light, cinematic composition";
+      }
+      if (!/texture|material|skin|fabric|detail/i.test(文)) {
+        文 += ", natural skin texture, clear material detail";
+      }
     }
     if (!/not anime|no anime|非卡通|非动漫/i.test(文)) {
       文 += ", not anime, not manga, not cartoon, not illustration";
@@ -2889,7 +2904,10 @@
   function 写实提示(英文) {
     var 文 = 强制写实英文(英文);
     var 核 = ((document.getElementById("角色描述") || {}).value || "") + ((document.getElementById("英文描述") || {}).value || "");
-    var 尾 = ", photorealistic RAW photo, cinematic still, DSLR, natural skin, sharp focus, real human, not anime, not manga, not cartoon";
+    var 尾 = "";
+    if (!显式画风(文 + 核)) {
+      尾 = ", photorealistic RAW photo, cinematic still, DSLR, natural skin, sharp focus, real human, not anime, not manga, not cartoon";
+    }
     if (/性爱|插入|抽插|口交|后入|骑乘|性交|做爱|sex|penetrat|oral|doggy|cowgirl/i.test(核)) {
       尾 += ", explicit adult sex";
     }
