@@ -400,8 +400,8 @@
       <details id="问答区" class="分区" open>
         <summary>AI 对话</summary>
           <label>
-            回答通道（选定后只用这一路；自动抢答才多路赛跑）
-          <select id="AI通道" onchange="对话通道已改()">
+            回答通道
+          <select id="AI通道" onchange="对话通道已改()" aria-label="选择 AI 对话通道">
             <option value="auto" selected>自动抢答 · 推荐</option>
             <option value="glm">GLM · 智谱</option>
             <option value="horde">Horde</option>
@@ -643,8 +643,12 @@
     }
     var 对话框 = document.getElementById("AI通道");
     if (对话框) {
+      对话框.disabled = false;
+      对话框.removeAttribute("disabled");
       对话框.addEventListener("change", function () {
+        对话框.disabled = false;
         保存对话通道(对话框.value || "auto", true);
+        刷新对话通道状态();
       });
     }
     var 核心 = document.getElementById("角色描述");
@@ -1114,6 +1118,8 @@
   function 同步对话通道选项() {
     var 框 = document.getElementById("AI通道");
     if (!框) return;
+    框.disabled = false;
+    框.removeAttribute("disabled");
     var horde = 框.querySelector('option[value="horde"]');
     var i = 0;
     for (i = 0; i < 对话通道选项.length; i++) {
@@ -1141,10 +1147,10 @@
     if (!框 || !状态) return;
     var 值 = 框.value || "auto";
     if (值 === "auto") {
-      状态.textContent = "自动抢答：只跑已配置通道，先返回的生效。";
+      状态.textContent = "自动通道：先返回的回答生效。";
       return;
     }
-    状态.textContent = "当前仅使用：" + 通道显示名(值);
+    状态.textContent = "当前通道：" + 通道显示名(值);
   }
 
   function 读取登录邮箱() {
@@ -3614,6 +3620,9 @@
   select {
     font-size: 16px;
   }
+
+  /* 前台只保留创作和对话，不显示后台管理/工具入口。 */
+  #平台管理区, #管理面板, #工具区 { display: none !important; }
 
   .应用 {
     min-height: 100vh;
