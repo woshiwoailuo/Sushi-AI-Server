@@ -429,7 +429,11 @@ async function userFromToken(token) {
 }
 
 function setAuthCookie(res, token) {
-  res.setHeader('Set-Cookie', 'sushi_token=' + token + '; HttpOnly; Path=/; SameSite=Lax');
+  // Secure on HTTPS so iOS Safari keeps the session cookie for same-origin iframe workshop fetches.
+  const secure = String(process.env.VERCEL || process.env.NODE_ENV || '').length > 0 || process.env.FORCE_SECURE_COOKIE === '1'
+    ? '; Secure'
+    : '';
+  res.setHeader('Set-Cookie', 'sushi_token=' + token + '; HttpOnly; Path=/; SameSite=Lax' + secure + '; Max-Age=2592000');
 }
 
 function publicUser(row) {

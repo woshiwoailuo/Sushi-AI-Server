@@ -46,6 +46,32 @@
     }
   }
 
+  // iOS Safari iframe: cookie alone can miss; same-origin localStorage JWT is reliable.
+  function readAuthToken() {
+    try {
+      if (window.__sushiJwt) return String(window.__sushiJwt);
+      return localStorage.getItem('sushi_jwt') || '';
+    } catch (e) { return window.__sushiJwt ? String(window.__sushiJwt) : ''; }
+  }
+  function authHeaders(extra) {
+    var headers = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
+    var tok = readAuthToken();
+    if (tok) headers.Authorization = 'Bearer ' + tok;
+    return headers;
+  }
+  try {
+    window.addEventListener('message', function (ev) {
+      try {
+        if (!ev || !ev.data || ev.data.type !== 'sushi_auth') return;
+        if (ev.origin && ev.origin !== location.origin) return;
+        var tok = String(ev.data.token || '');
+        if (!tok) return;
+        window.__sushiJwt = tok;
+        try { localStorage.setItem('sushi_jwt', tok); } catch (e) {}
+      } catch (e2) {}
+    });
+  } catch (e3) {}
+
   async function api(path, options) {
     options = options || {};
     var method = options.method || 'GET';
@@ -59,8 +85,8 @@
     }
     try {
       var response = await fetch('/api/images' + path, {
-        method: method, credentials: 'same-origin', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
+        method: method, credentials: 'include', cache: 'no-store',
+        headers: authHeaders(),
         body: options.body ? JSON.stringify(options.body) : undefined,
         signal: controller.signal
       });
@@ -360,7 +386,7 @@
       ensureActive(run);
       var url = pollinationsProxyUrl(model, prompt, run.payload.width, run.payload.height, seed + attempt * 131);
       try {
-        var response = await fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: run.controller.signal });
+        var response = await fetch(url, { method: 'GET', credentials: 'include', cache: 'no-store', headers: authHeaders(), signal: run.controller.signal });
         if (!response.ok) {
           var httpErr = new Error(label + (response.status === 429 ? ' 限流(429)' : (' HTTP ' + response.status)));
           httpErr.status = response.status;
@@ -720,7 +746,8 @@
   }
 
   window.开始生成 = function () {
-    if (active || $('生成按钮').disabled) return Promise.resolve();
+    var genBtn = $('生成按钮');
+    if (active || (genBtn && genBtn.disabled)) return Promise.resolve();
     // Never open Perchance official site — keep selection, generate in-app.
     var providerBox = $('出图引擎');
     if (providerBox) { providerBox.disabled = false; providerBox.removeAttribute('disabled'); }
@@ -769,7 +796,8 @@
   };
 
   window.开始随机生成 = function () {
-    if (active || $('随机按钮').disabled) return Promise.resolve();
+    var randBtn = $('随机按钮');
+    if (active || (randBtn && randBtn.disabled)) return Promise.resolve();
     var providerBox = $('出图引擎');
     if (providerBox) { providerBox.disabled = false; providerBox.removeAttribute('disabled'); }
     var item = typeof window.本地随机一项 === 'function' ? window.本地随机一项() : null;

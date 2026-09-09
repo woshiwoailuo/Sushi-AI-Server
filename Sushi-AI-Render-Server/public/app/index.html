@@ -169,9 +169,10 @@
         <label for="chatChannel">回答通道</label>
         <select id="chatChannel" aria-label="AI 回答通道">
           <option value="auto" selected>自动抢答 · 推荐</option>
-          <option value="grok">Grok · xAI</option>
-          <option value="horde">Horde</option>
+          <option value="horde">Horde · 免费可用</option>
+          <option value="grok">Grok · xAI（需配置密钥）</option>
         </select>
+        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答优先 Horde；Grok 需在 Vercel 设置 <code>XAI_API_KEY</code>（或 <code>GROK_API_KEY</code>），未配置时请改用 Horde。</p>
       </div>
     </div>
     <div class="chat-shell">
@@ -242,15 +243,17 @@
 
     function token() { return localStorage.getItem('sushi_jwt') || ''; }
     function setToken(t) {
+      var secure = (location.protocol === 'https:') ? '; Secure' : '';
       if (t) {
         localStorage.setItem('sushi_jwt', t);
         localStorage.setItem('sushi_jwt_at', String(Date.now()));
-        document.cookie = 'sushi_token=' + t + '; path=/; SameSite=Lax';
+        // Mirror JWT for workshop iframe cookie fallback; Bearer from localStorage is primary on iOS.
+        document.cookie = 'sushi_token=' + t + '; path=/; SameSite=Lax' + secure + '; Max-Age=2592000';
       } else {
         localStorage.removeItem('sushi_jwt');
         localStorage.removeItem('sushi_jwt_at');
         localStorage.removeItem('sushi_me_ok_at');
-        document.cookie = 'sushi_token=; path=/; max-age=0; SameSite=Lax';
+        document.cookie = 'sushi_token=; path=/; max-age=0; SameSite=Lax' + secure;
       }
     }
     function jwtUnexpired(tok) {
@@ -532,7 +535,7 @@
       } catch (err) {
         var msg = (err && err.message) || '通道失败';
         if (err && err.status === 402) msg = '快速对话通道暂时不可用（需付费额度）';
-        else if (err && err.status === 503 && /Grok/i.test(msg)) msg = 'Grok 未配置';
+        else if (err && err.status === 503 && /Grok/i.test(msg)) msg = 'Grok 未配置：请在 Vercel 环境变量填写 XAI_API_KEY（或 GROK_API_KEY）后重新部署；也可改用 Horde';
         else if (err && err.status === 503 && /DeepSeek/i.test(msg)) msg = 'DeepSeek 未配置';
         else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
         throw new Error(msg);
@@ -680,8 +683,8 @@
       // Explicit channel: answer only on that platform.
       if (channel && channel !== 'auto') return askOneChat(question, channel);
       var messages = buildMessages(question);
-      // auto：grok / horde 多通道抢答（已下架 402/未配置死胡同）；整体抢答上限 30s。
-      var models = ['grok', 'horde'];
+      // auto：Horde 优先（Grok 未配置时不挡路），再并行 Grok；整体抢答上限 30s。
+      var models = ['horde', 'grok'];
       return await new Promise(function (resolve, reject) {
         var left = models.length;
         var failed = 0;
@@ -963,6 +966,12 @@
               genLoaded = false;
             }
           } catch (e) {}
+          try {
+            var tok = token();
+            if (tok && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({ type: 'sushi_auth', token: tok }, location.origin);
+            }
+          } catch (e2) {}
         });
         body.appendChild(iframe);
         genLoaded = true;
