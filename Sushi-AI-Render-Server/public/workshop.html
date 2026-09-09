@@ -127,7 +127,8 @@
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
               <option value="perchance" selected>Perch / Perchance · 应用内优先</option>
               <option value="turbo">Turbo</option>
-              <option value="horde">Horde</option>
+              <option value="horde">Horde · 免费共享</option>
+            <option value="openai">快速对话 · 免费通道</option>
               <option value="flux">Flux</option>
               <option value="flux-realism">Flux写实</option>
               <option value="sana">Sana</option>
@@ -766,7 +767,8 @@
   }
   function 规范化对话通道(值, 用户选过) {
     值 = String(值 || "").trim();
-    if (!值 || 值 === "perchance" || 值 === "官方" || 值 === "openai" || 值 === "openai-fast" || 值 === "fast" || 值 === "turbo") return "auto";
+    if (!值 || 值 === "perchance" || 值 === "官方") return "auto";
+    if (值 === "openai-fast" || 值 === "fast" || 值 === "turbo") return "openai";
     return 值;
   }
 
@@ -1656,7 +1658,8 @@
     if (指定 === "glm") return 问花粉(问句, "glm");
     if (指定 === "groq" || 指定 === "gemini" || 指定 === "openrouter" || 指定 === "grok") return 问花粉(问句, 指定);
     if (指定 === "horde") return 问群体模型(问句);
-    if (指定 === "fast" || 指定 === "openai-fast" || 指定 === "openai" || 指定 === "turbo") 指定 = "auto";
+    if (指定 === "fast" || 指定 === "openai-fast" || 指定 === "turbo") 指定 = "openai";
+    if (指定 === "openai") return 问花粉(问句, "openai");
     if (指定 && 指定 !== "auto") return 问花粉(问句, 指定);
     var 赛道模型 = [];
     if (已配置通道.glm) 赛道模型.push("glm");

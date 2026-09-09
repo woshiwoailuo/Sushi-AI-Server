@@ -168,7 +168,9 @@
   // Explicit art-style keywords: honor anime/manga/cartoon/二次元/插画 instead of forcing photoreal.
   var ART_STYLE_RE = /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i;
   function hasExplicitArtStyle(text) {
-    return ART_STYLE_RE.test(String(text || ''));
+    // Negative phrases such as “非动漫” must not be mistaken for a requested art style.
+    var cleaned = String(text || '').replace(/(?:非|不要|不需要|no|not)\s*(?:anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说)/gi, ' ');
+    return ART_STYLE_RE.test(cleaned);
   }
 
   function photorealPrompt(prompt) {
@@ -358,7 +360,7 @@
     try { window.__sushiDisabledImageEngines = []; } catch (e) {}
   }
 
-  async function runWithProviderBudget(run, engine, task) {
+  async function runWithProviderBudget(run, engine, task, budgetMs) {
     engine = normalizeEngineName(engine);
     var providerController = new AbortController();
     // Do not use AbortSignal.any here: embedded WebViews and jsdom can expose
@@ -369,7 +371,7 @@
     if (run.controller.signal.aborted) forwardAbort();
     else run.controller.signal.addEventListener('abort', forwardAbort, { once: true });
     var timedOut = false;
-    var timer = setTimeout(function () { timedOut = true; providerController.abort(); }, PROVIDER_RESULT_TIMEOUT_MS);
+    var timer = setTimeout(function () { timedOut = true; providerController.abort(); }, budgetMs || PROVIDER_RESULT_TIMEOUT_MS);
     try {
       return await task(signal);
     } catch (error) {
@@ -632,7 +634,7 @@
     // Never window.open perchance.org (Cloudflare + X-Frame-Options block embeds).
     if (typeof window.update === 'function') {
       try {
-        return await generatePerchancePlugin(run, prompt, index, 8000);
+        return await generatePerchancePlugin(run, prompt, index, 5000);
       } catch (error) {
         var pluginMsg = String(error && error.message || error || '');
         if (!error || /已取消生成|lost-race/.test(pluginMsg)) throw error;
@@ -643,17 +645,8 @@
       '应用内出图，不跳转官网。',
       true
     );
-    try {
-      var result = await generatePollinations(run, prompt, index, 'perchance', providerSignal);
-      return { url: result.url, engine: 'perchance' };
-    } catch (error) {
-      if (error && /取消|lost-race|已取消生成/.test(String(error.message || ''))) throw error;
-      // If Perch's upstream is busy or fails, keep the user's Perch choice
-      // and continue immediately through the same-origin realistic fallback.
-      status('Perch 暂时无响应，正在自动修复', '保留核心描述，切换同源写实备用模型重试。', true);
-      var repaired = await generatePollinations(run, prompt, index, 'turbo', providerSignal);
-      return { url: repaired.url, engine: 'perchance' };
-    }
+    var result = await generatePollinations(run, prompt, index, 'perchance', providerSignal);
+    return { url: result.url, engine: 'perchance' };
   }
 
   async function generateOne(run, prompt, index) {
@@ -681,10 +674,20 @@
       }
     }
     if (engine === 'perchance') {
-      // Explicit Perch: plugin if loaded, otherwise same-origin proxy. Never open perchance.org.
-      return await runWithProviderBudget(run, engine, function (signal) {
-        return generatePerchance(run, prompt, index, signal);
-      });
+      // Explicit Perch gets a shorter attempt budget; a timed-out attempt must not abort its fresh fallback.
+      try {
+        return await runWithProviderBudget(run, engine, function (signal) {
+          return generatePerchance(run, prompt, index, signal);
+        }, 15000);
+      } catch (error) {
+        if (run.cancelled || /取消|lost-race|已取消生成/.test(String(error && error.message || ''))) throw error;
+        ensureActive(run);
+        status('Perch 暂时无响应，正在自动修复', '保留核心描述，切换同源写实备用模型重试。', true);
+        var repaired = await runWithProviderBudget(run, 'turbo', function (signal) {
+          return generatePollinations(run, prompt, index, 'turbo', signal);
+        }, 15000);
+        return { url: repaired.url, engine: 'perchance' };
+      }
     }
     if (engine !== 'auto') return runWithProviderBudget(run, engine, function (signal) {
       return generatePollinations(run, prompt, index, engine, signal);
