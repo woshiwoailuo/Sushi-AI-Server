@@ -30,10 +30,12 @@ test('homepage chat channel picker honors explicit selection and auto race', () 
   assert.match(home, /localStorage\.setItem\(chatChannelKey\(\), v\)/);
   assert.match(home, /value="groq"/);
   assert.match(home, /value="grok"/);
-  assert.match(home, /var models = \['groq', 'horde'\]/);
+  assert.match(home, /var models = \['groq', 'gemini', 'openrouter', 'horde'\]/);
   assert.match(home, /GROQ_API_KEY/);
   assert.match(home, /Groq · 免费额度/);
   assert.match(home, /Grok · xAI（需配置密钥）/);
+  assert.match(home, /value="gemini"/);
+  assert.match(home, /value="openrouter"/);
   // Broken OpenAI(402) / DeepSeek(未配置) removed from homepage picker (not grayed).
   const picker = home.slice(home.indexOf('id="chatChannel"'), home.indexOf('</select>', home.indexOf('id="chatChannel"')) + 9);
   assert.match(picker, /value="auto"/);
