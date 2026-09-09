@@ -35,8 +35,27 @@ test('homepage chat channel picker honors explicit selection and auto race', () 
 test('homepage can generate images directly from chat intent', () => {
   assert.match(home, /function wantsImageGen/);
   assert.match(home, /function generateHomeImage/);
-  assert.match(home, /model=flux-realism/);
+  assert.match(home, /model: 'flux-realism'/);
   assert.match(home, /item\.image \? '<img class="chat-img"/);
   assert.match(home, /photorealistic RAW photo/);
   assert.match(home, /not anime, not manga, not cartoon/);
+});
+
+
+test('homepage image path uses auth API and never opens workshop loader', () => {
+  assert.match(home, /function homeImageError/);
+  assert.match(home, /\/api\/chat\/image/);
+  assert.match(home, /api\('\/api\/images'/);
+  // Must not mint workshop HTML tickets or navigate for homepage image intent.
+  const genFn = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
+  assert.ok(genFn.length > 200);
+  assert.doesNotMatch(genFn, /\/api\/workshop\/ticket/);
+  assert.doesNotMatch(genFn, /\/workshop\?/);
+  assert.doesNotMatch(genFn, /enterGen|openWorkshop|data-tab="gen"/);
+  assert.doesNotMatch(genFn, /工坊未能打开|打开工坊超时/);
+  assert.match(home, /填入对话后发送，首页直出图/);
+  assert.match(home, /input\.value = '画一张：' \+ item\[1\]/);
+  assert.doesNotMatch(home, /文生图快捷模板（会跳转工坊）/);
+  assert.match(server, /app\.post\('\/api\/chat\/image'/);
+  assert.match(server, /Homepage chat image: auth cookie\/JWT only/);
 });
