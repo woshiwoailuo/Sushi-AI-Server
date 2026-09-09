@@ -169,11 +169,15 @@
         <label for="chatChannel">回答通道</label>
         <select id="chatChannel" aria-label="AI 回答通道">
           <option value="auto" selected>自动抢答 · 推荐</option>
+          <option value="glm">GLM · 智谱</option>
+          <option value="deepseek">DeepSeek</option>
           <option value="groq">Groq · 免费额度</option>
+          <option value="gemini">Gemini · 免费层</option>
+          <option value="openrouter">OpenRouter · 免费模型</option>
           <option value="horde">Horde · 免费可用</option>
           <option value="grok">Grok · xAI（需配置密钥）</option>
         </select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答：Groq + Horde 免费通道并行。Groq 需 Vercel 设置 <code>GROQ_API_KEY</code>（可选 <code>GROQ_MODEL</code>，默认 <code>openai/gpt-oss-20b</code>）。Grok 仍需 <code>XAI_API_KEY</code>，未配置时请勿选 Grok。</p>
+        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答只并行<strong>已配置</strong>的 GLM / DeepSeek / Groq / Gemini / OpenRouter，并始终带上 Horde；未配置密钥的通道不会发起请求、不会空等。在 Vercel 设置 <code>GLM_API_KEY</code>、<code>DEEPSEEK_API_KEY</code>、<code>GROQ_API_KEY</code>、<code>GEMINI_API_KEY</code>、<code>OPENROUTER_API_KEY</code> 后重新部署即可加入抢答。Grok 需 <code>XAI_API_KEY</code>，仅显式选择时使用。</p>
       </div>
     </div>
     <div class="chat-shell">
@@ -538,7 +542,10 @@
         if (err && err.status === 402) msg = '快速对话通道暂时不可用（需付费额度）';
         else if (err && err.status === 503 && /Groq/i.test(msg)) msg = 'Groq 未配置：请在 Vercel 环境变量填写 GROQ_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
         else if (err && err.status === 503 && /Grok/i.test(msg)) msg = 'Grok 未配置：请在 Vercel 环境变量填写 XAI_API_KEY（或 GROK_API_KEY）后重新部署；也可改用 Groq / Horde';
-        else if (err && err.status === 503 && /DeepSeek/i.test(msg)) msg = 'DeepSeek 未配置';
+        else if (err && err.status === 503 && /Gemini/i.test(msg)) msg = 'Gemini 未配置：请在 Vercel 环境变量填写 GEMINI_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
+        else if (err && err.status === 503 && /OpenRouter/i.test(msg)) msg = 'OpenRouter 未配置：请在 Vercel 环境变量填写 OPENROUTER_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
+        else if (err && err.status === 503 && /DeepSeek/i.test(msg)) msg = 'DeepSeek 未配置：请在 Vercel 环境变量填写 DEEPSEEK_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
+        else if (err && err.status === 503 && /GLM/i.test(msg)) msg = 'GLM 未配置：请在 Vercel 环境变量填写 GLM_API_KEY（或 ZHIPUAI_API_KEY / ZAI_API_KEY）后重新部署；也可改用 Horde 或自动抢答';
         else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
         throw new Error(msg);
       }
@@ -550,15 +557,18 @@
       if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
       return content;
     }
-    var CHAT_LABELS = { groq: 'Groq', grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
+    var CHAT_LABELS = { groq: 'Groq', gemini: 'Gemini', openrouter: 'OpenRouter', grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', glm: 'GLM', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
     function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
     function normalizeChatChannel(raw) {
       var v = String(raw || 'auto').trim().toLowerCase();
-      // Drop dead-end channels from picker (OpenAI 402 / DeepSeek 未配置); map stale localStorage to auto.
-      if (v === 'openai' || v === 'turbo' || v === 'openai-fast' || v === 'fast' || v === 'deepseek') return 'auto';
+      // Drop dead-end channels from picker (OpenAI 402); map stale localStorage to auto.
+      if (v === 'openai' || v === 'turbo' || v === 'openai-fast' || v === 'fast') return 'auto';
       if (v === 'xai' || v === 'x-ai') return 'grok';
       if (v === 'groq' || v === 'groqcloud' || v === 'groq-cloud') return 'groq';
-      if (v === 'grok' || v === 'horde' || v === 'groq' || v === 'auto') return v;
+      if (v === 'gemini' || v === 'google' || v === 'google-gemini') return 'gemini';
+      if (v === 'openrouter' || v === 'open-router') return 'openrouter';
+      if (v === 'zhipu' || v === 'zhipuai' || v === 'chatglm' || v === 'zai' || v === 'z-ai' || v === 'z.ai') return 'glm';
+      if (v === 'grok' || v === 'horde' || v === 'groq' || v === 'gemini' || v === 'openrouter' || v === 'deepseek' || v === 'glm' || v === 'auto') return v;
       return 'auto';
     }
     function loadChatChannel() {
@@ -578,6 +588,45 @@
     function selectedChatChannel() {
       var box = $('chatChannel');
       return normalizeChatChannel(box && box.value ? box.value : loadChatChannel());
+    }
+    var chatReady = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
+    function autoRaceList() {
+      var list = [];
+      if (chatReady.glm) list.push('glm');
+      if (chatReady.deepseek) list.push('deepseek');
+      if (chatReady.groq) list.push('groq');
+      if (chatReady.gemini) list.push('gemini');
+      if (chatReady.openrouter) list.push('openrouter');
+      list.push('horde');
+      return list;
+    }
+    function updateChatHint() {
+      var el = $('grokSetupHint');
+      if (!el) return;
+      var ready = [];
+      if (chatReady.glm) ready.push('GLM');
+      if (chatReady.deepseek) ready.push('DeepSeek');
+      if (chatReady.groq) ready.push('Groq');
+      if (chatReady.gemini) ready.push('Gemini');
+      if (chatReady.openrouter) ready.push('OpenRouter');
+      ready.push('Horde');
+      el.innerHTML = '自动抢答只并行已配置通道：<strong>' + ready.join('、') + '</strong>。未配置密钥的通道不会发起请求。在 Vercel 设置 <code>GLM_API_KEY</code> / <code>DEEPSEEK_API_KEY</code> / <code>GROQ_API_KEY</code> / <code>GEMINI_API_KEY</code> / <code>OPENROUTER_API_KEY</code> 后重新部署即可加入抢答。Grok 需 <code>XAI_API_KEY</code>，仅显式选择时使用。';
+    }
+    async function loadChatReady() {
+      try {
+        var h = await api('/api/health', { timeoutMs: 4000 });
+        if (h && h.chat) {
+          chatReady.groq = !!h.chat.groq;
+          chatReady.gemini = !!h.chat.gemini;
+          chatReady.openrouter = !!h.chat.openrouter;
+          chatReady.deepseek = !!h.chat.deepseek;
+          chatReady.glm = !!h.chat.glm;
+          chatReady.grok = !!h.chat.grok;
+          chatReady.horde = true;
+        }
+      } catch (e) {}
+      updateChatHint();
+      return chatReady;
     }
     function wantsImageGen(text) {
       return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|给我.*(图|照片)|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)|txt2img|text.?to.?image/i.test(String(text || ''));
@@ -686,8 +735,8 @@
       // Explicit channel: answer only on that platform.
       if (channel && channel !== 'auto') return askOneChat(question, channel);
       var messages = buildMessages(question);
-      // auto：免费通道 Groq + Horde 并行（Grok 需密钥，不进抢答以免 503 噪声）；整体抢答上限 30s。
-      var models = ['groq', 'horde'];
+      // auto：只并行 /api/health.chat 已配置的免费通道 + Horde；Grok 不进抢答。未探测到配置时只走 Horde，避免空等 503。
+      var models = autoRaceList();
       return await new Promise(function (resolve, reject) {
         var left = models.length;
         var failed = 0;
@@ -767,6 +816,7 @@
       loadChat();
       loadChatChannel();
       setMemMode(memMode());
+      loadChatReady().catch(function () {});
       try {
         const data = await api('/api/me');
         cacheMe(data.user);

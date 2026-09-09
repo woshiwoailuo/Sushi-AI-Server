@@ -17,7 +17,7 @@ const {
   migratePostgres,
   persistenceFromMode,
 } = require('./lib/db-postgres');
-const { normalizeChatPayload, collapseRepeatedText, normalizeChatModel, missingChatApiKeyMessage } = require('./lib/chat-response');
+const { normalizeChatPayload, collapseRepeatedText, normalizeChatModel, missingChatApiKeyMessage, configuredChatChannels, chatChannelLabel, buildKeyedChatRequest } = require('./lib/chat-response');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -890,6 +890,7 @@ app.get('/api/health', (req, res) => {
     db: persistence,
     mail: smtpConfigured(),
     warning,
+    chat: configuredChatChannels(process.env),
   });
 });
 
@@ -1235,7 +1236,7 @@ app.post('/api/workshop/unlock', authMiddleware, async (req, res) => {
 });
 
 const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
-const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai', 'groq', 'gemini', 'google', 'openrouter']);
+const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai', 'groq', 'gemini', 'google', 'google-gemini', 'openrouter', 'open-router', 'glm', 'zhipu', 'zhipuai', 'chatglm', 'zai', 'z-ai']);
 const DEEPSEEK_API_KEY = String(process.env.DEEPSEEK_API_KEY || '').trim();
 const DEEPSEEK_MODEL = String(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim();
 const XAI_API_KEY = String(process.env.XAI_API_KEY || process.env.GROK_API_KEY || '').trim();
@@ -1247,6 +1248,9 @@ const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
 const GEMINI_MODEL = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').trim() || 'gemini-2.5-flash-lite';
 const OPENROUTER_API_KEY = String(process.env.OPENROUTER_API_KEY || '').trim();
 const OPENROUTER_MODEL = String(process.env.OPENROUTER_MODEL || 'openrouter/free').trim() || 'openrouter/free';
+const GLM_API_KEY = String(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.ZAI_API_KEY || process.env.ZHIPU_API_KEY || '').trim();
+const GLM_MODEL = String(process.env.GLM_MODEL || 'glm-4.7-flash').trim() || 'glm-4.7-flash';
+const GLM_BASE_URL = String(process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/chat/completions').trim() || 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 const HORDE_TEXT_API_KEY = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
 const HORDE_TEXT_CLIENT = 'sushi-club:1.1.21:https://aihorde.net';
 
@@ -1353,7 +1357,7 @@ app.post('/api/workshop/chat', async (req, res) => {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const model = normalizeChatModel(requested);
-  if (!['deepseek', 'openai', 'horde', 'grok', 'groq', 'gemini', 'openrouter'].includes(model)) {
+  if (!['deepseek', 'openai', 'horde', 'grok', 'groq', 'gemini', 'openrouter', 'glm'].includes(model)) {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-48) : [];
@@ -1373,6 +1377,9 @@ app.post('/api/workshop/chat', async (req, res) => {
   if (model === 'openrouter' && !OPENROUTER_API_KEY) {
     return workshopImageError(res, 503, missingChatApiKeyMessage('openrouter'));
   }
+  if (model === 'glm' && !GLM_API_KEY) {
+    return workshopImageError(res, 503, missingChatApiKeyMessage('glm'));
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), model === 'horde' ? 35_000 : 18_000);
@@ -1382,70 +1389,24 @@ app.post('/api/workshop/chat', async (req, res) => {
       return res.status(200).json(payload);
     }
 
-    const endpoint = model === 'deepseek'
-      ? 'https://api.deepseek.com/chat/completions'
-      : model === 'grok'
-        ? 'https://api.x.ai/v1/chat/completions'
-        : model === 'groq'
-          ? 'https://api.groq.com/openai/v1/chat/completions'
-          : model === 'openrouter'
-            ? 'https://openrouter.ai/api/v1/chat/completions'
-            : model === 'gemini'
-              ? 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(GEMINI_MODEL) + ':generateContent?key=' + encodeURIComponent(GEMINI_API_KEY)
-          : 'https://text.pollinations.ai/openai';
-    const upstreamModel = model === 'deepseek'
-      ? DEEPSEEK_MODEL
-      : model === 'grok'
-        ? GROK_MODEL
-        : model === 'groq'
-          ? GROQ_MODEL
-          : model === 'gemini'
-            ? GEMINI_MODEL
-            : model === 'openrouter'
-              ? OPENROUTER_MODEL
-          : 'openai';
-    const geminiMessages = messages.filter((item) => item && item.content);
-    const geminiSystem = geminiMessages
-      .filter((item) => String(item.role || '').toLowerCase() === 'system')
-      .map((item) => String(item.content).slice(0, 6000))
-      .join('\n\n')
-      .trim();
-    const requestBody = model === 'gemini'
-      ? {
-          ...(geminiSystem ? { systemInstruction: { parts: [{ text: geminiSystem }] } } : {}),
-          contents: geminiMessages
-            .filter((item) => String(item.role || '').toLowerCase() !== 'system')
-            .map((item) => ({
-              role: String(item.role || '').toLowerCase() === 'assistant' ? 'model' : 'user',
-              parts: [{ text: String(item.content).slice(0, 6000) }],
-            })),
-          generationConfig: { maxOutputTokens: 800, temperature: 0.7 },
-        }
-      : model === 'deepseek'
-      ? {
-          model: upstreamModel,
-          messages,
-          max_tokens: 800,
-          temperature: 0.7,
-          thinking: { type: 'disabled' },
-        }
-      : (model === 'grok' || model === 'groq' || model === 'openrouter')
-        ? {
-            model: upstreamModel,
-            messages,
-            max_tokens: 800,
-            temperature: 0.7,
-          }
-      : { model: upstreamModel, messages };
-    const authHeader = model === 'deepseek'
-      ? { Authorization: 'Bearer ' + DEEPSEEK_API_KEY }
-      : model === 'grok'
-        ? { Authorization: 'Bearer ' + XAI_API_KEY }
-      : model === 'groq'
-          ? { Authorization: 'Bearer ' + GROQ_API_KEY }
-          : model === 'openrouter'
-            ? { Authorization: 'Bearer ' + OPENROUTER_API_KEY, 'HTTP-Referer': 'https://sushi-ai-server.vercel.app', 'X-Title': 'Sushi AI' }
-          : {};
+    const keyed = buildKeyedChatRequest(model, messages, {
+      groqKey: GROQ_API_KEY,
+      groqModel: GROQ_MODEL,
+      geminiKey: GEMINI_API_KEY,
+      geminiModel: GEMINI_MODEL,
+      openrouterKey: OPENROUTER_API_KEY,
+      openrouterModel: OPENROUTER_MODEL,
+      xaiKey: XAI_API_KEY,
+      grokModel: GROK_MODEL,
+      deepseekKey: DEEPSEEK_API_KEY,
+      deepseekModel: DEEPSEEK_MODEL,
+      glmKey: GLM_API_KEY,
+      glmModel: GLM_MODEL,
+      glmBase: GLM_BASE_URL,
+    });
+    const endpoint = keyed.endpoint;
+    const requestBody = keyed.body;
+    const authHeader = keyed.headers || {};
     let upstream = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
@@ -1485,30 +1446,9 @@ app.post('/api/workshop/chat', async (req, res) => {
         return workshopImageError(res, 402, '快速对话通道暂时需要付费额度，请改用 Horde 或其他通道');
       }
       if (upstream.status === 429) {
-        const busyLabel = model === 'deepseek'
-          ? 'DeepSeek'
-          : model === 'grok'
-            ? 'Grok'
-            : model === 'groq'
-              ? 'Groq'
-              : model === 'gemini'
-                ? 'Gemini'
-                : model === 'openrouter'
-                  ? 'OpenRouter'
-                  : '快速对话';
-        return workshopImageError(res, 429, busyLabel + '通道繁忙，请稍后重试');
+        return workshopImageError(res, 429, chatChannelLabel(model) + '通道繁忙，请稍后重试');
       }
-      const label = model === 'deepseek'
-        ? 'DeepSeek'
-        : model === 'grok'
-          ? 'Grok'
-          : model === 'groq'
-            ? 'Groq'
-            : model === 'gemini'
-              ? 'Gemini'
-              : model === 'openrouter'
-                ? 'OpenRouter'
-                : '快速对话';
+      const label = chatChannelLabel(model);
       const status = upstream.status === 401 ? 401 : 502;
       return workshopImageError(res, status, `${label}暂时不可用${detail ? '：' + detail : ''}，请改用其他通道`);
     }

@@ -55,6 +55,10 @@ test('normalizeChatModel maps groq/grok aliases and legacy pollinations ids', ()
   assert.equal(normalizeChatModel('openai-fast'), 'openai');
   assert.equal(normalizeChatModel('turbo'), 'openai');
   assert.equal(normalizeChatModel('deepseek'), 'deepseek');
+  assert.equal(normalizeChatModel('google-gemini'), 'gemini');
+  assert.equal(normalizeChatModel('open-router'), 'openrouter');
+  assert.equal(normalizeChatModel('zhipuai'), 'glm');
+  assert.equal(normalizeChatModel('chatglm'), 'glm');
 });
 
 test('missingChatApiKeyMessage is clear for groq and grok', () => {
@@ -62,5 +66,8 @@ test('missingChatApiKeyMessage is clear for groq and grok', () => {
   assert.match(missingChatApiKeyMessage('groq'), /GROQ_API_KEY/);
   assert.match(missingChatApiKeyMessage('grok'), /Grok 尚未配置/);
   assert.match(missingChatApiKeyMessage('xai'), /XAI_API_KEY/);
-  assert.match(missingChatApiKeyMessage('deepseek'), /DeepSeek 尚未配置/);
+  assert.match(missingChatApiKeyMessage('deepseek'), /DEEPSEEK_API_KEY/);
+  assert.match(missingChatApiKeyMessage('gemini'), /GEMINI_API_KEY/);
+  assert.match(missingChatApiKeyMessage('openrouter'), /OPENROUTER_API_KEY/);
+  assert.match(missingChatApiKeyMessage('glm'), /GLM_API_KEY/);
 });
