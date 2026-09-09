@@ -548,7 +548,7 @@
     return msgs.length ? msgs.join('；') : '自动抢出失败：各平台均未成功';
   }
 
-  var FREE_RACE_ENGINES = ['flux-realism', 'turbo', 'flux', 'sana', 'horde', 'perchance'];
+  var FREE_RACE_ENGINES = [ 'turbo', 'flux', 'sana', 'horde', 'perchance'];
 
   function normalizeEngineName(raw) {
     var name = String(raw || '').trim().toLowerCase();
@@ -697,7 +697,6 @@
     // auto only: race free platforms; skip engines still in short cool-down after 429/5xx.
     // Perchance always eligible (cool-down cancelled); generation never window.open's perchance.org.
     var activeEngines = FREE_RACE_ENGINES.filter(function (eng) {
-      if (eng === 'perchance' && typeof window.update !== 'function') return false;
       if (eng === 'perchance' && isPerchanceCooling()) return false; // always false now
       return !isEngineCool(eng) && !isEngineDisabled(eng);
     });
