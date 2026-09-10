@@ -759,7 +759,7 @@
     var map = {
       auto: '自动抢出 · 写实', 'auto-real': '自动抢出 · 写实', 'auto-anime': '自动抢出 · 动漫',
       turbo: 'Sana', horde: 'Horde · 写实', 'horde-real': 'Horde · 写实', 'horde-anime': 'Horde · 动漫',
-      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perchance 官方'
+      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perch'
     };
     return map[name] || name;
   }
@@ -832,9 +832,24 @@
   }
 
   async function generatePerchance(run, prompt, index, providerSignal) {
-    if (run.payload.sourceImage) throw new Error('Perchance 当前未接入图生图，未切换平台。');
-    if (typeof window.update !== 'function') throw new Error('Perchance 官方生图组件不可用，未切换平台。可手动选择其他通道。');
-    return generatePerchancePlugin(run, prompt, index, 30000);
+    // Official Perchance.org cannot be embedded (Cloudflare 403 + X-Frame-Options).
+    // In-app Perch is an independent photoreal channel on Horde 写实 models — never Sana.
+    // Never window.open perchance.org.
+    if (typeof window.update === 'function' && !(run.payload && run.payload.sourceImage)) {
+      try {
+        return await generatePerchancePlugin(run, prompt, index, 5000);
+      } catch (error) {
+        var pluginMsg = String(error && error.message || error || '');
+        if (!error || /已取消生成|lost-race/.test(pluginMsg)) throw error;
+      }
+    }
+    status(
+      '正在用 Perch 生成 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
+      '官网无法内嵌，改用写实后端；不跳转官网。',
+      true
+    );
+    var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
+    return { url: result.url, engine: 'perchance' };
   }
 
   async function generateOne(run, prompt, index) {

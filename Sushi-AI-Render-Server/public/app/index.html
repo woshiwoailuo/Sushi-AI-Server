@@ -739,12 +739,14 @@
       // Chat bubble text stays as typed; only the generator prompt is enriched.
       try {
         var engine = localStorage.getItem('角色生成器_默认平台') || 'perchance';
-        if (engine !== 'horde-real' && engine !== 'horde-anime') {
+        if (engine === '官方' || engine === 'perch') engine = 'perchance';
+        if (engine === 'sana' || engine === 'auto-anime') {
           throw new Error('当前选择 ' + engine + '，请在工坊使用该通道；未自动更换平台。');
         }
         var prompt = engine === 'horde-anime' ? promptText : photorealHomePrompt(promptText);
         var negative = engine === 'horde-anime' ? 'lowres, blurry, watermark, text' : 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
         var lastErr = null;
+        var channelLabel = engine === 'perchance' ? 'Perch' : (engine === 'horde-anime' ? 'Horde · 动漫' : 'Horde · 写实');
         for (var attempt = 0; attempt < 10; attempt += 1) {
           try {
             var created = await api('/api/images', {
@@ -760,7 +762,7 @@
             });
             var job = created && (created.job || created);
             if (job && job.state === 'done' && job.image && job.image.url) {
-              return { url: job.image.url, channel: engine === 'horde-anime' ? 'Horde · 动漫' : 'Horde · 写实' };
+              return { url: job.image.url, channel: channelLabel };
             }
             if (!job || !job.id) throw new Error('工坊未受理出图，请稍后重试');
             var deadline = Date.now() + 180000;

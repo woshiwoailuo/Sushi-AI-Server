@@ -23,10 +23,12 @@ test('manual image choice survives both successful and failed generation',async(
   assert.deepEqual(calls,[engine]);assert.equal(run.engine,engine);
  }
 });
-test('unavailable official Perchance never submits to Horde',async()=>{
- const ctx={window:{},generateHorde:()=>{throw Error('wrong provider')}};
+test('unavailable official Perchance falls back to Horde photoreal in-app',async()=>{
+ const calls=[];
+ const ctx={window:{},status:()=>{},generateHorde:async()=>{calls.push('horde');return {url:'https://example.com/p.png',engine:'perchance'}}};
  vm.createContext(ctx);vm.runInContext(extract(generation,'generatePerchance'),ctx);
- await assert.rejects(ctx.generatePerchance({payload:{}},'landscape',0),/未切换平台/);
+ const result=await ctx.generatePerchance({payload:{},completed:0,total:1},'landscape',0);
+ assert.deepEqual(calls,['horde']);assert.equal(result.engine,'perchance');
 });
 test('unsupported reference image remains on selected provider',async()=>{
  const ctx={};vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
