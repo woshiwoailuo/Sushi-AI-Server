@@ -31,6 +31,7 @@ function imageSource(value) {
 
 const HORDE_REAL_MODELS = [
   'Flux.1-Schnell fp8 (Compact)',
+  'Z-Image-Turbo',
   'ICBINP - I Can\'t Believe It\'s Not Photography',
   'AbsoluteReality',
   'Realistic Vision',
@@ -38,8 +39,8 @@ const HORDE_REAL_MODELS = [
   'ICBINP XL',
   'Edge Of Realism',
   'majicMIX realistic',
-  'AlbedoBase XL (SDXL)',
 ];
+const HORDE_IMG2IMG_REAL_MODELS = HORDE_REAL_MODELS.filter((name) => !/flux|z-image/i.test(name));
 const HORDE_ANIME_MODELS = [
   'Counterfeit',
   'Anima-Turbo-v1.1',
@@ -75,8 +76,13 @@ function sanitizeRealPrompt(prompt) {
 
 function hordeModelsFor(input = {}, model = '') {
   const style = String((input && input.style) || '').trim().toLowerCase();
+  const hasSource = !!(input && input.sourceImage);
   if (style === 'anime' || style === 'horde-anime' || style === 'auto-anime') return HORDE_ANIME_MODELS.slice();
-  if (style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real') return HORDE_REAL_MODELS.slice();
+  if (style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance' || style === 'glm') {
+    return hasSource ? HORDE_IMG2IMG_REAL_MODELS.slice() : HORDE_REAL_MODELS.slice();
+  }
+  // Unstyled img2img used to omit models → Horde picked WAI-NSFW-illustrious (anime). Always pin photoreal.
+  if (hasSource) return HORDE_IMG2IMG_REAL_MODELS.slice();
   if (model) return [model];
   return null;
 }
@@ -94,7 +100,7 @@ function generationPayload(input = {}, model = '') {
   };
   const negativeRaw = String(input.negativePrompt || '').trim().slice(0, 1000);
   const style = String((input && input.style) || '').trim().toLowerCase();
-  const isReal = style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real';
+  const isReal = style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance' || style === 'glm';
   let prompt = isReal ? sanitizeRealPrompt(promptRaw) : promptRaw;
   if (prompt.length > 2000) prompt = prompt.slice(0, 2000);
   let negative = negativeRaw;
@@ -367,4 +373,4 @@ function createImageService(options = {}) {
   return { create, get, cancel, current, sweep };
 }
 
-module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, hordeModelsFor, sanitizeRealPrompt };
+module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, hordeModelsFor, sanitizeRealPrompt };

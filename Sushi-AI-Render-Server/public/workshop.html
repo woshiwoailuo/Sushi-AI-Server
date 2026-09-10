@@ -77,6 +77,7 @@
             <optgroup label="写实">
               <option value="auto-real" selected>自动抢出 · 写实</option>
               <option value="horde-real">Horde · 写实</option>
+              <option value="glm">智谱 GLM · 写实</option>
             </optgroup>
             <optgroup label="动漫">
               <option value="auto-anime">自动抢出 · 动漫</option>
@@ -119,6 +120,7 @@
               <optgroup label="写实">
                 <option value="auto-real" selected>自动抢出 · 写实</option>
                 <option value="horde-real">Horde · 写实</option>
+                <option value="glm">智谱 GLM · 写实</option>
               </optgroup>
               <optgroup label="动漫">
                 <option value="auto-anime">自动抢出 · 动漫</option>
@@ -379,8 +381,9 @@
           <label>
             图生图平台
             <select id="图生图平台" name="图生图平台" onchange="保存图生图平台(this.value)">
-              <option value="aihorde" selected>AI Horde · 真实图生图</option>
-              <option value="server-auto">服务器自动选择（当前 AI Horde）</option>
+              <option value="horde-real" selected>Horde · 写实</option>
+              <option value="horde-anime">Horde · 动漫</option>
+              <option value="auto">跟随生图平台</option>
             </select>
           </label>
           <div class="核心操作">
@@ -508,7 +511,7 @@
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["auto-real", "perchance", "horde-real", "auto-anime", "sana", "horde-anime"];
+  var 引擎顺序 = ["auto-real", "glm", "perchance", "horde-real", "auto-anime", "sana", "horde-anime"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -517,7 +520,7 @@
   var 十八禁点击 = 0;
   var 十八禁行已开 = false;
   var 用户选定平台 = "auto-real";
-  var 用户选定图生图平台 = "aihorde";
+  var 用户选定图生图平台 = "horde-real";
   var 本轮胜出 = "";
   var 管理员已解锁 = false;
   var 管理员口令 = "我是小笨蛋哦哦";
@@ -738,7 +741,8 @@
     值 = String(值 || "").trim();
     if (值 === "官方" || 值 === "perch") 值 = "perchance";
     if (值 === "turbo" || 值 === "flux" || 值 === "flux-realism" || 值 === "auto" || 值 === "horde") 值 = "auto-real";
-    var 可用 = ["auto-real", "auto-anime", "perchance", "horde-real", "horde-anime", "sana"];
+    if (值 === "zhipu" || 值 === "zhipuai" || 值 === "chatglm" || 值 === "cogview") 值 = "glm";
+    var 可用 = ["auto-real", "auto-anime", "perchance", "horde-real", "horde-anime", "sana", "glm"];
     if (用户选过 && 可用.indexOf(值) >= 0) return 值;
     if (!用户选过 && (!值 || 值 === "auto-real")) return "auto-real";
     return 可用.indexOf(值) >= 0 ? 值 : "auto-real";
@@ -748,18 +752,26 @@
     var 邮箱 = (window.当前用户邮箱 || window.登录邮箱 || "").toString().trim().toLowerCase();
     return "苏轼AI_图生图平台" + (邮箱 ? "_" + 邮箱 : "");
   }
+  function 规范化图生图平台(值) {
+    值 = String(值 || "").trim().toLowerCase();
+    if (值 === "aihorde" || 值 === "horde" || 值 === "server-auto") 值 = "horde-real";
+    if (值 === "anime") 值 = "horde-anime";
+    if (值 === "horde-real" || 值 === "horde-anime" || 值 === "auto") return 值;
+    return "horde-real";
+  }
   function 载入图生图平台() {
-    var 值 = "aihorde";
+    var 值 = "horde-real";
     try { 值 = localStorage.getItem(图生图平台键()) || 值; } catch (e) {}
-    用户选定图生图平台 = 值 === "server-auto" ? "server-auto" : "aihorde";
+    用户选定图生图平台 = 规范化图生图平台(值);
     var 框 = document.getElementById("图生图平台");
     if (框) 框.value = 用户选定图生图平台;
   }
   function 保存图生图平台(值) {
-    用户选定图生图平台 = 值 === "server-auto" ? "server-auto" : "aihorde";
+    用户选定图生图平台 = 规范化图生图平台(值);
     try { localStorage.setItem(图生图平台键(), 用户选定图生图平台); } catch (e) {}
     var 状态 = document.getElementById("工具状态");
-    if (状态) 状态.textContent = "图生图平台已保存：" + (用户选定图生图平台 === "server-auto" ? "服务器自动选择（当前 AI Horde）" : "AI Horde");
+    var 名 = { "horde-real": "Horde · 写实", "horde-anime": "Horde · 动漫", auto: "跟随生图平台" };
+    if (状态) 状态.textContent = "图生图平台已保存：" + (名[用户选定图生图平台] || "Horde · 写实");
   }
   function 规范化对话通道(值, 用户选过) {
     return "auto";
@@ -2757,7 +2769,12 @@
     var 值 = (框 && 框.value) || 用户选定平台 || "auto-real";
     if (值 === "官方" || 值 === "perch") 值 = "perchance";
     if (值 === "turbo" || 值 === "flux" || 值 === "flux-realism" || 值 === "auto" || 值 === "horde") 值 = "auto-real";
-    if (有参考图()) return /anime|sana/.test(值) ? "horde-anime" : "horde-real";
+    if (有参考图()) {
+      var 图平台 = 规范化图生图平台(用户选定图生图平台 || ((document.getElementById("图生图平台") || {}).value || ""));
+      if (图平台 === "horde-anime") return "horde-anime";
+      if (图平台 === "auto") return /anime|sana/.test(值) ? "horde-anime" : "horde-real";
+      return "horde-real";
+    }
     return 值 || "auto-real";
   }
 
@@ -2950,6 +2967,7 @@
       horde: "Horde · 写实",
       "horde-real": "Horde · 写实",
       "horde-anime": "Horde · 动漫",
+      glm: "智谱 GLM · 写实",
       perchance: "Perch · 独立通道"
     };
     return 真[值] || 值;
@@ -3339,7 +3357,8 @@
         body: JSON.stringify({
           k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
           width: 尺寸.宽, height: 尺寸.高,
-          strength: Number((强度框 && 强度框.value) || 0.52), seed: 基础种子 + 序号 * 97
+          strength: Number((强度框 && 强度框.value) || 0.52), seed: 基础种子 + 序号 * 97,
+          style: 规范化图生图平台(用户选定图生图平台 || ((document.getElementById("图生图平台") || {}).value || "horde-real"))
         })
       }, 95_000);
       var data = await resp.json().catch(function () { return {}; });
@@ -3544,7 +3563,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.38" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.39" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
