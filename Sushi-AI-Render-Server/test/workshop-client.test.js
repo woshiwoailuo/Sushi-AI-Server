@@ -568,3 +568,26 @@ test('production feature injection preserves manual choice through two generatio
   }
   assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 2);
 });
+
+test('shows danger/adult warning overlay then enables adult mode on confirm', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const layer = f.w.document.getElementById('成人确认层');
+  assert.ok(layer, 'official-style warning overlay required');
+  assert.match(layer.textContent, /危险内容与成人提示/);
+  assert.match(layer.textContent, /我已年满 18 岁/);
+  assert.equal(layer.hidden, false);
+  assert.equal(f.w.成人主题已开启, false);
+  assert.equal(f.w.document.getElementById('确认开启按钮').disabled, true);
+  f.w.document.getElementById('成人统一确认').checked = true;
+  f.w.检查成人确认按钮();
+  assert.equal(f.w.document.getElementById('确认开启按钮').disabled, false);
+  f.w.确认开启成人主题();
+  assert.equal(layer.hidden, true);
+  assert.equal(f.w.成人主题已开启, true);
+  assert.equal(f.w.localStorage.getItem('角色生成器_成人确认'), '1');
+  assert.match(f.w.document.getElementById('成人功能状态').value, /NSFW allowed/);
+  assert.match(f.w.document.getElementById('成人状态标签').textContent, /已开启/);
+  f.w.藏编辑钮();
+  assert.equal(layer.hidden, true);
+  assert.ok(layer.getAttribute('style') === null || !/display:\s*none/i.test(layer.getAttribute('style') || ''));
+});
