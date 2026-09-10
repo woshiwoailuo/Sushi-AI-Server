@@ -30,11 +30,15 @@ function imageSource(value) {
 }
 
 const HORDE_REAL_MODELS = [
-  'PerfectDeliberate',
-  'Deliberate 3.0',
-  "ICBINP - I Can't Believe It's Not Photography",
+  'ICBINP - I Can\'t Believe It\'s Not Photography',
   'AbsoluteReality',
+  'Realistic Vision',
+  'Photon',
+  'ICBINP XL',
+  'Edge Of Realism',
+  'majicMIX realistic',
   'AlbedoBase XL (SDXL)',
+  'AlbedoBase XL 3.1',
   'Flux.1-Schnell fp8 (Compact)',
 ];
 const HORDE_ANIME_MODELS = [
@@ -45,6 +49,30 @@ const HORDE_ANIME_MODELS = [
   'Rev Animated',
   'WAI-NSFW-illustrious-SDXL',
 ];
+const REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render';
+
+function stripArtStyleWords(text) {
+  return String(text || '')
+    .replace(/\b(anime|manga|cartoon|chibi|illustration|cel[\s-]?shading|pixar|disney|comic(?:\s|-)?style|2d\s*art|visual novel)\b/gi, ' ')
+    .replace(/二次元|动漫风格|动漫|卡通|漫画|插画|手绘|赛璐璐|视觉小说/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[，,]{2,}/g, ',')
+    .trim();
+}
+
+function sanitizeRealPrompt(prompt) {
+  let text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
+  if (!text) text = 'a fictional adult, natural light, DSLR';
+  if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
+    text = 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture, ' + text;
+  } else if (!/^\s*photoreal/i.test(text)) {
+    text = 'photorealistic photograph of ' + text;
+  }
+  if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(text)) {
+    text += ', not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading';
+  }
+  return text.replace(/\s{2,}/g, ' ').trim();
+}
 
 function hordeModelsFor(input = {}, model = '') {
   const style = String((input && input.style) || '').trim().toLowerCase();
@@ -56,9 +84,8 @@ function hordeModelsFor(input = {}, model = '') {
 
 function generationPayload(input = {}, model = '') {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ImageError('生图参数格式无效', 400, 'BAD_INPUT');
-  const prompt = String(input.prompt || '').trim();
-  if (!prompt) throw new ImageError('请先填写画面描述', 400, 'EMPTY_PROMPT');
-  if (prompt.length > 2000) throw new ImageError('画面描述请控制在 2000 字以内', 400, 'LONG_PROMPT');
+  const promptRaw = String(input.prompt || '').trim();
+  if (!promptRaw) throw new ImageError('请先填写画面描述', 400, 'EMPTY_PROMPT');
   const dimension = (value) => {
     const number = Number(value === undefined ? 512 : value);
     if (!Number.isFinite(number) || number < 256 || number > 1024 || number % 64) {
@@ -66,21 +93,29 @@ function generationPayload(input = {}, model = '') {
     }
     return number;
   };
-  const negative = String(input.negativePrompt || '').trim().slice(0, 1000);
+  const negativeRaw = String(input.negativePrompt || '').trim().slice(0, 1000);
+  const style = String((input && input.style) || '').trim().toLowerCase();
+  const isReal = style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real';
+  let prompt = isReal ? sanitizeRealPrompt(promptRaw) : promptRaw;
+  if (prompt.length > 2000) prompt = prompt.slice(0, 2000);
+  let negative = negativeRaw;
+  if (isReal) {
+    negative = negative ? (negative + ', ' + REAL_NEGATIVE) : REAL_NEGATIVE;
+  }
   const cfgScale = Number(input.cfgScale === undefined ? 7 : input.cfgScale);
   if (!Number.isFinite(cfgScale) || cfgScale < 1 || cfgScale > 20) throw new ImageError('引导强度需在 1 到 20 之间', 400, 'BAD_CFG');
   const params = {
     n: 1,
     width: dimension(input.width),
     height: dimension(input.height),
-    steps: 20,
+    steps: 16,
     cfg_scale: cfgScale,
   };
   if (input.seed !== undefined && input.seed !== null && input.seed !== '') {
     if (!/^\d{1,10}$/.test(String(input.seed))) throw new ImageError('随机种子格式无效', 400, 'BAD_SEED');
     params.seed = String(input.seed);
   }
-  const payload = { prompt: prompt + (negative ? ' ### ' + negative : ''), params, r2: true, nsfw: true, censor_nsfw: false };
+  const payload = { prompt: prompt + (negative ? ' ### ' + negative : ''), params, r2: true, nsfw: true, censor_nsfw: false, slow_workers: true };
   const models = hordeModelsFor(input, model);
   if (models && models.length) payload.models = models;
   if (input.sourceImage) {
@@ -185,7 +220,10 @@ function createImageService(options = {}) {
 
   async function create(userId, input) {
     const payload = generationPayload(input, options.model || '');
-    if (active.has(userId)) throw new ImageError('已有图片正在生成，请等待完成或先取消', 409, 'ALREADY_RUNNING');
+    if (active.has(userId)) {
+      const prevId = active.get(userId);
+      try { await cancel(userId, prevId); } catch { /* previous job may already be gone */ }
+    }
     if (jobs.size >= 100) {
       for (const [id, job] of jobs) if (terminal(job)) jobs.delete(id);
       if (jobs.size >= 100) throw new ImageError('当前生成任务较多，请稍后重试', 503, 'SERVER_BUSY');
@@ -254,7 +292,7 @@ function createImageService(options = {}) {
       job.controller.abort();
       void removeUpstream(job);
     }
-    if (terminal(job) || job.state === 'submitting' || now() - job.lastPoll < 1500) return snapshot(job);
+    if (terminal(job) || job.state === 'submitting' || now() - job.lastPoll < 800) return snapshot(job);
     if (!job.polling) job.polling = refresh(job).finally(() => { job.polling = null; });
     return job.polling;
   }
@@ -286,4 +324,4 @@ function createImageService(options = {}) {
   return { create, get, cancel, current, sweep };
 }
 
-module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, hordeModelsFor };
+module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, hordeModelsFor, sanitizeRealPrompt };

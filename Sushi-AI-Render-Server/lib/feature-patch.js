@@ -77,14 +77,14 @@ function patchWorkshop(source) {
     var tip=byId('平台提示');
     if(!tip) return;
     var messages={
-      'auto-real':'自动抢出 · 写实：Perch 与 Horde 写实同时开跑，先到先得',
+      'auto-real':'自动抢出 · 写实：只走 Horde 写实模型，不含动漫通道',
       'auto-anime':'自动抢出 · 动漫：Sana 与 Horde 动漫同时开跑，先到先得',
-      auto:'自动抢出 · 写实：Perch 与 Horde 写实同时开跑，先到先得',
+      auto:'自动抢出 · 写实：只走 Horde 写实模型，不含动漫通道',
       'horde-real':'Horde · 写实 · 免费共享算力，繁忙时需要排队',
       horde:'Horde · 写实 · 免费共享算力，繁忙时需要排队',
       'horde-anime':'Horde · 动漫 · 免费共享算力，繁忙时需要排队',
       sana:'Sana · 动漫/插画 · Pollinations 目前唯一可用模型',
-      perchance:'Perch · 写实 · 应用内生成（不跳转官网）'
+      perchance:'Perch · 独立通道 · 应用内生成（不跳转官网，偏插画）'
     };
     tip.textContent=messages[name]||messages['auto-real'];
   }

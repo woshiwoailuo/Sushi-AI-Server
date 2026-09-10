@@ -76,13 +76,15 @@
           <select id="出图引擎" name="出图引擎">
             <optgroup label="写实">
               <option value="auto-real" selected>自动抢出 · 写实</option>
-              <option value="perchance">Perch · 写实</option>
               <option value="horde-real">Horde · 写实</option>
             </optgroup>
             <optgroup label="动漫">
               <option value="auto-anime">自动抢出 · 动漫</option>
               <option value="sana">Sana · 动漫/插画</option>
               <option value="horde-anime">Horde · 动漫</option>
+            </optgroup>
+            <optgroup label="独立">
+              <option value="perchance">Perch · 独立通道</option>
             </optgroup>
           </select>
         </label>
@@ -116,13 +118,15 @@
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
               <optgroup label="写实">
                 <option value="auto-real" selected>自动抢出 · 写实</option>
-                <option value="perchance">Perch · 写实</option>
                 <option value="horde-real">Horde · 写实</option>
               </optgroup>
               <optgroup label="动漫">
                 <option value="auto-anime">自动抢出 · 动漫</option>
                 <option value="sana">Sana · 动漫/插画</option>
                 <option value="horde-anime">Horde · 动漫</option>
+              </optgroup>
+              <optgroup label="独立">
+                <option value="perchance">Perch · 独立通道</option>
               </optgroup>
             </select>
           </label>
@@ -1976,15 +1980,12 @@
 
   function 强制写实英文(英文) {
     var 文 = String(英文 || "").replace(/\s+/g, " ").trim();
+    文 = 文
+      .replace(/\b(anime|manga|cartoon|chibi|illustration|cel[\s-]?shading|pixar|disney|comic(?:\s|-)?style|2d\s*art|visual novel)\b/gi, " ")
+      .replace(/二次元|动漫风格|动漫|卡通|漫画|插画|手绘|赛璐璐|视觉小说/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
     if (!文) 文 = "photorealistic RAW photo of a fictional adult, natural light, DSLR";
-    // 用户点名动漫/插画等画风时按文字生成，不强制写实、不剥离风格词。
-    if (显式画风(文)) {
-      if (!/fictional adult|18\+|no minors|虚构成年/i.test(文)) {
-        文 += ", fictional adult 18+ only, no minors";
-      }
-      return 文.replace(/\s{2,}/g, " ").trim();
-    }
-    // 默认写实：前置摄影修辞，便于 Perchance 等偏二次元引擎也走照片风（只写生成器提示，不回写展示框）。
     var 头 = "photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture";
     if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(文)) {
       文 = 头 + ", " + 文;
@@ -2952,7 +2953,7 @@
       horde: "Horde · 写实",
       "horde-real": "Horde · 写实",
       "horde-anime": "Horde · 动漫",
-      perchance: "Perch · 写实"
+      perchance: "Perch · 独立通道"
     };
     return 真[值] || 值;
   }
@@ -3108,12 +3109,12 @@
   }
 
   function 写实提示(英文) {
+    var 引擎 = "";
+    try { 引擎 = String((document.getElementById("出图引擎") || {}).value || ""); } catch (e) {}
+    if (/anime|sana/.test(引擎) || 引擎 === "perchance") return String(英文 || "").replace(/\s+/g, " ").trim();
     var 文 = 强制写实英文(英文);
     var 核 = ((document.getElementById("角色描述") || {}).value || "") + ((document.getElementById("英文描述") || {}).value || "");
-    var 尾 = "";
-    if (!显式画风(文 + 核)) {
-      尾 = ", photorealistic RAW photo, cinematic still, DSLR, natural skin, sharp focus, real human, not anime, not manga, not cartoon";
-    }
+    var 尾 = ", photorealistic RAW photo, cinematic still, DSLR, natural skin, sharp focus, real human, not anime, not manga, not cartoon";
     if (/性爱|插入|抽插|口交|后入|骑乘|性交|做爱|sex|penetrat|oral|doggy|cowgirl/i.test(核)) {
       尾 += ", explicit adult sex";
     }
@@ -3251,10 +3252,14 @@
     var 尺寸 = 解析尺寸();
     var w = Math.min(768, Math.max(512, Math.round((尺寸.宽 || 512) / 64) * 64));
     var h = Math.min(768, Math.max(512, Math.round((尺寸.高 || 512) / 64) * 64));
+    var 引擎 = "";
+    try { 引擎 = String((document.getElementById("出图引擎") || {}).value || ""); } catch (e) {}
+    var 动漫 = /anime|sana/.test(引擎);
+    var 提示 = 动漫 ? String(英文 || "photo") : (写实提示(英文) || "photo");
     var resp = await 限时拉取("/api/workshop/horde-image", {
       method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ k: 工坊票据(), prompt: (写实提示(英文) || "photo").slice(0, 1000), width: w, height: h })
-    }, 55000);
+      body: JSON.stringify({ k: 工坊票据(), prompt: 提示.slice(0, 1000), width: w, height: h, style: 动漫 ? "anime" : "real" })
+    }, 180000);
     var j = await resp.json().catch(function () { return {}; });
     if (!resp.ok || !j || !j.url) throw new Error((j && j.error) || "群体未返回图片");
     return j.url;
@@ -3463,7 +3468,7 @@
     var 框 = document.getElementById("出图引擎");
     if (框) 框.value = 引擎;
     设平台提示(引擎);
-    if (引擎 === "auto" || 引擎 === "auto-real") { 用写实引擎出图("perchance"); 用群体出图探测(); }
+    if (引擎 === "auto" || 引擎 === "auto-real") { 用群体出图(); }
     else if (引擎 === "auto-anime") { 用写实引擎出图("sana"); 用群体出图探测(); }
     else if (引擎 === "perchance") { 用官方插件出图(false); }
     else if (引擎 === "horde" || 引擎 === "horde-real" || 引擎 === "horde-anime") 用群体出图();
@@ -3521,12 +3526,11 @@
       本轮胜出 = "";
       设平台提示("auto-real");
       var 行 = document.getElementById("平台提示");
-      if (行) 行.textContent = "生图平台：自动抢出 · 写实先到先得";
+      if (行) 行.textContent = "生图平台：自动抢出 · 写实（Horde 写实模型）";
       var 输出区 = document.getElementById("图像输出");
       if (输出区) 输出区.style.visibility = "";
       计划张数 = 抢出目标张数 || 1;
-      用写实引擎出图("perchance");
-      用群体出图探测();
+      用群体出图();
     } else if (选引擎 === "auto-anime") {
       抢出已定 = false;
       本轮胜出 = "";
@@ -3543,7 +3547,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.33" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.35" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
