@@ -92,20 +92,22 @@ test('free chat providers keep provider-specific errors and Gemini system instru
 test('homepage can generate images directly from chat intent', () => {
   assert.match(home, /function wantsImageGen/);
   assert.match(home, /function generateHomeImage/);
-  assert.match(home, /model: 'sana'/);
+  assert.match(home, /style: 'real'/);
   assert.match(home, /item\.image \? '<img class="chat-img"/);
   assert.match(home, /photorealistic RAW photo/);
   assert.match(home, /not anime, not manga, not cartoon/);
 });
 
 
-test('homepage image path uses auth API and never opens workshop loader', () => {
+test('homepage image path uses workshop Horde API and never opens workshop loader', () => {
   assert.match(home, /function homeImageError/);
-  assert.match(home, /\/api\/chat\/image/);
+  assert.doesNotMatch(home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat')), /\/api\/chat\/image/);
   assert.match(home, /api\('\/api\/images'/);
-  // Must not mint workshop HTML tickets or navigate for homepage image intent.
   const genFn = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
   assert.ok(genFn.length > 200);
+  assert.match(genFn, /style: 'real'/);
+  assert.doesNotMatch(genFn, /style: style/);
+  assert.doesNotMatch(genFn, /style = 'anime'/);
   assert.doesNotMatch(genFn, /\/api\/workshop\/ticket/);
   assert.doesNotMatch(genFn, /\/workshop\?/);
   assert.doesNotMatch(genFn, /enterGen|openWorkshop|data-tab="gen"/);
@@ -118,18 +120,21 @@ test('homepage image path uses auth API and never opens workshop loader', () => 
 });
 
 
-test('homepage photoreal enrichment honors style-keyword bypass', () => {
+test('homepage photoreal enrichment strips anime keywords on the default 写实 path', () => {
   assert.match(home, /function hasExplicitArtStyle/);
   assert.match(home, /function photorealHomePrompt/);
-  assert.match(home, /二次元\|动漫\|卡通\|漫画\|插画/);
+  assert.match(home, /二次元\|动漫风格\|动漫\|卡通\|漫画\|插画/);
   assert.match(home, /photorealistic RAW photo/);
   assert.match(home, /not anime, not manga, not cartoon/);
   const fn = home.slice(home.indexOf('function photorealHomePrompt'), home.indexOf('function homeImageError'));
-  assert.match(fn, /hasExplicitArtStyle\(t\)/);
-  assert.doesNotMatch(fn, /t\.replace\(\/\\b\(anime\|manga\|cartoon\|chibi\)\\b\/gi/);
+  assert.match(fn, /not anime, not manga, not cartoon/);
+  assert.doesNotMatch(fn, /hasExplicitArtStyle\(t\)/);
   const gen = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
-  assert.match(gen, /styleAware/);
+  assert.doesNotMatch(gen, /styleAware/);
   assert.match(gen, /negativePrompt: negative/);
+  assert.match(gen, /style: 'real'/);
+  assert.doesNotMatch(gen, /\/api\/chat\/image/);
+  assert.doesNotMatch(gen, /style = 'anime'/);
 });
 
 

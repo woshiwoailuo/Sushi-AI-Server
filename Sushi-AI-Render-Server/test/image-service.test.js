@@ -42,12 +42,21 @@ test('style pins Horde models for 写实 vs 动漫 without changing prompt text'
   assert.deepEqual(real.models, HORDE_REAL_MODELS);
   assert.deepEqual(anime.models, HORDE_ANIME_MODELS);
   assert.equal(plain.models, undefined);
-  assert.equal(real.prompt, 'A cat by a window');
+  assert.match(real.prompt, /A cat by a window/);
+  assert.match(real.prompt, /photorealistic RAW photo/i);
+  assert.match(real.prompt, /anime, manga, cartoon/);
   assert.equal(anime.prompt, 'A cat by a window');
+  assert.equal(real.slow_workers, true);
   assert.equal(real.nsfw, true);
   assert.equal(anime.censor_nsfw, false);
   assert.ok(HORDE_REAL_MODELS.includes('AlbedoBase XL (SDXL)'));
+  assert.ok(HORDE_REAL_MODELS.includes('AbsoluteReality'));
+  assert.equal(HORDE_REAL_MODELS.some((name) => /deliberate|anima|anything|counterfeit|illustrious|wai-nsfw/i.test(name)), false);
   assert.ok(HORDE_ANIME_MODELS.includes('WAI-NSFW-illustrious-SDXL'));
+  const forced = generationPayload({ prompt: 'anime style girl with red hair', style: 'real', width: 512, height: 512 });
+  assert.match(forced.prompt, /photorealistic RAW photo/i);
+  assert.doesNotMatch(forced.prompt.split(' ### ')[0], /\banime style\b/i);
+  assert.match(forced.prompt, /not anime, not manga, not cartoon/);
 });
 
 test('accepts HTTPS, data URLs and raw base64; rejects HTML and unsafe URL schemes', () => {
@@ -79,16 +88,22 @@ test('polls check first, fetches the image only on done, and commits quota once'
   assert.deepEqual(f.calls.map(c => new URL(c.url).pathname), ['/api/v2/generate/async', '/api/v2/generate/check/remote-1', '/api/v2/generate/check/remote-1', '/api/v2/generate/status/remote-1']);
 });
 
-test('prevents duplicate submissions and hides jobs from other users', async () => {
-  const f = fixture(() => response({ id: 'remote' }, 202));
+test('new submission auto-cancels a previous in-flight job', async () => {
+  let posts = 0;
+  const f = fixture((url, options) => {
+    if (url.endsWith('/async') && options.method === 'POST') return response({ id: 'remote-' + (++posts) }, 202);
+    if (options.method === 'DELETE') return response({});
+    return response({ done: false, is_possible: true, processing: 0 });
+  });
   const job = await f.service.create(1, { prompt: 'A cat' });
-  await assert.rejects(f.service.create(1, { prompt: 'A dog' }), e => e.status === 409);
-  await assert.rejects(f.service.get(2, job.id), e => e.status === 404);
-  await assert.rejects(f.service.cancel(2, job.id), e => e.status === 404);
-  assert.equal(f.calls.length, 1);
-  await f.service.cancel(1, job.id);
-  await f.service.cancel(1, job.id);
-  assert.deepEqual(f.refunded, [[1, 1]]);
+  const next = await f.service.create(1, { prompt: 'A dog' });
+  assert.equal((await f.service.get(1, job.id)).state, 'cancelled');
+  assert.equal(next.state, 'queued');
+  assert.equal(f.service.current(1).id, next.id);
+  await assert.rejects(f.service.get(2, next.id), e => e.status === 404);
+  await assert.rejects(f.service.cancel(2, next.id), e => e.status === 404);
+  assert.equal(f.calls.filter(c => c.method === 'POST').length, 2);
+  await f.service.cancel(1, next.id);
 });
 
 test('cancellation during submission deletes a late upstream task and refunds once', async () => {

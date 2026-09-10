@@ -26,13 +26,15 @@ function patchWorkshop(source) {
       '<select id="出图引擎" name="出图引擎">\n' +
       '            <optgroup label="写实">\n' +
       '              <option value="auto-real" selected>自动抢出 · 写实</option>\n' +
-      '              <option value="perchance">Perch · 写实</option>\n' +
       '              <option value="horde-real">Horde · 写实</option>\n' +
       '            </optgroup>\n' +
       '            <optgroup label="动漫">\n' +
       '              <option value="auto-anime">自动抢出 · 动漫</option>\n' +
       '              <option value="sana">Sana · 动漫/插画</option>\n' +
       '              <option value="horde-anime">Horde · 动漫</option>\n' +
+      '            </optgroup>\n' +
+      '            <optgroup label="独立">\n' +
+      '              <option value="perchance">Perch · 独立通道</option>\n' +
       '            </optgroup>\n' +
       '          </select>';
   html = html.replace(/<select id="出图引擎" name="出图引擎">[\s\S]*?<\/select>/, providerOptions);
@@ -42,13 +44,15 @@ function patchWorkshop(source) {
     '<select id="管理默认平台" onchange="保存默认平台(this.value, true)">\n' +
       '              <optgroup label="写实">\n' +
       '                <option value="auto-real" selected>自动抢出 · 写实</option>\n' +
-      '                <option value="perchance">Perch · 写实</option>\n' +
       '                <option value="horde-real">Horde · 写实</option>\n' +
       '              </optgroup>\n' +
       '              <optgroup label="动漫">\n' +
       '                <option value="auto-anime">自动抢出 · 动漫</option>\n' +
       '                <option value="sana">Sana · 动漫/插画</option>\n' +
       '                <option value="horde-anime">Horde · 动漫</option>\n' +
+      '              </optgroup>\n' +
+      '              <optgroup label="独立">\n' +
+      '                <option value="perchance">Perch · 独立通道</option>\n' +
       '              </optgroup>\n' +
       '            </select>'
   );
@@ -85,7 +89,7 @@ function patchWorkshop(source) {
   var priority = ['auto-real','perchance','horde-real','auto-anime','sana','horde-anime'];
   var labels = {
     'auto-real':'自动抢出 · 写实', 'auto-anime':'自动抢出 · 动漫', auto:'自动抢出 · 写实',
-    perchance:'Perch · 写实', 'horde-real':'Horde · 写实', horde:'Horde · 写实',
+    perchance:'Perch · 独立通道', 'horde-real':'Horde · 写实', horde:'Horde · 写实',
     'horde-anime':'Horde · 动漫', sana:'Sana · 动漫/插画'
   };
   function el(id){ return document.getElementById(id); }
@@ -109,12 +113,12 @@ function patchWorkshop(source) {
   function selected(){ var box=el('出图引擎'); return box ? box.value : 'auto-real'; }
   function tipFor(name){
     name = normalizeSaved(name);
-    if(name==='auto-real') return '自动抢出 · 写实：Perch 与 Horde 写实同时开跑，先到先得';
+    if(name==='auto-real') return '自动抢出 · 写实：只走 Horde 写实模型，不含动漫通道';
     if(name==='auto-anime') return '自动抢出 · 动漫：Sana 与 Horde 动漫同时开跑，先到先得';
     if(name==='horde-real' || name==='horde') return 'Horde · 写实 · 免费共享算力，繁忙时需要排队';
     if(name==='horde-anime') return 'Horde · 动漫 · 免费共享算力，繁忙时需要排队';
     if(name==='sana') return 'Sana · 动漫/插画 · Pollinations 目前唯一可用模型';
-    if(name==='perchance') return 'Perch · 写实 · 应用内生成（不跳转官网）';
+    if(name==='perchance') return 'Perch · 独立通道 · 应用内生成（不跳转官网，偏插画）';
     return (labels[name]||name) + ' · 应用内免费通道';
   }
   function updateTip(){ var tip=el('平台提示'); if(tip) tip.textContent=tipFor(selected()); }

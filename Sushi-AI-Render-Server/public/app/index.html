@@ -661,13 +661,8 @@
       var t = String(text || '').trim();
       // Strip only the intent prefix; keep the user's core description for the generator.
       t = t.replace(/^(请)?(帮我)?(生成|画|做)(一)?[张幅]?(图|图片|照片)?[：:\s]*/i, '').trim() || t;
-      if (hasExplicitArtStyle(t)) {
-        if (!/fictional adult|18\+|no minors|虚构成年/i.test(t)) {
-          t += ', fictional adult 18+ only, no minors';
-        }
-        return t.slice(0, 1200);
-      }
-      // Default photoreal rhetoric — enrich generator prompt only (chat bubble text stays original).
+      t = t.replace(/\b(anime|manga|cartoon|chibi|illustration|cel[\s-]?shading|pixar|disney|comic(?:\s|-)?style|2d\s*art)\b/gi, ' ');
+      t = t.replace(/二次元|动漫风格|动漫|卡通|漫画|插画|手绘|赛璐璐|视觉小说/g, ' ').replace(/\s{2,}/g, ' ').trim() || t;
       var lead = 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture';
       if (!/photoreal|写实|摄影|RAW photo|DSLR|cinematic still/i.test(t)) {
         t = lead + ', ' + t + ', natural light, cinematic still, shallow depth of field, sharp focus, real human, fictional adult 18+, not anime, not manga, not cartoon, not illustration';
@@ -675,6 +670,7 @@
         if (!/^\s*photoreal/i.test(t)) t = 'photorealistic photograph of ' + t;
         if (!/not anime|no anime/i.test(t)) t += ', not anime, not manga, not cartoon, not illustration';
       }
+      if (!/fictional adult|18\+|no minors|虚构成年/i.test(t)) t += ', fictional adult 18+ only, no minors';
       return t.slice(0, 1200);
     }
     function homeImageError(err) {
@@ -688,64 +684,54 @@
       return msg || '出图失败，请换描述再试';
     }
     async function generateHomeImage(promptText) {
-      // Stay on homepage chat: authenticated API only. Never open /workshop or mint workshop HTML tickets.
-      // Enrich only the generator prompt; user chat text / captions stay as typed.
-      var prompt = photorealHomePrompt(promptText);
-      var styleAware = hasExplicitArtStyle(promptText);
-      var negative = styleAware
-        ? 'blurry, child, minor, watermark, text, lowres'
-        : 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text';
+      // Homepage image intent always uses workshop Horde 写实. Never Pollinations/Sana,
+      // never switch to 动漫 because the prompt mentioned 插画/动漫.
+      // Chat bubble text stays as typed; only the generator prompt is enriched.
       try {
-        var direct = await api('/api/chat/image', {
-          method: 'POST',
-          body: JSON.stringify({
-            prompt: prompt,
-            model: 'sana',
-            width: 768,
-            height: 768,
-            seed: Math.floor(Math.random() * 1e9),
-            negativePrompt: negative
-          }),
-          timeoutMs: 95000
-        });
-        if (direct && direct.url && String(direct.url).indexOf('data:image') === 0) {
-          return { url: direct.url, channel: direct.channel || 'Sana' };
-        }
-        throw new Error('图片无效，请换描述再试');
-      } catch (err) {
-        if (err && (err.status === 401 || err.status === 403 || err.status === 402)) {
-          throw new Error(homeImageError(err));
-        }
-        // Fallback: authenticated Horde job API (still no workshop page).
-        try {
-          var created = await api('/api/images', {
-            method: 'POST',
-            body: JSON.stringify({
-              prompt: prompt,
-              width: 768,
-              height: 768,
-              negativePrompt: negative
-            }),
-            timeoutMs: 90000
-          });
-          var job = created && (created.job || created);
-          if (!job || !job.id) throw err;
-          var deadline = Date.now() + 180000;
-          while (Date.now() < deadline) {
-            var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
-            var cur = st && (st.job || st);
-            if (cur && cur.state === 'done' && cur.image && cur.image.url) {
-              return { url: cur.image.url, channel: 'Horde' };
+        var prompt = photorealHomePrompt(promptText);
+        var negative = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
+        var lastErr = null;
+        for (var attempt = 0; attempt < 4; attempt += 1) {
+          try {
+            var created = await api('/api/images', {
+              method: 'POST',
+              body: JSON.stringify({
+                prompt: prompt,
+                width: 768,
+                height: 768,
+                negativePrompt: negative,
+                style: 'real'
+              }),
+              timeoutMs: 45000
+            });
+            var job = created && (created.job || created);
+            if (!job || !job.id) throw new Error('工坊未受理出图，请稍后重试');
+            var deadline = Date.now() + 180000;
+            while (Date.now() < deadline) {
+              var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
+              var cur = st && (st.job || st);
+              if (cur && cur.state === 'done' && cur.image && cur.image.url) {
+                return { url: cur.image.url, channel: '工坊 · 写实' };
+              }
+              if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
+                throw new Error((cur && cur.error) || '出图失败');
+              }
+              await new Promise(function (r) { setTimeout(r, 1200); });
             }
-            if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
-              throw new Error((cur && cur.error) || '出图失败');
+            throw new Error('出图超时，请稍后重试');
+          } catch (err) {
+            lastErr = err;
+            var status = err && err.status;
+            if (status === 429 || status === 409 || status === 503) {
+              await new Promise(function (r) { setTimeout(r, 1200 + attempt * 1400); });
+              continue;
             }
-            await new Promise(function (r) { setTimeout(r, 2500); });
+            throw err;
           }
-          throw new Error('出图超时，请稍后重试');
-        } catch (fallbackErr) {
-          throw new Error(homeImageError(fallbackErr || err));
         }
+        throw lastErr || new Error('出图失败，请稍后重试');
+      } catch (err) {
+        throw new Error(homeImageError(err));
       }
     }
     async function askOneChat(question, model) {

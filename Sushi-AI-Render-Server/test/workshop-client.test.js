@@ -186,7 +186,7 @@ test('auto race prefers a free platform without requiring official redirect', as
   assert.equal(opened.length, 0);
   assert.ok(f.w.document.querySelector('#图像输出 img'));
   const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.ok(['sana', 'horde-real', 'horde-anime', 'perchance'].includes(engine), 'engine=' + engine);
+  assert.ok(['horde-real'].includes(engine), 'engine=' + engine);
   // Platform picker must remain selectable after a successful run.
   assert.equal(f.w.document.getElementById('出图引擎').disabled, false);
 });
@@ -280,7 +280,8 @@ test('perch/perchance is selectable and included in the free race list', async t
   box.value = 'perchance';
   assert.equal(f.w.当前引擎(), 'perchance');
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /REAL_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
+  assert.match(src, /REAL_RACE_ENGINES = \[[^\]]*['"]horde-real['"]/);
+  assert.doesNotMatch(src, /REAL_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
   assert.match(src, /name === 'perch'/);
   // Canonical select id is perchance; perch is accepted as an alias in normalizeEngineName.
   assert.match(src, /官方' \|\| name === 'perch'/);
@@ -310,30 +311,24 @@ test('perch/perchance is selectable and included in the free race list', async t
 });
 
 
-test('auto race skips rate-limited engines quickly and surfaces 限流 tip', async t => {
+test('auto-real never calls Pollinations and uses Horde写实', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('出图引擎').value = 'auto-real';
   const hits = [];
   const realFetch = f.w.fetch;
   f.w.fetch = async (url, options = {}) => {
     const href = String(url);
-    if (href.includes('/api/workshop/image')) {
+    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
       hits.push(href);
-      const model = new URL(href, 'https://app.example').searchParams.get('model');
-      if (model === 'perchance' || model === 'sana') {
-        return { ok: false, status: 429, blob: async () => new f.w.Blob([]) };
-      }
-      const bytes = Buffer.alloc(3200, 11);
-      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
+      return { ok: false, status: 429, blob: async () => new f.w.Blob([]) };
     }
     return realFetch(url, options);
   };
   await f.w.开始生成();
-  assert.ok(f.w.document.querySelector('#图像输出 img'), 'another engine should win the race');
+  assert.equal(hits.length, 0, '写实 must not hit Pollinations/Sana/Perch');
+  assert.ok(f.w.document.querySelector('#图像输出 img'), 'Horde写实 should produce an image');
   const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.ok(!['perchance', 'sana'].includes(engine), 'winner should not be rate-limited engine, got ' + engine);
-  const perchHits = hits.filter(h => h.includes('model=perchance')).length;
-  assert.ok(perchHits <= 1, 'perchance should fail fast on 429, hits=' + perchHits);
+  assert.equal(engine, 'horde-real');
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
   assert.match(src, /ENGINE_COOLDOWN_MS/);
   assert.match(src, /出图通道限流/);
@@ -420,8 +415,9 @@ test('photorealPrompt enriches by default but style-keyword bypass keeps anime/�
   assert.doesNotMatch(cn, /not anime|photorealistic RAW photo/i);
 });
 
-test('style-keyword generation keeps managed display simple while gen prompt honors anime', async t => {
+test('写实 channel strips anime keywords and always sends photoreal negatives', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
   f.w.document.getElementById('角色描述').value = 'anime style fictional adult in neon alley';
   f.w.document.getElementById('中文译文').value = '霓虹巷弄里的动漫成年角色';
   f.w.document.getElementById('英文描述').value = 'anime style fictional adult in neon alley';
@@ -432,14 +428,14 @@ test('style-keyword generation keeps managed display simple while gen prompt hon
   const beforeCap = f.w.document.getElementById('说明英文').textContent;
   await f.w.开始生成();
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
-  assert.match(payload.prompt, /anime style fictional adult in neon alley/i);
-  assert.doesNotMatch(payload.prompt, /not anime|not manga|photorealistic RAW photo/i);
-  assert.doesNotMatch(payload.negativePrompt || '', /anime|manga|cartoon|illustration/i);
+  assert.match(payload.prompt, /photorealistic RAW photo/i);
+  assert.match(payload.prompt, /not anime|not manga/i);
+  assert.match(payload.negativePrompt || '', /anime|manga|cartoon|illustration/i);
+  assert.equal(payload.style, 'real');
   assert.equal(f.w.document.getElementById('中文译文').value, beforeZh);
   assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
   assert.equal(f.w.document.getElementById('说明标题').textContent, beforeTitle);
   assert.equal(f.w.document.getElementById('说明英文').textContent, beforeCap);
-  assert.doesNotMatch(beforeCap, /not anime|photorealistic RAW photo/i);
 });
 
 test('default generation keeps visible core unchanged while enriching the private prompt', async t => {
@@ -541,8 +537,13 @@ test('photorealPrompt helper still available for style-aware enrich logic', asyn
   assert.match(anime, /anime illustration/i);
   assert.doesNotMatch(anime, /not anime|photorealistic RAW photo/i);
   assert.equal(f.w.engineFamily('horde-anime'), 'anime');
-  assert.equal(f.w.engineFamily('perchance'), 'real');
+  assert.equal(f.w.engineFamily('perchance'), 'perchance');
   assert.equal(f.w.engineFamily('turbo'), 'real');
+  assert.equal(typeof f.w.forcePhotorealPrompt, 'function');
+  const forced = f.w.forcePhotorealPrompt('anime style girl with red hair');
+  assert.match(forced, /photorealistic RAW photo/i);
+  assert.match(forced, /not anime/i);
+  assert.doesNotMatch(forced, /\banime style\b/i);
 });
 
 test('horde-anime enriches with animePrompt and sends style=anime', async t => {
@@ -570,5 +571,7 @@ test('picker no longer lists dead turbo/flux/flux-realism platforms', async t =>
   assert.ok(box.querySelector('option[value="horde-anime"]'));
   assert.ok(box.querySelector('optgroup[label="写实"]'));
   assert.ok(box.querySelector('optgroup[label="动漫"]'));
+  assert.ok(box.querySelector('optgroup[label="独立"]'));
+  assert.ok(box.querySelector('option[value="perchance"]'));
 });
 

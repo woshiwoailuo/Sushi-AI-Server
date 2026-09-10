@@ -10,7 +10,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const { ImageError, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('./lib/image-service');
+const { ImageError, createImageService, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('./lib/image-service');
 const workshopLoaderHtml = require('./lib/workshop-loader');
 const {
   openPostgres,
@@ -683,8 +683,8 @@ app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
     provider: 'horde',
     free: true,
     maxWaitSeconds: 600,
-    race: ['perchance', 'horde-real', 'sana', 'horde-anime'],
-    realRace: ['perchance', 'horde-real'],
+    race: ['horde-real', 'sana', 'horde-anime', 'perchance'],
+    realRace: ['horde-real'],
     animeRace: ['sana', 'horde-anime'],
   });
 });
@@ -1648,29 +1648,41 @@ app.get('/api/workshop/image', async (req, res) => {
 app.post('/api/workshop/horde-image', async (req, res) => {
   const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
-  const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
+  const style = String((req.body && req.body.style) || '').trim().toLowerCase();
+  const isAnime = style === 'anime' || style === 'horde-anime' || style === 'auto-anime';
+  let prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
   const width = Math.min(768, Math.max(512, Number(req.body.width) || 512));
   const height = Math.min(768, Math.max(512, Number(req.body.height) || 512));
   const seed = Number.isFinite(Number(req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
-  const style = String((req.body && req.body.style) || '').trim().toLowerCase();
-  const models = (style === 'anime' || style === 'horde-anime' || style === 'auto-anime')
-    ? HORDE_ANIME_MODELS
-    : HORDE_REAL_MODELS;
+  const models = isAnime ? HORDE_ANIME_MODELS : HORDE_REAL_MODELS;
+  let hordePrompt = prompt;
+  try {
+    const built = generationPayload({
+      prompt,
+      width,
+      height,
+      style: isAnime ? 'anime' : 'real',
+      seed: seed === undefined ? '' : String(seed),
+    });
+    hordePrompt = built.prompt;
+  } catch {
+    if (!isAnime) hordePrompt = prompt + ' ### ' + 'anime, manga, cartoon, illustration';
+  }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
+  const timer = setTimeout(() => controller.abort(), 180_000);
   try {
     const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
       method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', apikey: '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
-      body: JSON.stringify({ prompt, nsfw: true, censor_nsfw: false, models, params: { n: 1, width, height, steps: 15, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
+      headers: { 'Content-Type': 'application/json', apikey: process.env.HORDE_API_KEY || '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
+      body: JSON.stringify({ prompt: hordePrompt, nsfw: true, censor_nsfw: false, slow_workers: true, models, params: { n: 1, width, height, steps: 16, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
     });
     const acceptedJson = await accepted.json().catch(() => ({}));
     if (!accepted.ok || !acceptedJson.id) return workshopImageError(res, accepted.status === 429 ? 429 : 502, 'Horde 生图服务器未受理请求');
-    for (let i = 0; i < 48; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    for (let i = 0; i < 150; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
       if (controller.signal.aborted) break;
-      const status = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(acceptedJson.id), { signal: controller.signal, headers: { apikey: '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' } });
+      const status = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(acceptedJson.id), { signal: controller.signal, headers: { apikey: process.env.HORDE_API_KEY || '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' } });
       const statusJson = await status.json().catch(() => ({}));
       if (statusJson && statusJson.faulted) return workshopImageError(res, 502, 'Horde 生图服务器生成失败');
       const image = statusJson && statusJson.generations && statusJson.generations[0] && statusJson.generations[0].img;

@@ -24,13 +24,14 @@ test('auto mode keeps Perchance eligible when the official plugin is unavailable
   assert.match(source, /same-origin proxy|应用内出图/i);
 });
 
-test('auto-real races Perchance against Horde写实, not a duplicate Pollinations alias', () => {
+test('auto-real uses Horde写实 only; Perchance is a standalone channel', () => {
   const real = source.match(/var REAL_RACE_ENGINES\s*=\s*\[([\s\S]*?)\];/);
   const anime = source.match(/var ANIME_RACE_ENGINES\s*=\s*\[([\s\S]*?)\];/);
   assert.ok(real, 'REAL_RACE_ENGINES must be declared');
   assert.ok(anime, 'ANIME_RACE_ENGINES must be declared');
-  assert.match(real[1], /['"]perchance['"]/);
   assert.match(real[1], /['"]horde-real['"]/);
+  assert.doesNotMatch(real[1], /['"]perchance['"]/);
+  assert.doesNotMatch(real[1], /['"]sana['"]/);
   assert.doesNotMatch(real[1], /['"]flux-realism['"]/);
   assert.doesNotMatch(real[1], /['"]turbo['"]/);
   assert.match(anime[1], /['"]sana['"]/);
@@ -45,7 +46,6 @@ test('workshop image providers have no application-side cool-down', () => {
   assert.match(source, /可立即重试|未设置冷却/);
 });
 
-
 test('repeated Perch attempts reset the prior gallery and provider failure state', () => {
   assert.match(source, /gallery\.replaceChildren\(\)/);
   assert.match(source, /function resetDisabledEnginesForNewRun/);
@@ -54,11 +54,10 @@ test('repeated Perch attempts reset the prior gallery and provider failure state
 });
 
 test('generation prompt favors realistic output without rewriting the visible core description', () => {
-  assert.match(source, /prompt = family === 'anime' \? animePrompt\(prompt\) : photorealPrompt\(prompt\);/);
+  assert.match(source, /forcePhotorealPrompt\(prompt\)/);
   assert.match(source, /visible 核心描述 remains the source of truth/);
-  assert.match(source, /同源写实备用模型重试/);
+  assert.match(source, /同源备用模型重试/);
 });
-
 
 test('Perch timeout uses a fresh fallback and repeated attempts keep realistic routing', () => {
   assert.match(source, /runWithProviderBudget\(run, engine[\s\S]*?\}, 10000\)/);
@@ -75,7 +74,6 @@ test('chat channel selection keeps configured free routes and maps OpenAI aliase
   assert.match(workshopHtml, /指定 === "openai"\) return 问花粉/);
 });
 
-
 test('workshop keeps chat selector active and hides configuration UI', () => {
   assert.match(workshopHtml, /AI通道/);
   assert.match(workshopHtml, /框\.disabled = false/);
@@ -91,9 +89,11 @@ test('Perch requests are fast-cancelled and upstream work stops on disconnect', 
 test('workshop picker splits 写实 and 动漫 and hides dead Pollinations aliases', () => {
   assert.match(workshopHtml, /<optgroup label="写实">/);
   assert.match(workshopHtml, /<optgroup label="动漫">/);
+  assert.match(workshopHtml, /<optgroup label="独立">/);
   assert.match(workshopHtml, /value="auto-real" selected/);
   assert.match(workshopHtml, /value="horde-real"/);
   assert.match(workshopHtml, /value="horde-anime"/);
+  assert.match(workshopHtml, /value="perchance">Perch · 独立通道/);
   assert.doesNotMatch(workshopHtml, /<option value="turbo"/);
   assert.doesNotMatch(workshopHtml, /<option value="flux"/);
   assert.doesNotMatch(workshopHtml, /<option value="flux-realism"/);
