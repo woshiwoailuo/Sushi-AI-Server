@@ -173,10 +173,10 @@
       <p class="limit-note">长记忆把大量对话与摘要保存在本机 localStorage（单域约数 MB）。Vercel 上 SQLite 会重置，故跨设备不以服务端为准；本页会调用已有对话接口。</p>
       <div class="chat-channel-row">
         <label for="chatChannel">回答通道</label>
-        <select id="chatChannel" disabled aria-label="自动抢答已锁定">
-          <option value="auto" selected>自动抢答 · 已锁定</option>
+        <select id="chatChannel" disabled aria-label="GLM 已锁定">
+          <option value="glm" selected>GLM · 已锁定</option>
         </select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答已锁定，不再更换通道。已配置通道同时开跑，先到的留下。</p>
+        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">对话已锁定 GLM，不再更换通道。</p>
       </div>
     </div>
     <div class="chat-shell">
@@ -634,32 +634,24 @@
     var CHAT_LABELS = { groq: 'Groq', gemini: 'Gemini', openrouter: 'OpenRouter', grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', glm: 'GLM', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
     function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
     function normalizeChatChannel(raw) {
-      var v = String(raw || 'auto').trim().toLowerCase();
-      // Drop dead-end channels from picker (OpenAI 402); map stale localStorage to auto.
-      if (v === 'openai' || v === 'turbo' || v === 'openai-fast' || v === 'fast') return 'auto';
-      if (v === 'xai' || v === 'x-ai') return 'grok';
-      if (v === 'groq' || v === 'groqcloud' || v === 'groq-cloud') return 'groq';
-      if (v === 'gemini' || v === 'google' || v === 'google-gemini') return 'gemini';
-      if (v === 'openrouter' || v === 'open-router') return 'openrouter';
-      if (v === 'zhipu' || v === 'zhipuai' || v === 'chatglm' || v === 'zai' || v === 'z-ai' || v === 'z.ai') return 'glm';
-      if (v === 'grok' || v === 'horde' || v === 'groq' || v === 'gemini' || v === 'openrouter' || v === 'deepseek' || v === 'glm' || v === 'auto') return v;
-      return 'auto';
+      void raw;
+      return 'glm';
     }
     function loadChatChannel() {
       var box = $('chatChannel');
       if (box) {
-        box.value = 'auto';
+        box.value = 'glm';
         box.disabled = true;
         box.setAttribute('disabled', 'disabled');
       }
-      try { localStorage.setItem(chatChannelKey(), 'auto'); } catch (e) {}
-      return 'auto';
+      try { localStorage.setItem(chatChannelKey(), 'glm'); } catch (e) {}
+      return 'glm';
     }
     function saveChatChannel() {
       return loadChatChannel();
     }
     function selectedChatChannel() {
-      return 'auto';
+      return 'glm';
     }
     var chatReady = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
     var CHAT_PICKER = [
@@ -675,39 +667,25 @@
       if (!box) return;
       box.disabled = true;
       box.setAttribute('disabled', 'disabled');
-      box.value = 'auto';
+      box.value = 'glm';
       Array.prototype.slice.call(box.options).forEach(function (opt) {
-        if (opt.value !== 'auto') opt.remove();
+        if (opt.value !== 'glm') opt.remove();
       });
-      if (!box.querySelector('option[value="auto"]')) {
+      if (!box.querySelector('option[value="glm"]')) {
         var opt = document.createElement('option');
-        opt.value = 'auto';
-        opt.textContent = '自动抢答 · 已锁定';
+        opt.value = 'glm';
+        opt.textContent = 'GLM · 已锁定';
         opt.selected = true;
         box.appendChild(opt);
       }
     }
     function autoRaceList() {
-      var list = [];
-      if (chatReady.glm) list.push('glm');
-      if (chatReady.deepseek) list.push('deepseek');
-      if (chatReady.groq) list.push('groq');
-      if (chatReady.gemini) list.push('gemini');
-      if (chatReady.openrouter) list.push('openrouter');
-      list.push('horde');
-      return list;
+      return ['glm'];
     }
     function updateChatHint() {
       var el = $('grokSetupHint');
       if (!el) return;
-      var ready = [];
-      if (chatReady.glm) ready.push('GLM');
-      if (chatReady.deepseek) ready.push('DeepSeek');
-      if (chatReady.groq) ready.push('Groq');
-      if (chatReady.gemini) ready.push('Gemini');
-      if (chatReady.openrouter) ready.push('OpenRouter');
-      ready.push('Horde');
-      el.innerHTML = '自动抢答已锁定：<strong>' + ready.join('、') + '</strong> 同时开跑。不再更换通道。';
+      el.innerHTML = '对话已锁定 <strong>GLM</strong>，不再更换通道。';
     }
     async function loadChatReady() {
       try {
@@ -797,7 +775,7 @@
             });
             var job = created && (created.job || created);
             if (job && job.state === 'done' && job.image && job.image.url) {
-              return { url: job.image.url, channel: '工坊 · 写实' };
+              return { url: job.image.url, channel: 'Perch · 写实' };
             }
             if (!job || !job.id) throw new Error('工坊未受理出图，请稍后重试');
             var deadline = Date.now() + 180000;
@@ -806,7 +784,7 @@
               var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
               var cur = st && (st.job || st);
               if (cur && cur.state === 'done' && cur.image && cur.image.url) {
-                return { url: cur.image.url, channel: '工坊 · 写实' };
+                return { url: cur.image.url, channel: 'Perch · 写实' };
               }
               if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
                 throw new Error((cur && cur.error) || '出图失败');
@@ -836,37 +814,26 @@
       return { text: text, channel: CHAT_LABELS[model] || model };
     }
     async function raceChat(question, channel) {
-      channel = normalizeChatChannel(channel);
-      // Explicit channel: answer only on that platform.
-      if (channel && channel !== 'auto') return askOneChat(question, channel);
-      var messages = buildMessages(question);
-      // auto：只并行 /api/health.chat 已配置的免费通道 + Horde；Grok 不进抢答。未探测到配置时只走 Horde，避免空等 503。
+      void channel;
       var models = autoRaceList();
+      var model = models[0] || 'glm';
       return await new Promise(function (resolve, reject) {
-        var left = models.length;
-        var failed = 0;
         var settled = false;
-        var lastErr = '';
         var raceTimer = setTimeout(function () {
           if (settled) return;
           settled = true;
           reject(new Error('抢答超时'));
         }, 30000);
-        models.forEach(function (model) {
-          askModel(model, messages).then(function (text) {
-            if (settled) return;
-            settled = true;
-            clearTimeout(raceTimer);
-            resolve({ text: text, channel: CHAT_LABELS[model] || model });
-          }).catch(function (err) {
-            lastErr = (err && err.message) || lastErr;
-            failed += 1;
-            if (!settled && failed >= left) {
-              settled = true;
-              clearTimeout(raceTimer);
-              reject(new Error(lastErr && /未登录|401/.test(lastErr) ? '请先登录后再对话' : (lastErr || '各路对话暂时不可用，请稍后重试')));
-            }
-          });
+        askOneChat(question, model).then(function (result) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(raceTimer);
+          resolve(result);
+        }).catch(function (err) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(raceTimer);
+          reject(err);
         });
       });
     }
@@ -1073,7 +1040,7 @@
     });
     if ($('chatChannel')) {
       loadChatChannel();
-      $('chatChannel').onchange = function () { saveChatChannel('auto'); };
+      $('chatChannel').onchange = function () { saveChatChannel('glm'); };
     }
     $('chatSend').onclick = sendChat;
     $('chatInput').addEventListener('keydown', function (e) {

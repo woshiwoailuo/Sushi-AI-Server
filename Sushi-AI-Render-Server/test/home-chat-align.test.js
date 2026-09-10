@@ -22,12 +22,11 @@ test('homepage chat timeouts and short-reply match workshop #14 values', () => {
   assert.match(server, /cleaned\.length < 1/);
 });
 
-test('homepage and workshop lock chat channel switching to auto race', () => {
+test('homepage and workshop lock chat channel switching to GLM', () => {
   assert.match(home, /id="chatChannel"/);
   assert.match(home, /function selectedChatChannel/);
   assert.match(home, /function raceChat\(question, channel\)/);
-  assert.match(home, /if \(channel && channel !== 'auto'\) return askOneChat\(question, channel\);/);
-  assert.match(home, /localStorage\.setItem\(chatChannelKey\(\), 'auto'\)/);
+  assert.match(home, /localStorage\.setItem\(chatChannelKey\(\), 'glm'\)/);
   assert.match(home, /function syncChatPicker/);
   assert.match(home, /var CHAT_PICKER/);
   assert.match(home, /id: 'groq'/);
@@ -36,13 +35,13 @@ test('homepage and workshop lock chat channel switching to auto race', () => {
   assert.match(home, /function autoRaceList/);
   assert.match(home, /function loadChatReady/);
   assert.match(home, /\/api\/health/);
-  assert.match(home, /自动抢答已锁定/);
+  assert.match(home, /对话已锁定 GLM|GLM 已锁定/);
   assert.match(home, /不再更换通道/);
   const picker = home.slice(home.indexOf('id="chatChannel"'), home.indexOf('</select>', home.indexOf('id="chatChannel"')) + 9);
   assert.match(picker, /disabled/);
-  assert.match(picker, /value="auto"/);
+  assert.match(picker, /value="glm"/);
   assert.doesNotMatch(picker, /value="horde"/);
-  assert.doesNotMatch(picker, /value="glm"/);
+  assert.doesNotMatch(picker, /value="auto"/);
   assert.doesNotMatch(picker, /value="openai"/);
   assert.doesNotMatch(picker, /value="groq"/);
   assert.doesNotMatch(picker, /value="grok"/);
@@ -51,17 +50,17 @@ test('homepage and workshop lock chat channel switching to auto race', () => {
   assert.doesNotMatch(picker, /value="deepseek"/);
   assert.match(workshop, /id="AI通道"/);
   assert.match(workshop, /问免费模型\(文本, 本轮通道\)/);
-  assert.match(workshop, /if \(指定 === "deepseek"\) return 问花粉/);
+  assert.match(workshop, /问花粉\(问句, "glm"\)/);
   const wsPicker = workshop.slice(workshop.indexOf('id="AI通道"'), workshop.indexOf('</select>', workshop.indexOf('id="AI通道"')) + 9);
   assert.match(wsPicker, /disabled/);
-  assert.match(wsPicker, /value="auto"/);
-  assert.doesNotMatch(wsPicker, /value="glm"/);
+  assert.match(wsPicker, /value="glm"/);
+  assert.doesNotMatch(wsPicker, /value="auto"/);
   assert.doesNotMatch(wsPicker, /value="horde"/);
   assert.doesNotMatch(wsPicker, /value="openai"/);
   assert.doesNotMatch(wsPicker, /value="groq"/);
   assert.doesNotMatch(wsPicker, /value="deepseek"/);
-  assert.match(workshop, /var 选择通道 = "auto"/);
-  assert.match(workshop, /function 规范化对话通道[\s\S]*return "auto"/);
+  assert.match(workshop, /var 选择通道 = "glm"/);
+  assert.match(workshop, /function 规范化对话通道[\s\S]*return "glm"/);
 });
 
 test('homepage and server wire Groq + Grok OpenAI-compatible chat', () => {
