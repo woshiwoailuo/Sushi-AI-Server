@@ -66,17 +66,19 @@ test('Perch timeout uses a fresh fallback and repeated attempts keep realistic r
   assert.match(source, /Negative phrases.*must not be mistaken/);
 });
 
-test('chat channel selection keeps configured free routes and maps OpenAI aliases', () => {
-  assert.match(workshopHtml, /value="glm">GLM/);
-  assert.match(workshopHtml, /value="horde">Horde/);
+test('chat channel selection is locked to auto race and still maps OpenAI aliases in race helpers', () => {
+  assert.match(workshopHtml, /value="auto"[^>]*>自动抢答 · 已锁定/);
+  assert.doesNotMatch(workshopHtml, /<option value="glm"/);
   assert.doesNotMatch(workshopHtml, /<option value="openai"/);
-  assert.match(workshopHtml, /值 === "openai-fast".*return "openai"/);
+  assert.match(workshopHtml, /指定 === "glm"\) return 问花粉/);
   assert.match(workshopHtml, /指定 === "openai"\) return 问花粉/);
+  assert.match(workshopHtml, /function 规范化对话通道[\s\S]*return "auto"/);
 });
 
-test('workshop keeps chat selector active and hides configuration UI', () => {
+test('workshop locks chat selector and hides configuration UI', () => {
   assert.match(workshopHtml, /AI通道/);
-  assert.match(workshopHtml, /框\.disabled = false/);
+  assert.match(workshopHtml, /自动抢答已锁定/);
+  assert.match(workshopHtml, /框\.disabled = true/);
   assert.match(workshopHtml, /#平台管理区, #管理面板/);
   assert.doesNotMatch(workshopHtml, /#平台管理区, #管理面板, #工具区/);
 });

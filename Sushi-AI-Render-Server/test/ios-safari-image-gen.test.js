@@ -43,7 +43,7 @@ test('auth cookie sets Secure on Vercel and generation button disable is honored
 test('Grok unconfigured UX points to Vercel XAI_API_KEY and keeps Horde', () => {
   assert.match(home, /id="grokSetupHint"/);
   assert.match(home, /XAI_API_KEY/);
-  assert.match(home, /value="horde"/);
+  assert.match(home, /list\.push\('horde'\)/);
   assert.match(home, /改用 Horde/);
   assert.match(server, /XAI_API_KEY \|\| process\.env\.GROK_API_KEY/);
 });

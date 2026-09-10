@@ -167,12 +167,10 @@
       <p class="limit-note">长记忆把大量对话与摘要保存在本机 localStorage（单域约数 MB）。Vercel 上 SQLite 会重置，故跨设备不以服务端为准；本页会调用已有对话接口。</p>
       <div class="chat-channel-row">
         <label for="chatChannel">回答通道</label>
-        <select id="chatChannel" aria-label="AI 回答通道">
-          <option value="auto" selected>自动抢答 · 推荐</option>
-          <option value="glm">GLM · 智谱</option>
-          <option value="horde">Horde · 免费可用</option>
+        <select id="chatChannel" disabled aria-label="自动抢答已锁定">
+          <option value="auto" selected>自动抢答 · 已锁定</option>
         </select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答只并行已配置通道。未填写密钥的通道已隐藏。</p>
+        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答已锁定，不再更换通道。已配置通道同时开跑，先到的留下。</p>
       </div>
     </div>
     <div class="chat-shell">
@@ -567,22 +565,20 @@
       return 'auto';
     }
     function loadChatChannel() {
-      var v = 'auto';
-      try { v = normalizeChatChannel(localStorage.getItem(chatChannelKey()) || 'auto'); } catch (e) {}
       var box = $('chatChannel');
-      if (box) box.value = v;
-      return v;
+      if (box) {
+        box.value = 'auto';
+        box.disabled = true;
+        box.setAttribute('disabled', 'disabled');
+      }
+      try { localStorage.setItem(chatChannelKey(), 'auto'); } catch (e) {}
+      return 'auto';
     }
-    function saveChatChannel(v) {
-      v = normalizeChatChannel(v);
-      try { localStorage.setItem(chatChannelKey(), v); } catch (e) {}
-      var box = $('chatChannel');
-      if (box) box.value = v;
-      return v;
+    function saveChatChannel() {
+      return loadChatChannel();
     }
     function selectedChatChannel() {
-      var box = $('chatChannel');
-      return normalizeChatChannel(box && box.value ? box.value : loadChatChannel());
+      return 'auto';
     }
     var chatReady = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
     var CHAT_PICKER = [
@@ -596,21 +592,19 @@
     function syncChatPicker() {
       var box = $('chatChannel');
       if (!box) return;
-      var horde = box.querySelector('option[value="horde"]');
-      CHAT_PICKER.forEach(function (item) {
-        var opt = box.querySelector('option[value="' + item.id + '"]');
-        if (chatReady[item.id]) {
-          if (!opt) {
-            opt = document.createElement('option');
-            opt.value = item.id;
-            opt.textContent = item.label;
-            box.insertBefore(opt, horde);
-          }
-        } else if (opt) {
-          opt.remove();
-        }
+      box.disabled = true;
+      box.setAttribute('disabled', 'disabled');
+      box.value = 'auto';
+      Array.prototype.slice.call(box.options).forEach(function (opt) {
+        if (opt.value !== 'auto') opt.remove();
       });
-      if (box.value && !box.querySelector('option[value="' + box.value + '"]')) saveChatChannel('auto');
+      if (!box.querySelector('option[value="auto"]')) {
+        var opt = document.createElement('option');
+        opt.value = 'auto';
+        opt.textContent = '自动抢答 · 已锁定';
+        opt.selected = true;
+        box.appendChild(opt);
+      }
     }
     function autoRaceList() {
       var list = [];
@@ -632,7 +626,7 @@
       if (chatReady.gemini) ready.push('Gemini');
       if (chatReady.openrouter) ready.push('OpenRouter');
       ready.push('Horde');
-      el.innerHTML = '自动抢答：<strong>' + ready.join('、') + '</strong>。未填写密钥的通道已隐藏。';
+      el.innerHTML = '自动抢答已锁定：<strong>' + ready.join('、') + '</strong> 同时开跑。不再更换通道。';
     }
     async function loadChatReady() {
       try {
@@ -958,7 +952,7 @@
     });
     if ($('chatChannel')) {
       loadChatChannel();
-      $('chatChannel').onchange = function () { saveChatChannel($('chatChannel').value); };
+      $('chatChannel').onchange = function () { saveChatChannel('auto'); };
     }
     $('chatSend').onclick = sendChat;
     $('chatInput').addEventListener('keydown', function (e) {
