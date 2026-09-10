@@ -82,8 +82,17 @@
     .chat-channel-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
     .chat-channel-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
     .chat-channel-row select { width: auto; min-width: 160px; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-    .bubble img.chat-img { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 12px; margin: 4px 0 8px; background: #fff; }
+    .bubble img.chat-img { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 12px; margin: 4px 0 8px; background: #fff; cursor: pointer; }
     .bubble.bot img.chat-img { box-shadow: 0 8px 24px rgba(27,31,42,.08); }
+    .bubble img.chat-img:not([src]) { display: none; }
+    .chat-img-wrap { display: block; width: min(100%, 280px); margin: 4px 0 8px; cursor: pointer; }
+    .chat-img-hint { display: grid; place-items: center; min-height: 140px; border-radius: 12px; background: #EEF2FF; color: var(--muted); font-size: 13px; font-weight: 700; }
+    .图片预览层 { position: fixed; inset: 0; z-index: 10050; display: grid; place-items: center; padding: 24px; background: rgba(5,7,8,.92); }
+    .图片预览层[hidden] { display: none; }
+    .图片预览关闭 { position: absolute; top: 16px; right: 18px; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; font-size: 28px; cursor: pointer; }
+    .图片预览层 img { max-width: min(96vw, 920px); max-height: 82vh; object-fit: contain; border-radius: 12px; background: #111; }
+    .图片预览状态 { margin-top: 12px; color: #e5e7eb; font-size: 14px; text-align: center; }
+    .图片预览重试 { margin-top: 12px; }
     .limit-note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 8px; }
     .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
     .tpl-btn { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 10px; width: 100%; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text); }
@@ -420,11 +429,97 @@
         var item = chatHistory[i] || {};
         var cls = item.role === 'user' ? 'user' : 'bot';
         var meta = item.channel ? '<span class="meta">' + escapeHtml(item.channel) + '</span>' : '';
-        var img = item.image ? '<img class="chat-img" alt="生成图片" src="' + escapeHtml(item.image) + '" />' : '';
+        var img = '';
+        if (item.image) {
+          img = '<img class="chat-img" alt="生成图片" data-full-url="' + escapeHtml(item.image) + '"'
+            + (item.imageLoaded ? ' src="' + escapeHtml(item.image) + '"' : '')
+            + ' />';
+          if (!item.imageLoaded) {
+            img = '<span class="chat-img-wrap">' + img + '<span class="chat-img-hint">点击查看大图</span></span>';
+          }
+        }
         html += '<div class="bubble ' + cls + '">' + img + escapeHtml(item.role === 'assistant' ? collapseRepeatedText(item.text) : item.text) + meta + '</div>';
       }
       box.innerHTML = html;
       box.scrollTop = box.scrollHeight;
+      bindChatImagePreview();
+    }
+    function ensureHomePreviewLayer() {
+      var layer = $('图片预览层');
+      if (layer) return layer;
+      layer = document.createElement('div');
+      layer.id = '图片预览层';
+      layer.className = '图片预览层';
+      layer.hidden = true;
+      layer.innerHTML = '<button type="button" class="图片预览关闭" aria-label="关闭预览">×</button>'
+        + '<figure class="图片预览框"><img alt="预览大图" referrerpolicy="no-referrer">'
+        + '<figcaption class="图片预览状态"></figcaption>'
+        + '<button type="button" class="btn btn-ghost 图片预览重试" hidden>重新加载图片</button></figure>';
+      document.body.appendChild(layer);
+      layer.addEventListener('click', function (e) {
+        if (e.target === layer || (e.target.classList && e.target.classList.contains('图片预览关闭'))) {
+          layer.hidden = true;
+        }
+      });
+      layer.querySelector('.图片预览重试').addEventListener('click', function (e) {
+        e.stopPropagation();
+        var url = layer.getAttribute('data-full-url');
+        var id = layer.getAttribute('data-thumb-id');
+        openHomePreview(url, id ? document.getElementById(id) : null);
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { var ly = $('图片预览层'); if (ly) ly.hidden = true; }
+      });
+      return layer;
+    }
+    function openHomePreview(url, thumb) {
+      if (!url) return;
+      var layer = ensureHomePreviewLayer();
+      layer.hidden = false;
+      layer.setAttribute('data-full-url', url);
+      if (thumb) {
+        if (!thumb.id) thumb.id = 'chat_img_' + Date.now();
+        layer.setAttribute('data-thumb-id', thumb.id);
+      }
+      var img = layer.querySelector('img');
+      var note = layer.querySelector('.图片预览状态');
+      var retry = layer.querySelector('.图片预览重试');
+      note.textContent = '正在加载大图…';
+      retry.hidden = true;
+      img.hidden = true;
+      img.onload = function () {
+        img.onload = null; img.onerror = null;
+        if (!img.naturalWidth) { img.dispatchEvent(new Event('error')); return; }
+        img.hidden = false;
+        note.textContent = '';
+        if (thumb && (thumb.getAttribute('src') || '') !== url) thumb.src = url;
+        for (var i = 0; i < chatHistory.length; i++) {
+          if (chatHistory[i] && chatHistory[i].image === url) chatHistory[i].imageLoaded = true;
+        }
+        saveChat();
+      };
+      img.onerror = function () {
+        img.onload = null; img.onerror = null;
+        img.hidden = true;
+        note.textContent = '图片已生成，但下载失败。';
+        retry.hidden = false;
+      };
+      img.removeAttribute('src');
+      img.src = url;
+    }
+    function bindChatImagePreview() {
+      var box = $('chatList');
+      if (!box || box.getAttribute('data-preview') === '1') return;
+      box.setAttribute('data-preview', '1');
+      box.addEventListener('click', function (e) {
+        var wrap = e.target.closest && e.target.closest('.chat-img-wrap');
+        var img = (e.target.closest && e.target.closest('img.chat-img')) || (wrap && wrap.querySelector('img.chat-img'));
+        if (!img && !wrap) return;
+        var url = (img && (img.getAttribute('data-full-url') || img.src)) || '';
+        if (!url) return;
+        e.preventDefault();
+        openHomePreview(url, img);
+      });
     }
     function appendTemp(text) {
       var box = $('chatList');

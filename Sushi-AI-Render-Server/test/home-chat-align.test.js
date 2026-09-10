@@ -98,7 +98,11 @@ test('homepage can generate images directly from chat intent', () => {
   assert.match(home, /function wantsImageGen/);
   assert.match(home, /function generateHomeImage/);
   assert.match(home, /style: 'real'/);
-  assert.match(home, /item\.image \? '<img class="chat-img"/);
+  assert.match(home, /item\.image/);
+  assert.match(home, /class="chat-img"/);
+  assert.match(home, /data-full-url/);
+  assert.match(home, /点击查看大图/);
+  assert.match(home, /function openHomePreview/);
   assert.match(home, /photorealistic RAW photo/);
   assert.match(home, /not anime, not manga, not cartoon/);
 });
