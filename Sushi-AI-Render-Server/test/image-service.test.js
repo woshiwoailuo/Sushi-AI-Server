@@ -16,7 +16,8 @@ function fixture(handler, extra = {}) {
     reserve: uid => { reserved.push(uid); return reserved.length; },
     refund: (id, uid) => refunded.push([id, uid]),
     commit: (id, uid) => committed.push([id, uid]),
-    ...extra
+    ...extra,
+    sleep: extra.sleep || (async () => {}),
   });
   return { service, calls, reserved, refunded, committed, advance: ms => { time += ms; } };
 }
@@ -106,6 +107,23 @@ test('new submission auto-cancels a previous in-flight job', async () => {
   await assert.rejects(f.service.cancel(2, next.id), e => e.status === 404);
   assert.equal(f.calls.filter(c => c.method === 'POST').length, 2);
   await f.service.cancel(1, next.id);
+});
+
+test('create retries Horde 429 instead of failing the user immediately', async () => {
+  let posts = 0;
+  const f = fixture((url, options) => {
+    if (url.endsWith('/async') && options.method === 'POST') {
+      posts += 1;
+      if (posts === 1) return response({ message: 'Already has a waiting request' }, 429);
+      return response({ id: 'remote-ok' }, 202);
+    }
+    if (options.method === 'DELETE') return response({});
+    return response({ done: false, is_possible: true, processing: 0 });
+  });
+  const job = await f.service.create(1, { prompt: 'A cat' });
+  assert.equal(job.state, 'queued');
+  assert.equal(posts, 2);
+  await f.service.cancel(1, job.id);
 });
 
 test('cancellation during submission deletes a late upstream task and refunds once', async () => {

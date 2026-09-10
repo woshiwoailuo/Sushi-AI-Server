@@ -101,7 +101,7 @@ test('homepage can generate images directly from chat intent', () => {
   assert.match(home, /item\.image/);
   assert.match(home, /class="chat-img"/);
   assert.match(home, /data-full-url/);
-  assert.match(home, /点击查看大图/);
+  assert.match(home, /function conversationWantsImage/);
   assert.match(home, /function openHomePreview/);
   assert.match(home, /photorealistic RAW photo/);
   assert.match(home, /not anime, not manga, not cartoon/);
@@ -121,8 +121,9 @@ test('homepage image path uses workshop Horde API and never opens workshop loade
   assert.doesNotMatch(genFn, /\/workshop\?/);
   assert.doesNotMatch(genFn, /enterGen|openWorkshop|data-tab="gen"/);
   assert.doesNotMatch(genFn, /工坊未能打开|打开工坊超时/);
-  assert.match(home, /填入对话后发送，首页直出图/);
+  assert.match(home, /点一下直接出图/);
   assert.match(home, /input\.value = '画一张：' \+ item\[1\]/);
+  assert.match(home, /sendChat\(\)/);
   assert.doesNotMatch(home, /文生图快捷模板（会跳转工坊）/);
   assert.match(server, /app\.post\('\/api\/chat\/image'/);
   assert.match(server, /Homepage chat image: auth cookie\/JWT only/);

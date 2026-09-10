@@ -84,9 +84,6 @@
     .chat-channel-row select { width: auto; min-width: 160px; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
     .bubble img.chat-img { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 12px; margin: 4px 0 8px; background: #fff; cursor: pointer; }
     .bubble.bot img.chat-img { box-shadow: 0 8px 24px rgba(27,31,42,.08); }
-    .bubble img.chat-img:not([src]) { display: none; }
-    .chat-img-wrap { display: block; width: min(100%, 280px); margin: 4px 0 8px; cursor: pointer; }
-    .chat-img-hint { display: grid; place-items: center; min-height: 140px; border-radius: 12px; background: #EEF2FF; color: var(--muted); font-size: 13px; font-weight: 700; }
     .图片预览层 { position: fixed; inset: 0; z-index: 10050; display: grid; place-items: center; padding: 24px; background: rgba(5,7,8,.92); }
     .图片预览层[hidden] { display: none; }
     .图片预览关闭 { position: absolute; top: 16px; right: 18px; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; font-size: 28px; cursor: pointer; }
@@ -193,7 +190,7 @@
         <button class="btn btn-ghost" type="button" id="toImageTools" style="margin:0;background:var(--card);border:1px solid var(--line);color:var(--text)">图生图 / 换背景</button>
       </div>
       <details style="margin-top:12px">
-        <summary class="muted" style="cursor:pointer">文生图快捷模板（填入对话后发送，首页直出图）</summary>
+        <summary class="muted" style="cursor:pointer">文生图快捷模板（点一下直接出图）</summary>
         <div class="tpl-grid" id="tplGrid"></div>
       </details>
     </div>
@@ -429,15 +426,9 @@
         var item = chatHistory[i] || {};
         var cls = item.role === 'user' ? 'user' : 'bot';
         var meta = item.channel ? '<span class="meta">' + escapeHtml(item.channel) + '</span>' : '';
-        var img = '';
-        if (item.image) {
-          img = '<img class="chat-img" alt="生成图片" data-full-url="' + escapeHtml(item.image) + '"'
-            + (item.imageLoaded ? ' src="' + escapeHtml(item.image) + '"' : '')
-            + ' />';
-          if (!item.imageLoaded) {
-            img = '<span class="chat-img-wrap">' + img + '<span class="chat-img-hint">点击查看大图</span></span>';
-          }
-        }
+        var img = item.image
+          ? '<img class="chat-img" alt="生成图片" data-full-url="' + escapeHtml(item.image) + '" src="' + escapeHtml(item.image) + '" />'
+          : '';
         html += '<div class="bubble ' + cls + '">' + img + escapeHtml(item.role === 'assistant' ? collapseRepeatedText(item.text) : item.text) + meta + '</div>';
       }
       box.innerHTML = html;
@@ -493,10 +484,6 @@
         img.hidden = false;
         note.textContent = '';
         if (thumb && (thumb.getAttribute('src') || '') !== url) thumb.src = url;
-        for (var i = 0; i < chatHistory.length; i++) {
-          if (chatHistory[i] && chatHistory[i].image === url) chatHistory[i].imageLoaded = true;
-        }
-        saveChat();
       };
       img.onerror = function () {
         img.onload = null; img.onerror = null;
@@ -512,10 +499,9 @@
       if (!box || box.getAttribute('data-preview') === '1') return;
       box.setAttribute('data-preview', '1');
       box.addEventListener('click', function (e) {
-        var wrap = e.target.closest && e.target.closest('.chat-img-wrap');
-        var img = (e.target.closest && e.target.closest('img.chat-img')) || (wrap && wrap.querySelector('img.chat-img'));
-        if (!img && !wrap) return;
-        var url = (img && (img.getAttribute('data-full-url') || img.src)) || '';
+        var img = e.target.closest && e.target.closest('img.chat-img');
+        if (!img) return;
+        var url = img.getAttribute('data-full-url') || img.src || '';
         if (!url) return;
         e.preventDefault();
         openHomePreview(url, img);
@@ -741,7 +727,23 @@
       return chatReady;
     }
     function wantsImageGen(text) {
-      return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|给我.*(图|照片)|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)|txt2img|text.?to.?image/i.test(String(text || ''));
+      return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|画一个|给我.*(图|照片)|再画|再来一[张幅]|根据.*生成图|生成角色|出一[张幅]|设计.*角色|角色设定|txt2img|text.?to.?image|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)/i.test(String(text || ''));
+    }
+    function isImageFollowUp(text) {
+      return /再[来画出]|换[一]?[张个]|改成|换成|背景|姿势|发型|衣服|裙子|更[美帅好看]|另一[张个]|继续画|重新画|换个/i.test(String(text || ''));
+    }
+    function conversationWantsImage(text) {
+      if (wantsImageGen(text)) return true;
+      var lastBot = null;
+      for (var i = chatHistory.length - 1; i >= 0; i--) {
+        if (chatHistory[i] && chatHistory[i].role === 'assistant') { lastBot = chatHistory[i]; break; }
+      }
+      if (lastBot && lastBot.image && isImageFollowUp(text)) return true;
+      var recent = chatHistory.slice(-6);
+      for (var j = 0; j < recent.length; j++) {
+        if (recent[j] && recent[j].role === 'user' && wantsImageGen(recent[j].text) && String(text || '').length > 8) return true;
+      }
+      return false;
     }
     function hasExplicitArtStyle(text) {
       return /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i.test(String(text || ''));
@@ -780,7 +782,7 @@
         var prompt = photorealHomePrompt(promptText);
         var negative = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
         var lastErr = null;
-        for (var attempt = 0; attempt < 4; attempt += 1) {
+        for (var attempt = 0; attempt < 10; attempt += 1) {
           try {
             var created = await api('/api/images', {
               method: 'POST',
@@ -791,7 +793,7 @@
                 negativePrompt: negative,
                 style: 'real'
               }),
-              timeoutMs: 45000
+              timeoutMs: 90000
             });
             var job = created && (created.job || created);
             if (!job || !job.id) throw new Error('工坊未受理出图，请稍后重试');
@@ -814,7 +816,7 @@
             lastErr = err;
             var status = err && err.status;
             if (status === 429 || status === 409 || status === 503) {
-              await new Promise(function (r) { setTimeout(r, 1200 + attempt * 1400); });
+              await new Promise(function (r) { setTimeout(r, Math.min(2000 + attempt * 2200, 14000)); });
               continue;
             }
             throw err;
@@ -877,22 +879,43 @@
       chatHistory.push({ role: 'user', text: text, at: Date.now() });
       saveChat();
       renderChat();
-      var waiting = appendTemp(wantsImageGen(text) ? '正在出图…' : '思考中…');
+      var waiting = appendTemp(conversationWantsImage(text) ? '正在出图…' : '思考中…');
       try {
-        if (wantsImageGen(text)) {
-          var imgResult = await generateHomeImage(text);
+        if (conversationWantsImage(text)) {
+          var imgResult = null;
+          var imgErr = null;
+          var imgPromise = generateHomeImage(text).then(function (r) { imgResult = r; }).catch(function (e) { imgErr = e; });
+          var result = null;
+          try { result = await raceChat(text, channel); } catch (e) { result = null; }
+          if (result && result.text) {
+            if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
+            chatHistory.push({ role: 'assistant', text: result.text, channel: result.channel, at: Date.now() });
+            rollMemory(text, result.text);
+            saveChat();
+            renderChat();
+            waiting = appendTemp('正在出图…');
+          }
+          await imgPromise;
           if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
-          chatHistory.push({
-            role: 'assistant',
-            text: '已按你的描述生成图片。还可继续描述微调，或去工坊做图生图/换背景。',
-            image: imgResult.url,
-            channel: imgResult.channel,
-            at: Date.now()
-          });
-          rollMemory(text, '已生成图片');
-          saveChat();
-          renderChat();
-          return;
+          if (imgResult && imgResult.url) {
+            var last = chatHistory[chatHistory.length - 1];
+            if (last && last.role === 'assistant') {
+              last.image = imgResult.url;
+              if (!last.channel) last.channel = imgResult.channel;
+            } else {
+              chatHistory.push({
+                role: 'assistant',
+                text: '已按你的描述生成图片。',
+                image: imgResult.url,
+                channel: imgResult.channel,
+                at: Date.now()
+              });
+            }
+            saveChat();
+            renderChat();
+            return;
+          }
+          throw imgErr || new Error('出图失败，请稍后重试');
         }
         var result = await raceChat(text, channel);
         if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
@@ -1035,10 +1058,8 @@
         b.textContent = item[0];
         b.onclick = function () {
           var input = $('chatInput');
-          if (input) {
-            input.value = '画一张：' + item[1];
-            input.focus();
-          }
+          if (input) input.value = '画一张：' + item[1];
+          sendChat();
         };
         g.appendChild(b);
       });

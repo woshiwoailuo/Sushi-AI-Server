@@ -217,21 +217,18 @@ test('manual platform selection is honored and not remapped to auto', async t =>
   assert.equal(box.disabled, false);
 });
 
-test('generate does not download the image until the card is clicked', async t => {
+test('generate displays the image immediately and click enlarges', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   await f.w.开始生成();
   const img = f.w.document.querySelector('#图像输出 img');
   assert.ok(img);
-  assert.equal(img.getAttribute('src') || '', '');
+  assert.ok(img.getAttribute('src') || img.src);
   assert.ok(img.getAttribute('data-full-url'));
-  assert.equal(f.w.document.querySelector('.生图卡片 .点击查看').textContent, '点击查看大图');
   assert.equal(f.w.读取生成历史().length, 1);
   assert.equal(f.w.document.getElementById('状态提示').style.display, 'none');
   assert.equal(f.w.document.getElementById('生成按钮').disabled, false);
   f.w.document.querySelector('.生图卡片').click();
   await until(() => f.w.document.querySelector('#图片预览层') && !f.w.document.querySelector('#图片预览层').hasAttribute('hidden'), 'preview overlay');
-  await until(() => !!(img.getAttribute('src') || img.src), 'thumbnail src after click');
-  assert.ok((img.getAttribute('src') || img.src).indexOf('data:image') === 0);
 });
 
 test('failed image downloads show a reload action and do not silently create another paid/quota task', async t => {
@@ -239,13 +236,11 @@ test('failed image downloads show a reload action and do not silently create ano
   await f.w.开始生成();
   assert.equal(f.w.document.getElementById('生成按钮').disabled, false);
   assert.equal(f.w.document.querySelectorAll('#图像输出 img').length, 1);
-  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('src') || '', '');
   assert.doesNotMatch(f.text() || '', /未能加载/);
-  f.w.document.querySelector('.生图卡片').click();
   await until(() => {
     const btn = f.w.document.querySelector('#图像输出 button');
     return !!(btn && btn.textContent === '重新加载图片');
-  }, 'reload action after click');
+  }, 'reload action after display error');
   assert.equal(f.w.document.querySelector('#图像输出 button').textContent, '重新加载图片');
   assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 1);
   assert.equal(f.w.document.querySelector('#状态提示 .加载动画'), null);

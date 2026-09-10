@@ -447,17 +447,24 @@
     card.className = '生图卡片';
     card.setAttribute('data-full-url', url);
     card.setAttribute('data-engine', engine || 'horde');
-    card.setAttribute('data-lazy', '1');
     var img = document.createElement('img');
     img.alt = run.description || '生成的图片';
     img.referrerPolicy = 'no-referrer';
     img.setAttribute('data-engine', engine || 'horde');
     img.setAttribute('data-full-url', url);
-    var hint = document.createElement('figcaption');
-    hint.className = '点击查看';
-    hint.textContent = '点击查看大图';
-    card.append(img, hint);
+    img.onload = function () {
+      img.onload = null;
+      img.onerror = null;
+      card.classList.add('已加载');
+    };
+    img.onerror = function () {
+      img.onload = null;
+      img.onerror = null;
+      markCardFailed(card, url, img);
+    };
+    card.appendChild(img);
     $('图像输出').appendChild(card);
+    img.src = url;
     lockImageProvider(engine || 'horde');
     try { if (typeof window.收入历史 === 'function') window.收入历史(url); } catch (e) {}
   }
@@ -659,7 +666,7 @@
   async function generateHorde(run, prompt, index, providerSignal, engineName) {
     engineName = engineName === 'horde-anime' ? 'horde-anime' : 'horde-real';
     var lastError = null;
-    for (var attempt = 0; attempt < 4; attempt += 1) {
+    for (var attempt = 0; attempt < 10; attempt += 1) {
       ensureActive(run);
       var payload = Object.assign({}, run.payload, {
         prompt: prompt,
@@ -667,11 +674,11 @@
       });
       if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
       var waitHint = attempt
-        ? ('通道繁忙，正在第 ' + (attempt + 1) + ' 次提交，不会重复扣额度。')
+        ? ('通道忙，正在排队重试第 ' + (attempt + 1) + ' 次，不会重复扣额度。')
         : '服务器如刚启动可能稍慢；重复点击不会创建新任务。';
       status('正在提交 ' + engineLabel(engineName) + ' · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', waitHint, true);
       try {
-        run.job = await api('', { method: 'POST', body: payload, timeoutMs: 45000, signal: providerSignal || run.controller.signal });
+        run.job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: providerSignal || run.controller.signal });
         ensureActive(run);
         var done = await poll(run, run.job, providerSignal);
         return { url: done.image.url, engine: engineName, job: done };
@@ -680,7 +687,7 @@
         if (run.cancelled || (error && error.name === 'AbortError')) throw error;
         var statusCode = error && error.status;
         if (statusCode === 429 || statusCode === 409 || statusCode === 503) {
-          await pause(run, 1200 + attempt * 1400);
+          await pause(run, Math.min(2000 + attempt * 2200, 14000));
           continue;
         }
         throw error;
@@ -943,7 +950,7 @@
           if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
           try {
             var result = await runWithProviderBudget(run, eng, async function (signal) {
-              var job = await api('', { method: 'POST', body: payload, timeoutMs: 45000, signal: signal });
+              var job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: signal });
               hordeJobId = job.id;
               run.job = job;
               if (winner) {

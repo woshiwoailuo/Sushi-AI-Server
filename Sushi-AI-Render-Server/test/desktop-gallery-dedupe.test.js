@@ -32,7 +32,8 @@ test('success hides bulky 已生成 status so gallery sits under 角色画廊', 
   assert.match(genJs, /function hideStatusPanel/);
   assert.match(genJs, /hideStatusPanel\(\);/);
   assert.doesNotMatch(genJs, /status\('已生成 ' \+ run\.completed \+ ' 张图片'/);
-  assert.match(genJs, /点击查看大图/);
   assert.match(genJs, /data-full-url/);
   assert.match(workshop, /图片预览层/);
+  assert.match(workshop, /function 含生图指令/);
+  assert.match(workshop, /按对话生成图片\(画面\)/);
 });

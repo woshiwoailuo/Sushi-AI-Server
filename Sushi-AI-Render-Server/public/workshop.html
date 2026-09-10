@@ -1686,6 +1686,10 @@
     });
   }
 
+  function 含生图指令(文) {
+    return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|画一个|给我.*(图|照片)|再画|再来一[张幅]|根据.*生成图|生成角色|出一[张幅]|设计.*角色|角色设定|txt2img|text.?to.?image|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)/i.test(String(文 || ''));
+  }
+
   async function 提问AI() {
     if (正在回答对话) return;
     var 问 = document.getElementById("AI问题");
@@ -1723,6 +1727,10 @@
     var 区 = document.getElementById("对话列表");
     if (区) 区.scrollTop = 区.scrollHeight;
     后台译成中文(回复, 助手项, 助手泡);
+    if (含生图指令(文本)) {
+      var 画面 = (回复 && 回复.indexOf("没问到") !== 0) ? 回复 : 文本;
+      按对话生成图片(画面).catch(function () {});
+    }
   }
 
   function 像中文回复(文) {
@@ -3536,7 +3544,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.37" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.38" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4320,36 +4328,13 @@
     border-radius: 17px;
     overflow: hidden;
     background: #FFFFFF;
-    min-height: 220px;
     box-shadow:
       0 18px 60px
       rgba(0, 0, 0, 0.48);
   }
 
-  .生图卡片 img:not([src]) {
-    display: none !important;
-    min-height: 0 !important;
-    height: 0 !important;
-    box-shadow: none !important;
-  }
-
-  .生图卡片 .点击查看 {
-    display: grid;
-    place-items: center;
-    min-height: 220px;
-    margin: 0;
-    padding: 24px 16px;
-    color: #6B7280;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    background:
-      linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
-  }
-
-  .生图卡片.已加载 .点击查看,
-  .生图卡片 .点击查看[hidden] {
-    display: none;
+  .生图卡片 img {
+    display: block;
   }
 
   .生图卡片 .生图失败 {
@@ -4890,16 +4875,7 @@
     }
 
     .生图卡片 {
-      min-height: 320px;
-    }
-
-    .生图卡片 .点击查看 {
-      min-height: 320px;
-      font-size: 16px;
-    }
-
-    .生图卡片 img:not([src]) {
-      min-height: 0 !important;
+      min-height: 0;
     }
 
     .对话列表 {

@@ -144,8 +144,24 @@ function createImageService(options = {}) {
   const reserve = options.reserve || (() => null);
   const refund = options.refund || (() => {});
   const commit = options.commit || (() => {});
+  const sleep = options.sleep || function (ms, signal) {
+    return new Promise(function (resolve, reject) {
+      if (signal && signal.aborted) {
+        reject(new ImageError('已取消生成', 409, 'CANCELLED'));
+        return;
+      }
+      const timer = setTimeout(resolve, ms);
+      if (signal) {
+        signal.addEventListener('abort', function () {
+          clearTimeout(timer);
+          reject(new ImageError('已取消生成', 409, 'CANCELLED'));
+        }, { once: true });
+      }
+    });
+  };
   const jobs = new Map();
   const active = new Map();
+  let lastUpstreamId = '';
   const terminal = (job) => ['done', 'failed', 'cancelled'].includes(job.state);
 
   async function request(path, method = 'GET', body, signal) {
@@ -217,11 +233,20 @@ function createImageService(options = {}) {
     try { await request('/generate/status/' + encodeURIComponent(job.upstreamId), 'DELETE'); } catch { /* local cancellation still completes */ }
   }
 
+  function isRetryableSubmit(error) {
+    if (!error) return false;
+    if (error.code === 'CANCELLED') return false;
+    const upstream = error.upstreamStatus || error.status;
+    return upstream === 429 || upstream === 409 || upstream === 503 || error.code === 'UPSTREAM_UNREACHABLE';
+  }
+
   async function create(userId, input) {
     const payload = generationPayload(input, options.model || '');
     if (active.has(userId)) {
       const prevId = active.get(userId);
       try { await cancel(userId, prevId); } catch { /* previous job may already be gone */ }
+      // Horde anonymous keys keep the old slot for a beat after DELETE.
+      try { await sleep(500); } catch { /* ignore */ }
     }
     if (jobs.size >= 100) {
       for (const [id, job] of jobs) if (terminal(job)) jobs.delete(id);
@@ -240,20 +265,39 @@ function createImageService(options = {}) {
     };
     jobs.set(job.id, job);
     active.set(userId, job.id);
-    try {
-      const data = await request('/generate/async', 'POST', payload, job.controller.signal);
-      if (typeof data.id !== 'string' || !data.id) throw new ImageError('生图服务没有返回任务编号');
-      job.upstreamId = data.id;
-      if (terminal(job)) {
-        await removeUpstream(job);
-        return snapshot(job);
+    const submitDelays = [0, 700, 1400];
+    let lastError;
+    for (let attempt = 0; attempt < submitDelays.length; attempt += 1) {
+      if (submitDelays[attempt]) {
+        try { await sleep(submitDelays[attempt], job.controller.signal); } catch (error) {
+          if (!terminal(job)) await finish(job, 'failed', error.message);
+          throw error;
+        }
       }
-      job.state = 'queued';
-      return snapshot(job);
-    } catch (error) {
-      if (!terminal(job)) await finish(job, 'failed', error.message);
-      throw error;
+      try {
+        const data = await request('/generate/async', 'POST', payload, job.controller.signal);
+        if (typeof data.id !== 'string' || !data.id) throw new ImageError('生图服务没有返回任务编号');
+        job.upstreamId = data.id;
+        lastUpstreamId = data.id;
+        if (terminal(job)) {
+          await removeUpstream(job);
+          return snapshot(job);
+        }
+        job.state = 'queued';
+        return snapshot(job);
+      } catch (error) {
+        lastError = error;
+        if (terminal(job) || !isRetryableSubmit(error) || attempt === submitDelays.length - 1) {
+          if (!terminal(job)) await finish(job, 'failed', error.message);
+          throw error;
+        }
+        if (lastUpstreamId) {
+          try { await request('/generate/status/' + encodeURIComponent(lastUpstreamId), 'DELETE'); } catch { /* slot may already be free */ }
+        }
+      }
     }
+    if (!terminal(job)) await finish(job, 'failed', (lastError && lastError.message) || '生图提交失败');
+    throw lastError || new ImageError('生图提交失败');
   }
 
   async function refresh(job) {
