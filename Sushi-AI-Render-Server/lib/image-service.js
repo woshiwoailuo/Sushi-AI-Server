@@ -30,6 +30,7 @@ function imageSource(value) {
 }
 
 const HORDE_REAL_MODELS = [
+  'Flux.1-Schnell fp8 (Compact)',
   'ICBINP - I Can\'t Believe It\'s Not Photography',
   'AbsoluteReality',
   'Realistic Vision',
@@ -38,8 +39,6 @@ const HORDE_REAL_MODELS = [
   'Edge Of Realism',
   'majicMIX realistic',
   'AlbedoBase XL (SDXL)',
-  'AlbedoBase XL 3.1',
-  'Flux.1-Schnell fp8 (Compact)',
 ];
 const HORDE_ANIME_MODELS = [
   'Counterfeit',
