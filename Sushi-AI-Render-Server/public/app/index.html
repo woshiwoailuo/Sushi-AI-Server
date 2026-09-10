@@ -775,31 +775,12 @@
       return msg || '出图失败，请换描述再试';
     }
     async function generateHomeImage(promptText) {
-      // Homepage image intent: GLM 写实 first (if configured), then workshop Horde 写实.
-      // Never Pollinations/Sana, never switch to 动漫 because the prompt mentioned 插画/动漫.
+      // Homepage image intent always uses workshop Horde 写实. Never Pollinations/Sana,
+      // never GLM, never switch to 动漫 because the prompt mentioned 插画/动漫.
       // Chat bubble text stays as typed; only the generator prompt is enriched.
       try {
         var prompt = photorealHomePrompt(promptText);
         var negative = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
-        if (chatReady.glm) {
-          try {
-            var glmCreated = await api('/api/images', {
-              method: 'POST',
-              body: JSON.stringify({
-                prompt: prompt,
-                width: 768,
-                height: 768,
-                negativePrompt: negative,
-                style: 'glm'
-              }),
-              timeoutMs: 90000
-            });
-            var glmJob = glmCreated && (glmCreated.job || glmCreated);
-            if (glmJob && glmJob.state === 'done' && glmJob.image && glmJob.image.url) {
-              return { url: glmJob.image.url, channel: '工坊 · 智谱' };
-            }
-          } catch (glmErr) {}
-        }
         var lastErr = null;
         for (var attempt = 0; attempt < 10; attempt += 1) {
           try {
@@ -816,7 +797,7 @@
             });
             var job = created && (created.job || created);
             if (job && job.state === 'done' && job.image && job.image.url) {
-              return { url: job.image.url, channel: job.provider === 'glm' ? '工坊 · 智谱' : '工坊 · 写实' };
+              return { url: job.image.url, channel: '工坊 · 写实' };
             }
             if (!job || !job.id) throw new Error('工坊未受理出图，请稍后重试');
             var deadline = Date.now() + 180000;

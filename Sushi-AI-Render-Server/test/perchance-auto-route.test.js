@@ -56,7 +56,7 @@ test('repeated Perch attempts reset the prior gallery and provider failure state
 test('generation prompt favors realistic output without rewriting the visible core description', () => {
   assert.match(source, /forcePhotorealPrompt\(prompt\)/);
   assert.match(source, /visible 核心描述 remains the source of truth/);
-  assert.match(source, /改走智谱写实|切换写实模型重试/);
+  assert.match(source, /改用写实后端/);
 });
 
 test('Perch timeout uses a fresh fallback and repeated attempts keep realistic routing', () => {
@@ -96,7 +96,7 @@ test('workshop picker splits 写实 and 动漫 and hides dead Pollinations alias
   assert.match(workshopHtml, /<optgroup label="独立">/);
   assert.match(workshopHtml, /value="auto-real" selected/);
   assert.match(workshopHtml, /value="horde-real"/);
-  assert.match(workshopHtml, /value="glm">智谱 GLM · 写实/);
+  assert.doesNotMatch(workshopHtml, /value="glm">智谱 GLM · 写实/);
   assert.match(workshopHtml, /value="perchance">Perch · 独立通道/);
   assert.match(workshopHtml, /value="horde-real" selected>Horde · 写实/);
   assert.match(workshopHtml, /value="horde-anime">Horde · 动漫/);
@@ -107,14 +107,15 @@ test('workshop picker splits 写实 and 动漫 and hides dead Pollinations alias
   assert.doesNotMatch(workshopHtml, /value="aihorde"/);
 });
 
-test('img2img endpoint pins Horde models and GLM is a 写实 channel', () => {
+test('img2img endpoint pins Horde models; GLM is chat-only', () => {
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(server, /app\.post\('\/api\/workshop\/img2img'/);
   assert.match(server, /payload = generationPayload/);
   assert.match(server, /style: isAnime \? 'anime' : 'real'/);
-  assert.match(server, /style === 'glm'/);
-  assert.match(server, /realRace: GLM_API_KEY \? \['glm', 'horde-real'\]/);
-  assert.match(source, /function generateGlm/);
+  assert.doesNotMatch(server, /style === 'glm'/);
+  assert.doesNotMatch(server, /function glmGenerateImage/);
+  assert.match(server, /realRace: \['horde-real'\]/);
+  assert.doesNotMatch(source, /function generateGlm/);
   assert.match(source, /function resolveImg2imgEngine/);
-  assert.match(source, /glmImageReady/);
+  assert.doesNotMatch(source, /glmImageReady/);
 });

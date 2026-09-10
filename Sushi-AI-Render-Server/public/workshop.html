@@ -77,7 +77,6 @@
             <optgroup label="写实">
               <option value="auto-real" selected>自动抢出 · 写实</option>
               <option value="horde-real">Horde · 写实</option>
-              <option value="glm">智谱 GLM · 写实</option>
             </optgroup>
             <optgroup label="动漫">
               <option value="auto-anime">自动抢出 · 动漫</option>
@@ -120,7 +119,6 @@
               <optgroup label="写实">
                 <option value="auto-real" selected>自动抢出 · 写实</option>
                 <option value="horde-real">Horde · 写实</option>
-                <option value="glm">智谱 GLM · 写实</option>
               </optgroup>
               <optgroup label="动漫">
                 <option value="auto-anime">自动抢出 · 动漫</option>
@@ -511,7 +509,7 @@
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["auto-real", "glm", "perchance", "horde-real", "auto-anime", "sana", "horde-anime"];
+  var 引擎顺序 = ["auto-real", "perchance", "horde-real", "auto-anime", "sana", "horde-anime"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -741,8 +739,8 @@
     值 = String(值 || "").trim();
     if (值 === "官方" || 值 === "perch") 值 = "perchance";
     if (值 === "turbo" || 值 === "flux" || 值 === "flux-realism" || 值 === "auto" || 值 === "horde") 值 = "auto-real";
-    if (值 === "zhipu" || 值 === "zhipuai" || 值 === "chatglm" || 值 === "cogview") 值 = "glm";
-    var 可用 = ["auto-real", "auto-anime", "perchance", "horde-real", "horde-anime", "sana", "glm"];
+    if (值 === "glm" || 值 === "zhipu" || 值 === "zhipuai" || 值 === "chatglm" || 值 === "cogview") 值 = "auto-real";
+    var 可用 = ["auto-real", "auto-anime", "perchance", "horde-real", "horde-anime", "sana"];
     if (用户选过 && 可用.indexOf(值) >= 0) return 值;
     if (!用户选过 && (!值 || 值 === "auto-real")) return "auto-real";
     return 可用.indexOf(值) >= 0 ? 值 : "auto-real";
@@ -2967,7 +2965,6 @@
       horde: "Horde · 写实",
       "horde-real": "Horde · 写实",
       "horde-anime": "Horde · 动漫",
-      glm: "智谱 GLM · 写实",
       perchance: "Perch · 独立通道"
     };
     return 真[值] || 值;
@@ -3563,7 +3560,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.39" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.40" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

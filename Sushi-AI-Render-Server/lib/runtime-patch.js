@@ -15,7 +15,7 @@ function patchWorkshop(source) {
       '    if (值 === "turbo" || 值 === "flux" || 值 === "flux-realism" || 值 === "flux-real" || 值 === "auto" || 值 === "horde") 值 = "auto-real";\n' +
       '    if (值 === "zimage" || 值 === "sdxl" || 值 === "krea2" || 值 === "liblib") 值 = "auto-real";\n' +
       '    if (值 === "anishort") 值 = "sana";\n' +
-      '    var 可用 = ["auto-real", "auto-anime", "perchance", "horde-real", "horde-anime", "sana", "glm"];\n' +
+      '    var 可用 = ["auto-real", "auto-anime", "perchance", "horde-real", "horde-anime", "sana"];\n' +
       '    if (用户选过 && 可用.indexOf(值) >= 0) return 值;\n' +
       '    if (!用户选过 && (!值 || 值 === "auto-real")) return "auto-real";\n' +
       '    return 可用.indexOf(值) >= 0 ? 值 : "auto-real";\n' +
@@ -27,7 +27,6 @@ function patchWorkshop(source) {
       '            <optgroup label="写实">\n' +
       '              <option value="auto-real" selected>自动抢出 · 写实</option>\n' +
       '              <option value="horde-real">Horde · 写实</option>\n' +
-      '              <option value="glm">智谱 GLM · 写实</option>\n' +
       '            </optgroup>\n' +
       '            <optgroup label="动漫">\n' +
       '              <option value="auto-anime">自动抢出 · 动漫</option>\n' +
@@ -46,7 +45,6 @@ function patchWorkshop(source) {
       '              <optgroup label="写实">\n' +
       '                <option value="auto-real" selected>自动抢出 · 写实</option>\n' +
       '                <option value="horde-real">Horde · 写实</option>\n' +
-      '                <option value="glm">智谱 GLM · 写实</option>\n' +
       '              </optgroup>\n' +
       '              <optgroup label="动漫">\n' +
       '                <option value="auto-anime">自动抢出 · 动漫</option>\n' +
@@ -88,11 +86,11 @@ function patchWorkshop(source) {
 <script id="sushi-provider-pack-v3">
 (function () {
   'use strict';
-  var priority = ['auto-real','glm','perchance','horde-real','auto-anime','sana','horde-anime'];
+  var priority = ['auto-real','perchance','horde-real','auto-anime','sana','horde-anime'];
   var labels = {
     'auto-real':'自动抢出 · 写实', 'auto-anime':'自动抢出 · 动漫', auto:'自动抢出 · 写实',
     perchance:'Perch · 独立通道', 'horde-real':'Horde · 写实', horde:'Horde · 写实',
-    'horde-anime':'Horde · 动漫', sana:'Sana · 动漫/插画', glm:'智谱 GLM · 写实'
+    'horde-anime':'Horde · 动漫', sana:'Sana · 动漫/插画'
   };
   function el(id){ return document.getElementById(id); }
   function isPerchanceUrl(value) {
@@ -109,19 +107,17 @@ function patchWorkshop(source) {
     name = String(name || '').trim();
     if (name === '官方' || name === 'perch') return 'perchance';
     if (name === 'anishort') return 'sana';
-    if (name === 'turbo' || name === 'flux' || name === 'flux-realism' || name === 'flux-real' || name === 'auto' || name === 'horde' || name === 'zimage' || name === 'sdxl' || name === 'krea2' || name === 'liblib') return 'auto-real';
-    if (name === 'zhipu' || name === 'zhipuai' || name === 'chatglm' || name === 'cogview') return 'glm';
+    if (name === 'turbo' || name === 'flux' || name === 'flux-realism' || name === 'flux-real' || name === 'auto' || name === 'horde' || name === 'zimage' || name === 'sdxl' || name === 'krea2' || name === 'liblib' || name === 'glm' || name === 'zhipu' || name === 'zhipuai' || name === 'chatglm' || name === 'cogview') return 'auto-real';
     return name || 'auto-real';
   }
   function selected(){ var box=el('出图引擎'); return box ? box.value : 'auto-real'; }
   function tipFor(name){
     name = normalizeSaved(name);
-    if(name==='auto-real') return '自动抢出 · 写实：智谱优先，失败再走 Horde 写实，不含动漫通道';
+    if(name==='auto-real') return '自动抢出 · 写实：只走 Horde 写实模型，不含动漫通道';
     if(name==='auto-anime') return '自动抢出 · 动漫：Sana 与 Horde 动漫同时开跑，先到先得';
     if(name==='horde-real' || name==='horde') return 'Horde · 写实 · 免费共享算力，繁忙时需要排队';
     if(name==='horde-anime') return 'Horde · 动漫 · 免费共享算力，繁忙时需要排队';
     if(name==='sana') return 'Sana · 动漫/插画 · Pollinations 目前唯一可用模型';
-    if(name==='glm') return '智谱 GLM · 写实 · CogView 文生图，不走动漫模型';
     if(name==='perchance') return 'Perch · 独立通道 · 官网无法内嵌，改用写实后端（不跳转官网）';
     return (labels[name]||name) + ' · 应用内免费通道';
   }
