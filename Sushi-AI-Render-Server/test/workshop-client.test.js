@@ -5,6 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM, VirtualConsole } = require('jsdom');
+require('../lib/runtime-patch');
+require('../lib/image-lock-patch');
+require('../lib/feature-patch');
 const html = fs.readFileSync(path.join(__dirname, '../public/workshop.html'), 'utf8');
 const client = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6JkAAAAASUVORK5CYII=';
@@ -518,3 +521,24 @@ test('picker no longer lists dead turbo/flux/flux-realism platforms', async t =>
   assert.equal(img2img.disabled, false);
 });
 
+
+test('production feature injection preserves manual choice through two generations and image load', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const box = f.w.document.getElementById('出图引擎');
+  box.value = 'horde-real';
+  // outside-only executes scripts explicitly; bind the actual HTML event handler too.
+  box.onchange = f.w.Function(box.getAttribute('onchange'));
+  box.dispatchEvent(new f.w.Event('change', { bubbles: true }));
+  for (let i = 0; i < 2; i++) {
+    await f.w.开始生成();
+    const image = f.w.document.querySelector('#图像输出 img');
+    assert.ok(image);
+    image.dispatchEvent(new f.w.Event('load'));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(box.value, 'horde-real');
+    assert.equal(box.disabled, false);
+    assert.equal(f.w.localStorage.getItem('角色生成器_默认平台'), 'horde-real');
+    assert.doesNotMatch(f.w.document.getElementById('平台提示').textContent, /已锁定|Perch/);
+  }
+  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 2);
+});
