@@ -53,10 +53,10 @@ async function setup(t, handler, imageFails = false) {
   await until(() => w.__sushiReady && !w.document.getElementById('生成按钮').disabled, 'workshop initialization');
   assert.deepEqual(errors, [], errors.map(e => e.message).join('\n'));
   w.document.getElementById('角色描述').value = 'A small cat by a sunny window';
-  // Image channel is locked to Perch (Horde photoreal via /api/images).
+  // Select Horde explicitly for API-backed generation tests.
   var engine = w.document.getElementById('出图引擎');
   if (engine) {
-    engine.value = 'perchance';
+    engine.value = 'horde-real';
   }
   return { w, calls, errors, text: () => w.document.getElementById('状态提示').textContent };
 }
@@ -64,7 +64,7 @@ async function setup(t, handler, imageFails = false) {
 test('the actual workshop initializes without Perchance runtime and generates only once on double click', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.ok(f.w.document.querySelector('#出图引擎 option[value="perchance"]'), 'perchance remains the only image channel');
-  assert.equal(f.w.document.getElementById('出图引擎').disabled, true);
+  assert.equal(f.w.document.getElementById('出图引擎').disabled, false);
   const first = f.w.开始生成();
   await f.w.开始生成();
   await first;
@@ -129,68 +129,32 @@ test('the current Chinese prompt is translated before submission, never replaced
   assert.doesNotMatch(payload.prompt, /A stale unrelated scene/);
 });
 
-test('failed translation preserves the current text, and perchance stays selectable in-app (no official redirect)', async t => {
+test('failed translation preserves core; unavailable Perchance stays selected without redirects', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('角色描述').value = '窗边的小猫';
   f.w.调用开源翻译 = async () => { throw new Error('translation offline'); };
-  // Force perchance so unit test uses Horde photoreal via /api/images.
-  f.w.document.getElementById('出图引擎').value = 'perchance';
   await f.w.开始生成();
-  const failedPrompt = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body).prompt;
-  assert.match(failedPrompt, /窗边的小猫/);
-  assert.match(failedPrompt, /^photorealistic RAW photo/i);
-  const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length;
-  // Perchance must remain selectable and generate in-app — never window.open / official link.
+  const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
+  assert.match(payload.prompt, /窗边的小猫/);
+  const count = f.calls.length;
   const box = f.w.document.getElementById('出图引擎');
-  assert.ok(box.querySelector('option[value="perchance"]'), 'perchance option must exist');
   box.value = 'perchance';
-  const opened = [];
-  f.w.open = (url) => { opened.push(url); return null; };
-  const realFetch = f.w.fetch;
-  f.w.fetch = async (url, options = {}) => {
-    const href = String(url);
-    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
-      const bytes = Buffer.alloc(3200, 7);
-      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
-    }
-    return realFetch(url, options);
-  };
+  f.w.open = () => { throw new Error('unexpected redirect'); };
   await f.w.开始生成();
-  assert.equal(opened.length, 0, 'must not open perchance.org');
-  assert.equal(box.value, 'perchance', 'explicit perchance selection must be kept');
-  assert.equal(f.w.document.querySelectorAll('#状态提示 a[href*="perchance.org"]').length, 0);
-  assert.ok(f.w.document.querySelector('#图像输出 img') || f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length >= posts);
-  assert.doesNotMatch(f.text(), /在 Perchance 官网生成/);
+  assert.equal(box.value, 'perchance');
+  assert.equal(f.calls.length, count);
+  assert.match(f.text(), /官方生图组件不可用.*未切换平台/);
 });
 
-test('auto race prefers a free platform without requiring official redirect', async t => {
+test('Horde selection remains unchanged after a successful generation', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  f.w.document.getElementById('出图引擎').value = 'auto-real';
-  const realFetch = f.w.fetch;
-  f.w.fetch = async (url, options = {}) => {
-    const href = String(url);
-    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
-      const bytes = Buffer.alloc(3200, 7);
-      return {
-        ok: true,
-        status: 200,
-        blob: async () => new f.w.Blob([bytes], { type: 'image/png' })
-      };
-    }
-    return realFetch(url, options);
-  };
-  const opened = [];
-  f.w.open = (url) => { opened.push(String(url)); return null; };
   await f.w.开始生成();
-  assert.equal(opened.length, 0);
-  assert.ok(f.w.document.querySelector('#图像输出 img'));
-  const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.ok(['perchance'].includes(engine), 'engine=' + engine);
-  assert.equal(f.w.document.getElementById('出图引擎').value, 'perchance');
-  assert.equal(f.w.document.getElementById('出图引擎').disabled, true);
+  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'horde-real');
+  assert.equal(f.w.document.getElementById('出图引擎').value, 'horde-real');
+  assert.equal(f.w.document.getElementById('出图引擎').disabled, false);
 });
 
-test('manual platform selection is remapped to locked Perch', async t => {
+test('manual Sana selection uses only Sana', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎');
   box.value = 'sana';
@@ -209,10 +173,10 @@ test('manual platform selection is remapped to locked Perch', async t => {
     return realFetch(url, options);
   };
   await f.w.开始生成();
-  assert.equal(hits.length, 0, 'closed Sana channel must not be called');
-  assert.ok(imagePosts.length >= 1, 'locked Perch uses Horde photoreal via /api/images');
-  assert.equal(box.value, 'perchance');
-  assert.equal(box.disabled, true);
+  assert.equal(hits.length, 1, 'Sana must receive the generation request');
+  assert.equal(imagePosts.length, 0, 'must not call Horde');
+  assert.equal(box.value, 'sana');
+  assert.equal(box.disabled, false);
 });
 
 test('generate displays the image immediately and click enlarges', async t => {
@@ -291,75 +255,35 @@ test('random generate fills rich core while managed display stays simple two-lin
   assert.match(payload.prompt, /photoreal|shallow depth of field/i);
 });
 
-test('perch/perchance is selectable and uses Horde photoreal in-app, never Pollinations', async t => {
-  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  const box = f.w.document.getElementById('出图引擎');
-  assert.ok(box.querySelector('option[value="perchance"]'), 'perchance option required');
-  box.value = 'perchance';
-  assert.equal(f.w.当前引擎(), 'perchance');
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /REAL_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
-  assert.doesNotMatch(src, /REAL_RACE_ENGINES = \[[^\]]*['"]horde-real['"]/);
-  assert.match(src, /name === 'perch'/);
-  assert.match(src, /官方' \|\| name === 'perch'/);
-  assert.match(src, /pollinationsProxyUrl/);
-  assert.match(src, /function photorealPrompt/);
-  assert.match(src, /generateHorde\(run, prompt, index, providerSignal, 'perchance'\)/);
-  const opened = [];
-  f.w.open = (url) => { opened.push(String(url)); return null; };
-  box.value = 'perchance';
-  const realFetch = f.w.fetch;
-  const pollinationHits = [];
-  f.w.fetch = async (url, options = {}) => {
-    const href = String(url);
-    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
-      pollinationHits.push(href);
-      const bytes = Buffer.alloc(3200, 7);
-      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
-    }
-    return realFetch(url, options);
-  };
+test('Perchance uses its official component when available without Horde calls', async t => {
+  const f = await setup(t, () => { throw new Error('unexpected upstream'); });
+  const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
+  let invoked = 0;
+  f.w.update = gallery => { invoked++; const img = f.w.document.createElement('img'); img.src = PNG; gallery.appendChild(img); };
   await f.w.开始生成();
-  assert.equal(opened.length, 0, 'must never open perchance.org');
+  assert.equal(invoked, 1);
+  assert.ok(f.w.document.querySelector('#图像输出 img'));
   assert.equal(box.value, 'perchance');
-  assert.equal(pollinationHits.length, 0, 'explicit perchance must not use Sana/Pollinations');
-  const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images'));
-  assert.ok(posts.length >= 1, 'explicit perchance uses Horde photoreal via /api/images');
-  const payload = JSON.parse(posts[0].body);
-  assert.equal(payload.style, 'real');
-  assert.match(payload.prompt, /photorealistic RAW photo/i);
+  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 0);
 });
 
 
-test('closed auto-real still routes to locked Perch Horde photoreal', async t => {
-  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  f.w.document.getElementById('出图引擎').value = 'auto-real';
-  const hits = [];
-  const realFetch = f.w.fetch;
-  f.w.fetch = async (url, options = {}) => {
-    const href = String(url);
-    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
-      hits.push(href);
-      return { ok: false, status: 429, blob: async () => new f.w.Blob([]) };
-    }
-    return realFetch(url, options);
-  };
+test('failed manual Horde request does not call Sana or Perchance', async t => {
+  const f = await setup(t, () => response({error:'upstream unavailable'}, 502));
+  f.w.update = () => { throw new Error('unexpected Perchance fallback'); };
   await f.w.开始生成();
-  assert.equal(hits.length, 0, '写实 must not hit Pollinations/Sana');
-  assert.ok(f.w.document.querySelector('#图像输出 img'), 'Perch Horde photoreal should produce an image');
-  const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.equal(engine, 'perchance');
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /ENGINE_COOLDOWN_MS/);
-  assert.match(src, /出图通道限流/);
-  assert.doesNotMatch(src, /window\.open\([^)]*perchance\.org/);
+  assert.equal(f.w.document.getElementById('出图引擎').value, 'horde-real');
+  assert.equal(f.calls.filter(c => String(c.url).includes('/api/workshop/image')).length, 0);
+  assert.equal(f.w.document.querySelector('#图像输出 img'), null);
+  assert.match(f.text(), /upstream unavailable/);
 });
 
 
-test('workshop source defaults to locked Perch', () => {
-  assert.match(html, /<option value="perchance" selected>/);
-  assert.match(html, /var 用户选定平台 = "perchance";/);
-  assert.match(client, /function resolveEngine\(\) \{\s*return 'perchance';/);
+test('workshop offers Perchance as initial choice without locking selection', () => {
+  const dom = new JSDOM(html);
+  const box = dom.window.document.getElementById('出图引擎');
+  assert.equal(box.value, 'perchance'); assert.equal(box.disabled, false);
+  dom.window.close();
 });
 
 test('server keeps leftover Pollinations aliases on sana; Perchance no longer routes through it', () => {
@@ -373,44 +297,14 @@ test('server keeps leftover Pollinations aliases on sana; Perchance no longer ro
 });
 
 
-test('perchance cool-down cancelled: explicit selection retries Horde photoreal without opening the official site', async t => {
-  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  const box = f.w.document.getElementById('出图引擎');
-  box.value = 'perchance';
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /PERCHANCE_COOLDOWN_MS = 0/);
-  assert.match(src, /markPerchanceFailure/);
-  assert.match(src, /function isPerchanceCooling\(\) \{\s*return false;/);
-  assert.match(src, /cool-down cancelled|no cool-down gate/i);
-  assert.doesNotMatch(src, /Perchance 短暂冷却中/);
-  assert.match(src, /Never (?:window\.)?open perchance\.org/i);
-  assert.equal(f.w.当前引擎(), 'perchance');
-  const opened = [];
-  f.w.open = (url) => { opened.push(String(url)); return null; };
-  const realFetch = f.w.fetch;
-  const pollinationHits = [];
-  f.w.fetch = async (url, options = {}) => {
-    const href = String(url);
-    if (href.includes('/api/workshop/image') || href.includes('image.pollinations.ai')) {
-      pollinationHits.push(href);
-      const bytes = Buffer.alloc(3200, 7);
-      return { ok: true, status: 200, blob: async () => new f.w.Blob([bytes], { type: 'image/png' }) };
-    }
-    return realFetch(url, options);
-  };
-  await f.w.开始生成();
-  assert.equal(opened.length, 0, 'must never open perchance.org');
-  assert.equal(box.value, 'perchance');
-  assert.equal(pollinationHits.length, 0, 'explicit perchance must not use Sana/Pollinations');
-  const firstPosts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length;
-  assert.ok(firstPosts >= 1, 'explicit perchance uses Horde photoreal');
-  const tip1 = f.w.document.getElementById('状态提示').textContent || '';
-  assert.doesNotMatch(tip1, /冷却中/);
-  await f.w.开始生成();
-  assert.ok(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length >= firstPosts + 1, 'retry still uses Horde');
-  assert.equal(opened.length, 0);
-  const tip2 = f.w.document.getElementById('状态提示').textContent || '';
-  assert.doesNotMatch(tip2, /冷却中/);
+test('failed Perchance attempt may be retried immediately on the same platform', async t => {
+  const f = await setup(t, () => { throw new Error('unexpected upstream'); });
+  const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
+  let calls = 0; f.w.update = () => { calls++; throw new Error('official offline'); };
+  await f.w.开始生成(); await f.w.开始生成();
+  assert.equal(calls, 2); assert.equal(box.value, 'perchance');
+  assert.equal(f.w.document.getElementById('生成按钮').disabled, false);
+  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 0);
 });
 
 test('photorealPrompt enriches by default but style-keyword bypass keeps anime/二次元/插画', async t => {
@@ -438,7 +332,7 @@ test('photorealPrompt enriches by default but style-keyword bypass keeps anime/�
 
 test('写实 channel strips anime keywords and always sends photoreal negatives', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  f.w.document.getElementById('出图引擎').value = 'perchance';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
   f.w.document.getElementById('角色描述').value = 'anime style fictional adult in neon alley';
   f.w.document.getElementById('中文译文').value = '霓虹巷弄里的动漫成年角色';
   f.w.document.getElementById('英文描述').value = 'anime style fictional adult in neon alley';
@@ -500,7 +394,7 @@ test('清空描述 clears core and linked prompt fields but not gallery', async 
 
 test('generatePerchance source does not assign enriched prompt into 英文描述', async t => {
   const src = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /only touch hidden 安全英文|source of truth/);
+  assert.match(src, /var prevSafe = safeBox/);
   assert.doesNotMatch(src, /engBox\.value\s*=\s*prompt/);
   assert.match(src, /safeBox\.value\s*=\s*prompt/);
 });
@@ -520,7 +414,7 @@ test('智能修饰 writes visible core modifiers and generation uses that text',
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.ok(f.w.document.getElementById('智能修饰按钮'), '智能修饰 button present');
   assert.equal(typeof f.w.智能修饰, 'function');
-  f.w.document.getElementById('出图引擎').value = 'perchance';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
   f.w.document.getElementById('角色描述').value = '窗边看书的成年人';
   f.w.document.getElementById('中文译文').value = '窗边看书的成年人';
   f.w.document.getElementById('英文描述').value = 'an adult reading by the window';
@@ -566,22 +460,17 @@ test('photorealPrompt helper still available for style-aware enrich logic', asyn
   assert.doesNotMatch(forced, /\banime style\b/i);
 });
 
-test('closed horde-anime still uses Perch photoreal, never anime style', async t => {
+test('manual Horde anime choice reaches its requested style', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('出图引擎').value = 'horde-anime';
-  f.w.document.getElementById('角色描述').value = 'a fictional adult standing by a rainy window';
-  f.w.document.getElementById('英文描述').value = 'a fictional adult standing by a rainy window';
   await f.w.开始生成();
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
-  assert.equal(payload.style, 'real');
-  assert.match(payload.prompt, /photorealistic RAW photo/i);
-  assert.match(payload.prompt, /not anime|not manga/i);
-  assert.match(payload.negativePrompt || '', /anime|manga|cartoon/i);
-  const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.equal(engine, 'perchance');
+  assert.equal(payload.style, 'anime');
+  assert.doesNotMatch(payload.negativePrompt, /anime|manga|cartoon/i);
+  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'horde-anime');
 });
 
-test('img2img is locked to Perch photoreal and never falls back to Sana', async t => {
+test('img2img honors its own provider selection and never calls Sana', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('参考图地址').value = PNG;
   f.w.document.getElementById('图生图平台').value = 'horde-anime';
@@ -600,10 +489,10 @@ test('img2img is locked to Perch photoreal and never falls back to Sana', async 
   await f.w.开始生成();
   assert.equal(pollinationHits.length, 0);
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
-  assert.equal(payload.style, 'real');
+  assert.equal(payload.style, 'anime');
   assert.ok(payload.sourceImage);
   const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.equal(engine, 'perchance');
+  assert.equal(engine, 'horde-anime');
 });
 
 test('picker no longer lists dead turbo/flux/flux-realism platforms', async t => {
@@ -614,18 +503,18 @@ test('picker no longer lists dead turbo/flux/flux-realism platforms', async t =>
   assert.equal(box.querySelector('option[value="flux-realism"]'), null);
   assert.equal(box.querySelector('option[value="auto-real"]'), null);
   assert.equal(box.querySelector('option[value="auto-anime"]'), null);
-  assert.equal(box.querySelector('option[value="horde-real"]'), null);
-  assert.equal(box.querySelector('option[value="horde-anime"]'), null);
+  assert.ok(box.querySelector('option[value="horde-real"]'));
+  assert.ok(box.querySelector('option[value="horde-anime"]'));
   assert.equal(box.querySelector('optgroup[label="写实"]'), null);
   assert.equal(box.querySelector('optgroup[label="动漫"]'), null);
   assert.ok(box.querySelector('option[value="perchance"]'));
-  assert.equal(box.disabled, true);
+  assert.equal(box.disabled, false);
   assert.equal(box.querySelector('option[value="glm"]'), null);
   const img2img = f.w.document.getElementById('图生图平台');
   assert.ok(img2img.querySelector('option[value="perchance"]'));
-  assert.equal(img2img.querySelector('option[value="horde-real"]'), null);
-  assert.equal(img2img.querySelector('option[value="horde-anime"]'), null);
+  assert.ok(img2img.querySelector('option[value="horde-real"]'));
+  assert.ok(img2img.querySelector('option[value="horde-anime"]'));
   assert.equal(img2img.querySelector('option[value="auto"]'), null);
-  assert.equal(img2img.disabled, true);
+  assert.equal(img2img.disabled, false);
 });
 

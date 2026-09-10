@@ -173,10 +173,8 @@
       <p class="limit-note">长记忆把大量对话与摘要保存在本机 localStorage（单域约数 MB）。Vercel 上 SQLite 会重置，故跨设备不以服务端为准；本页会调用已有对话接口。</p>
       <div class="chat-channel-row">
         <label for="chatChannel">回答通道</label>
-        <select id="chatChannel" disabled aria-label="GLM 已锁定">
-          <option value="glm" selected>GLM · 已锁定</option>
-        </select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">对话已锁定 GLM，不再更换通道。</p>
+        <select id="chatChannel"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
+        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">使用所选对话通道，失败时不会自动更换。</p>
       </div>
     </div>
     <div class="chat-shell">
@@ -634,24 +632,22 @@
     var CHAT_LABELS = { groq: 'Groq', gemini: 'Gemini', openrouter: 'OpenRouter', grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', glm: 'GLM', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
     function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
     function normalizeChatChannel(raw) {
-      void raw;
-      return 'glm';
+      return ['glm','deepseek','groq','gemini','openrouter','grok','horde','openai','openai-fast'].includes(raw) ? raw : 'glm';
     }
     function loadChatChannel() {
+      var selected = 'glm';
+      try { selected = normalizeChatChannel(localStorage.getItem(chatChannelKey())); } catch (e) {}
       var box = $('chatChannel');
-      if (box) {
-        box.value = 'glm';
-        box.disabled = true;
-        box.setAttribute('disabled', 'disabled');
-      }
-      try { localStorage.setItem(chatChannelKey(), 'glm'); } catch (e) {}
-      return 'glm';
+      if (box) { box.value = selected; box.disabled = false; }
+      return selected;
     }
     function saveChatChannel() {
-      return loadChatChannel();
+      var selected = selectedChatChannel();
+      try { localStorage.setItem(chatChannelKey(), selected); } catch (e) {}
+      return selected;
     }
     function selectedChatChannel() {
-      return 'glm';
+      return normalizeChatChannel($('chatChannel').value);
     }
     var chatReady = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
     var CHAT_PICKER = [
@@ -664,28 +660,14 @@
     ];
     function syncChatPicker() {
       var box = $('chatChannel');
-      if (!box) return;
-      box.disabled = true;
-      box.setAttribute('disabled', 'disabled');
-      box.value = 'glm';
-      Array.prototype.slice.call(box.options).forEach(function (opt) {
-        if (opt.value !== 'glm') opt.remove();
-      });
-      if (!box.querySelector('option[value="glm"]')) {
-        var opt = document.createElement('option');
-        opt.value = 'glm';
-        opt.textContent = 'GLM · 已锁定';
-        opt.selected = true;
-        box.appendChild(opt);
-      }
+      if (box) box.disabled = false;
     }
     function autoRaceList() {
       return ['glm'];
     }
     function updateChatHint() {
       var el = $('grokSetupHint');
-      if (!el) return;
-      el.innerHTML = '对话已锁定 <strong>GLM</strong>，不再更换通道。';
+      if (el) el.textContent = '使用所选对话通道，失败时不会自动更换。';
     }
     async function loadChatReady() {
       try {
@@ -753,12 +735,15 @@
       return msg || '出图失败，请换描述再试';
     }
     async function generateHomeImage(promptText) {
-      // Homepage image intent always uses workshop Horde 写实. Never Pollinations/Sana,
-      // never GLM, never switch to 动漫 because the prompt mentioned 插画/动漫.
+      // Home image requests honor the saved provider and never fall back to another service.
       // Chat bubble text stays as typed; only the generator prompt is enriched.
       try {
-        var prompt = photorealHomePrompt(promptText);
-        var negative = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
+        var engine = localStorage.getItem('角色生成器_默认平台') || 'perchance';
+        if (engine !== 'horde-real' && engine !== 'horde-anime') {
+          throw new Error('当前选择 ' + engine + '，请在工坊使用该通道；未自动更换平台。');
+        }
+        var prompt = engine === 'horde-anime' ? promptText : photorealHomePrompt(promptText);
+        var negative = engine === 'horde-anime' ? 'lowres, blurry, watermark, text' : 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
         var lastErr = null;
         for (var attempt = 0; attempt < 10; attempt += 1) {
           try {
@@ -769,13 +754,13 @@
                 width: 768,
                 height: 768,
                 negativePrompt: negative,
-                style: 'real'
+                style: engine === 'horde-anime' ? 'anime' : 'real'
               }),
               timeoutMs: 90000
             });
             var job = created && (created.job || created);
             if (job && job.state === 'done' && job.image && job.image.url) {
-              return { url: job.image.url, channel: 'Perch · 写实' };
+              return { url: job.image.url, channel: engine === 'horde-anime' ? 'Horde · 动漫' : 'Horde · 写实' };
             }
             if (!job || !job.id) throw new Error('工坊未受理出图，请稍后重试');
             var deadline = Date.now() + 180000;
@@ -784,7 +769,7 @@
               var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
               var cur = st && (st.job || st);
               if (cur && cur.state === 'done' && cur.image && cur.image.url) {
-                return { url: cur.image.url, channel: 'Perch · 写实' };
+                return { url: cur.image.url, channel: engine === 'horde-anime' ? 'Horde · 动漫' : 'Horde · 写实' };
               }
               if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
                 throw new Error((cur && cur.error) || '出图失败');
@@ -814,9 +799,7 @@
       return { text: text, channel: CHAT_LABELS[model] || model };
     }
     async function raceChat(question, channel) {
-      void channel;
-      var models = autoRaceList();
-      var model = models[0] || 'glm';
+      var model = normalizeChatChannel(channel);
       return await new Promise(function (resolve, reject) {
         var settled = false;
         var raceTimer = setTimeout(function () {
@@ -855,16 +838,6 @@
           var imgResult = null;
           var imgErr = null;
           var imgPromise = generateHomeImage(text).then(function (r) { imgResult = r; }).catch(function (e) { imgErr = e; });
-          var result = null;
-          try { result = await raceChat(text, channel); } catch (e) { result = null; }
-          if (result && result.text) {
-            if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
-            chatHistory.push({ role: 'assistant', text: result.text, channel: result.channel, at: Date.now() });
-            rollMemory(text, result.text);
-            saveChat();
-            renderChat();
-            waiting = appendTemp('正在出图…');
-          }
           await imgPromise;
           if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
           if (imgResult && imgResult.url) {
@@ -1040,7 +1013,7 @@
     });
     if ($('chatChannel')) {
       loadChatChannel();
-      $('chatChannel').onchange = function () { saveChatChannel('glm'); };
+      $('chatChannel').onchange = function () { saveChatChannel(); };
     }
     $('chatSend').onclick = sendChat;
     $('chatInput').addEventListener('keydown', function (e) {

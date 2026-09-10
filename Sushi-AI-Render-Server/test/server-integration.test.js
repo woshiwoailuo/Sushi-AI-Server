@@ -46,6 +46,12 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   assert.equal(login.status, 200);
   const token = (await login.json()).token;
   const auth = { Authorization: 'Bearer ' + token };
+  const page = await request('/workshop', 'GET', undefined, auth);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-type'), /text\/html; charset=utf-8/i);
+  const pageText = await page.text();
+  assert.match(pageText, /核心描述/);
+  assert.doesNotMatch(pageText, /\uFFFD/);
   const ticket = await (await request('/api/workshop/ticket', 'POST', {}, auth)).json();
   assert.ok(ticket.key && ticket.iv);
   const loader = await request('/workshop?k=' + ticket.ticket);
