@@ -74,39 +74,19 @@ function patchWorkshop(source) {
     });
   }
   function providerChanged(name){
-    var tip=byId('平台提示');
-    if(!tip) return;
-    void name;
-    tip.textContent='Perch · 已锁定 · 官网无法内嵌，改用写实后端（不跳转官网）';
+    if(typeof window.设平台提示==='function') window.设平台提示(name);
   }
-  function forceDefaultProvider(){
-    var box=byId('出图引擎');
-    if(!box) return;
-    box.value='perchance';
-    box.disabled=true;
-    box.setAttribute('disabled','disabled');
-    window.__sushiImageProviderLock='perchance';
-    window.__sushiPreferredProvider='perchance';
-    try { localStorage.setItem('角色生成器_默认平台', 'perchance'); } catch(e) {}
-    providerChanged('perchance');
-    var img2=byId('图生图平台');
-    if(img2){ img2.value='perchance'; img2.disabled=true; img2.setAttribute('disabled','disabled'); }
-    var admin=byId('管理默认平台');
-    if(admin){ admin.value='perchance'; admin.disabled=true; admin.setAttribute('disabled','disabled'); }
-  }
-  function lockProvider(name){
-    void name;
-    window.__sushiLastEngine='perchance';
-    forceDefaultProvider();
+  function recordProvider(name){
+    window.__sushiLastEngine=name;
   }
   function watchImages(){
     var area=byId('图像输出'); if(!area || area.__sushiWatching) return;
     area.__sushiWatching=true;
     function scan(){
       var img=area.querySelector('img');
-      if(img && (img.complete ? img.naturalWidth>0 : true)) lockProvider(img.getAttribute('data-engine')||'horde');
+      if(img && (img.complete ? img.naturalWidth>0 : true)) recordProvider(img.getAttribute('data-engine')||'horde');
     }
-    area.addEventListener('load',function(e){ if(e.target && e.target.tagName==='IMG') lockProvider(e.target.getAttribute('data-engine')||'horde'); },true);
+    area.addEventListener('load',function(e){ if(e.target && e.target.tagName==='IMG') recordProvider(e.target.getAttribute('data-engine')||'horde'); },true);
     new MutationObserver(scan).observe(area,{childList:true,subtree:true});
     scan();
   }
@@ -143,23 +123,11 @@ function patchWorkshop(source) {
       }
     });
   }
-  function installProviderFallback(){
-    if(window.__sushiProviderFallbackInstalled) return;
-    window.__sushiProviderFallbackInstalled=true;
-    var original=window.开始生成;
-    if(typeof original!=='function') return;
-    window.开始生成=function(){
-      forceDefaultProvider();
-      return original.apply(this,arguments);
-    };
-  }
   function ready(){
     removePerchanceLinks();
-    forceDefaultProvider();
     installMemory();
     installAiImage();
     installRandomRecovery();
-    installProviderFallback();
     watchImages();
     var observer=new MutationObserver(function(){ removePerchanceLinks(); installAiImage(); watchImages(); });
     observer.observe(document.documentElement,{childList:true,subtree:true});
