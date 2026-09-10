@@ -10,7 +10,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const { ImageError, createImageService, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('./lib/image-service');
+const { ImageError, createImageService, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, sanitizeRealPrompt } = require('./lib/image-service');
 const workshopLoaderHtml = require('./lib/workshop-loader');
 const {
   openPostgres,
@@ -683,13 +683,37 @@ app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
     provider: 'horde',
     free: true,
     maxWaitSeconds: 600,
-    race: ['horde-real', 'sana', 'horde-anime', 'perchance'],
-    realRace: ['horde-real'],
+    glm: Boolean(GLM_API_KEY),
+    race: GLM_API_KEY ? ['glm', 'horde-real', 'sana', 'horde-anime', 'perchance'] : ['horde-real', 'sana', 'horde-anime', 'perchance'],
+    realRace: GLM_API_KEY ? ['glm', 'horde-real'] : ['horde-real'],
     animeRace: ['sana', 'horde-anime'],
   });
 });
 app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
 app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {
+  const style = String((req.body && req.body.style) || '').trim().toLowerCase();
+  if (style === 'glm') {
+    const prompt = sanitizeRealPrompt(String((req.body && req.body.prompt) || '').trim());
+    const width = Number(req.body && req.body.width) || 768;
+    const height = Number(req.body && req.body.height) || 768;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 80_000);
+    try {
+      const url = await glmGenerateImage(prompt, width, height, controller.signal);
+      return res.status(202).json({
+        id: crypto.randomUUID(),
+        state: 'done',
+        provider: 'glm',
+        image: { url },
+        expiresAt: Date.now() + 600000,
+      });
+    } catch (error) {
+      if (error && error.name === 'AbortError') throw new ImageError('智谱生图超时', 504, 'GLM_TIMEOUT');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   const job = await images.create(req.user.id, req.body);
   if (res.destroyed) { await images.cancel(req.user.id, job.id); return; }
   res.status(202).json(job);
@@ -1258,6 +1282,53 @@ const OPENROUTER_MODEL = String(process.env.OPENROUTER_MODEL || 'openrouter/free
 const GLM_API_KEY = String(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.ZAI_API_KEY || process.env.ZHIPU_API_KEY || '').trim();
 const GLM_MODEL = String(process.env.GLM_MODEL || 'glm-4.7-flash').trim() || 'glm-4.7-flash';
 const GLM_BASE_URL = String(process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/chat/completions').trim() || 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+const GLM_IMAGE_URL = String(process.env.GLM_IMAGE_URL || '').trim() || GLM_BASE_URL.replace(/\/chat\/completions\/?$/, '/images/generations');
+const GLM_IMAGE_MODEL = String(process.env.GLM_IMAGE_MODEL || 'cogview-3-flash').trim() || 'cogview-3-flash';
+
+function glmImageSize(width, height) {
+  const w = Number(width) || 1024;
+  const h = Number(height) || 1024;
+  const ratio = w / Math.max(1, h);
+  if (ratio > 1.35) return '1344x768';
+  if (ratio < 0.75) return '768x1344';
+  return '1024x1024';
+}
+
+async function glmGenerateImage(prompt, width, height, signal) {
+  if (!GLM_API_KEY) {
+    throw new ImageError('智谱 GLM 未配置，请填写 GLM_API_KEY', 503, 'NO_GLM');
+  }
+  const resp = await fetch(GLM_IMAGE_URL, {
+    method: 'POST',
+    signal,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + GLM_API_KEY,
+    },
+    body: JSON.stringify({
+      model: GLM_IMAGE_MODEL,
+      prompt: String(prompt || '').slice(0, 1600),
+      size: glmImageSize(width, height),
+    }),
+  });
+  const json = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const detail = String((json && (json.error && (json.error.message || json.error) || json.msg || json.message)) || '').slice(0, 180);
+    throw new ImageError(detail ? ('智谱生图失败：' + detail) : '智谱生图通道繁忙', resp.status === 429 ? 429 : (resp.status === 401 ? 401 : 502), 'GLM_IMAGE');
+  }
+  const item = json && json.data && json.data[0];
+  if (item && item.b64_json) return 'data:image/png;base64,' + String(item.b64_json).replace(/\s/g, '');
+  if (item && item.url) {
+    const imgResp = await fetch(item.url, { signal });
+    if (!imgResp.ok) throw new ImageError('智谱图片下载失败', 502, 'GLM_IMAGE');
+    const buf = Buffer.from(await imgResp.arrayBuffer());
+    if (!buf.length || buf.length < 2500) throw new ImageError('智谱返回图片无效', 502, 'GLM_IMAGE');
+    const mime = String(imgResp.headers.get('content-type') || 'image/png').split(';')[0].trim() || 'image/png';
+    return 'data:' + mime + ';base64,' + buf.toString('base64');
+  }
+  throw new ImageError('智谱未返回图片', 502, 'GLM_IMAGE');
+}
+
 const HORDE_TEXT_API_KEY = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
 const HORDE_TEXT_CLIENT = 'sushi-club:1.1.21:https://aihorde.net';
 
@@ -1358,6 +1429,8 @@ function normalizeImageModel(raw) {
 
 function pollinationsModelFor(model) {
   // Live Pollinations catalog is only `sana`. turbo/flux/flux-realism all aliased to the same dummy jpeg.
+  // Perchance no longer uses this proxy (official site is Cloudflare-blocked / unembeddable).
+  // Leftover GET /api/workshop/image?model=perchance from cached clients still maps to sana.
   void model;
   return 'sana';
 }
@@ -1710,40 +1783,56 @@ app.post('/api/workshop/img2img', async (req, res) => {
   }
   const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
-  const width = Math.min(1024, Math.max(256, Number(req.body.width) || 768));
-  const height = Math.min(1024, Math.max(256, Number(req.body.height) || 768));
-  const strength = Math.min(0.95, Math.max(0.05, Number(req.body.strength) || 0.52));
-  const seed = Number.isFinite(Number(req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
-  const body = {
-    prompt,
-    source_image: sourceImage,
-    source_processing: 'img2img',
-    nsfw: false,
-    censor_nsfw: true,
-    params: {
-      n: 1,
+  const snap = (value, fallback) => {
+    const number = Math.min(1024, Math.max(256, Number(value) || fallback));
+    return Math.round(number / 64) * 64;
+  };
+  const width = snap(req.body && req.body.width, 768);
+  const height = snap(req.body && req.body.height, 768);
+  const strength = Math.min(0.95, Math.max(0.05, Number(req.body && req.body.strength) || 0.52));
+  const seed = Number.isFinite(Number(req.body && req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
+  const styleRaw = String((req.body && (req.body.style || req.body.engine || req.body.platform)) || '').trim().toLowerCase();
+  const isAnime = /anime|sana/.test(styleRaw);
+  let payload;
+  try {
+    payload = generationPayload({
+      prompt,
       width,
       height,
-      steps: 20,
-      denoising_strength: strength,
-      ...(seed === undefined ? {} : { seed: String(seed) }),
-    },
-  };
+      sourceImage: 'data:image/png;base64,' + sourceImage,
+      strength,
+      seed: seed === undefined ? undefined : String(Math.abs(seed)).slice(0, 10),
+      style: isAnime ? 'anime' : 'real',
+    });
+  } catch (error) {
+    return workshopImageError(res, error.status || 400, error.message || '图生图参数无效');
+  }
+  const hordeKey = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 90_000);
   try {
-    const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: '0000000000',
-        'Client-Agent': 'woshisushi:1.0:server-img2img',
-      },
-      body: JSON.stringify(body),
-    });
-    const acceptedJson = await accepted.json().catch(() => ({}));
-    if (!accepted.ok || !acceptedJson.id) {
+    let accepted = null;
+    let acceptedJson = {};
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: hordeKey,
+          'Client-Agent': 'woshisushi:1.1.39:server-img2img',
+        },
+        body: JSON.stringify(payload),
+      });
+      acceptedJson = await accepted.json().catch(() => ({}));
+      if (accepted.ok && acceptedJson.id) break;
+      if (accepted.status === 429 && attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 800 + attempt * 700));
+        continue;
+      }
+      return workshopImageError(res, accepted.status === 429 ? 429 : 502, '图生图服务器未受理请求');
+    }
+    if (!accepted || !accepted.ok || !acceptedJson.id) {
       return workshopImageError(res, 502, '图生图服务器未受理请求');
     }
     for (let i = 0; i < 75; i += 1) {
@@ -1751,8 +1840,8 @@ app.post('/api/workshop/img2img', async (req, res) => {
       const status = await fetch(`https://aihorde.net/api/v2/generate/status/${encodeURIComponent(acceptedJson.id)}`, {
         signal: controller.signal,
         headers: {
-          apikey: '0000000000',
-          'Client-Agent': 'woshisushi:1.0:server-img2img',
+          apikey: hordeKey,
+          'Client-Agent': 'woshisushi:1.1.39:server-img2img',
         },
       });
       const statusJson = await status.json().catch(() => ({}));
@@ -1760,7 +1849,7 @@ app.post('/api/workshop/img2img', async (req, res) => {
       if (statusJson.faulted) return workshopImageError(res, 502, '图生图服务器生成失败');
       if (image) {
         res.set('Cache-Control', 'no-store');
-        return res.json({ url: image, provider: 'aihorde' });
+        return res.json({ url: image, provider: 'aihorde', style: isAnime ? 'anime' : 'real' });
       }
     }
     return workshopImageError(res, 504, '图生图服务器排队超时');

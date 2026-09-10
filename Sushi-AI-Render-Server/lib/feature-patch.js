@@ -77,14 +77,15 @@ function patchWorkshop(source) {
     var tip=byId('平台提示');
     if(!tip) return;
     var messages={
-      'auto-real':'自动抢出 · 写实：只走 Horde 写实模型，不含动漫通道',
+      'auto-real':'自动抢出 · 写实：智谱优先，失败再走 Horde 写实，不含动漫通道',
       'auto-anime':'自动抢出 · 动漫：Sana 与 Horde 动漫同时开跑，先到先得',
-      auto:'自动抢出 · 写实：只走 Horde 写实模型，不含动漫通道',
+      auto:'自动抢出 · 写实：智谱优先，失败再走 Horde 写实，不含动漫通道',
       'horde-real':'Horde · 写实 · 免费共享算力，繁忙时需要排队',
       horde:'Horde · 写实 · 免费共享算力，繁忙时需要排队',
       'horde-anime':'Horde · 动漫 · 免费共享算力，繁忙时需要排队',
       sana:'Sana · 动漫/插画 · Pollinations 目前唯一可用模型',
-      perchance:'Perch · 独立通道 · 应用内生成（不跳转官网，偏插画）'
+      glm:'智谱 GLM · 写实 · CogView 文生图，不走动漫模型',
+      perchance:'Perch · 独立通道 · 官网无法内嵌，改用写实后端（不跳转官网）'
     };
     tip.textContent=messages[name]||messages['auto-real'];
   }
@@ -96,6 +97,7 @@ function patchWorkshop(source) {
     if(saved==='官方'||saved==='perch') saved='perchance';
     if(saved==='anishort') saved='sana';
     if(saved==='turbo'||saved==='flux'||saved==='flux-realism'||saved==='flux-real'||saved==='auto'||saved==='horde'||saved==='zimage'||saved==='sdxl'||saved==='krea2'||saved==='liblib') saved='auto-real';
+    if(saved==='zhipu'||saved==='zhipuai'||saved==='chatglm'||saved==='cogview') saved='glm';
     if(!saved) saved='auto-real';
     if(!box.querySelector('option[value="'+saved+'"]')) saved='auto-real';
     box.value=saved;
