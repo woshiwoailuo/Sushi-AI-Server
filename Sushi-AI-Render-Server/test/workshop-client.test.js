@@ -132,21 +132,23 @@ test('the current Chinese prompt is translated before submission, never replaced
   assert.doesNotMatch(payload.prompt, /A stale unrelated scene/);
 });
 
-test('failed translation preserves core; unavailable Perchance stays selected without redirects', async t => {
+test('failed translation preserves core; Perch stays selected and generates in-app', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('角色描述').value = '窗边的小猫';
   f.w.调用开源翻译 = async () => { throw new Error('translation offline'); };
   await f.w.开始生成();
   const payload = JSON.parse(f.calls.find(c => c.method === 'POST' && String(c.url).includes('/api/images')).body);
   assert.match(payload.prompt, /窗边的小猫/);
-  const count = f.calls.length;
+  const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length;
   const box = f.w.document.getElementById('出图引擎');
   box.value = 'perchance';
-  f.w.open = () => { throw new Error('unexpected redirect'); };
+  const opened = [];
+  f.w.open = (url) => { opened.push(String(url)); return null; };
   await f.w.开始生成();
   assert.equal(box.value, 'perchance');
-  assert.equal(f.calls.length, count);
-  assert.match(f.text(), /官方生图组件不可用.*未切换平台/);
+  assert.equal(opened.length, 0, 'must never open perchance.org');
+  assert.ok(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length > posts);
+  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
 test('Horde selection remains unchanged after a successful generation', async t => {
@@ -270,6 +272,22 @@ test('Perchance uses its official component when available without Horde calls',
   assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 0);
 });
 
+test('Perch without official plugin uses Horde photoreal in-app', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
+  const opened = [];
+  f.w.open = (url) => { opened.push(String(url)); return null; };
+  await f.w.开始生成();
+  assert.equal(opened.length, 0, 'must never open perchance.org');
+  assert.equal(typeof f.w.update, 'undefined');
+  const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images'));
+  assert.ok(posts.length >= 1, 'in-app Perch uses Horde photoreal');
+  const payload = JSON.parse(posts[0].body);
+  assert.equal(payload.style, 'real');
+  assert.match(payload.prompt, /photorealistic RAW photo/i);
+  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
+});
+
 
 test('failed manual Horde request does not call Sana or Perchance', async t => {
   const f = await setup(t, () => response({error:'upstream unavailable'}, 502));
@@ -300,14 +318,22 @@ test('server keeps leftover Pollinations aliases on sana; Perchance no longer ro
 });
 
 
-test('failed Perchance attempt may be retried immediately on the same platform', async t => {
-  const f = await setup(t, () => { throw new Error('unexpected upstream'); });
+test('failed Perchance official plugin falls back to Horde photoreal', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
-  let calls = 0; f.w.update = () => { calls++; throw new Error('official offline'); };
-  await f.w.开始生成(); await f.w.开始生成();
-  assert.equal(calls, 2); assert.equal(box.value, 'perchance');
-  assert.equal(f.w.document.getElementById('生成按钮').disabled, false);
-  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, 0);
+  let plugin = 0;
+  f.w.update = () => { plugin++; throw new Error('official offline'); };
+  const opened = [];
+  f.w.open = (url) => { opened.push(String(url)); return null; };
+  await f.w.开始生成();
+  assert.equal(plugin, 1);
+  assert.equal(box.value, 'perchance');
+  assert.equal(opened.length, 0, 'must never open perchance.org');
+  const posts = f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images'));
+  assert.ok(posts.length >= 1, 'falls back to Horde photoreal');
+  const payload = JSON.parse(posts[0].body);
+  assert.equal(payload.style, 'real');
+  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
 test('photorealPrompt enriches by default but style-keyword bypass keeps anime/二次元/插画', async t => {
