@@ -701,6 +701,7 @@
             var job = created && (created.job || created);
             if (!job || !job.id) throw new Error('工坊未受理出图，请稍后重试');
             var deadline = Date.now() + 180000;
+            var firstPoll = true;
             while (Date.now() < deadline) {
               var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
               var cur = st && (st.job || st);
@@ -710,7 +711,8 @@
               if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
                 throw new Error((cur && cur.error) || '出图失败');
               }
-              await new Promise(function (r) { setTimeout(r, 1200); });
+              await new Promise(function (r) { setTimeout(r, firstPoll ? 400 : 800); });
+              firstPoll = false;
             }
             throw new Error('出图超时，请稍后重试');
           } catch (err) {

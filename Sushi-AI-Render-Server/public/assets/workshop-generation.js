@@ -149,16 +149,21 @@
     })]).finally(function () { clearTimeout(timer); });
   }
 
+  var promptCache = Object.create(null);
   async function promptFor(run) {
     var source = run.description;
     if (randomPair && randomPair.chinese === source) return randomPair.english;
     if (!/[\u4e00-\u9fff]/.test(source)) return source;
+    if (promptCache[source]) return promptCache[source];
     if (source.length <= 400 && typeof window.调用开源翻译 === 'function') {
       status('正在翻译画面描述', '翻译完成后提交；连接失败时使用本次原文。', true);
       try {
         var translated = await within(window.调用开源翻译(source, 'en'), 8000);
         ensureActive(run);
-        if (translated && !/[\u4e00-\u9fff]/.test(translated)) return translated;
+        if (translated && !/[\u4e00-\u9fff]/.test(translated)) {
+          promptCache[source] = translated;
+          return translated;
+        }
       } catch (e) { ensureActive(run); }
     }
     run.translationNote = '翻译未完成，已使用本次原文；英文描述通常更稳定。';
@@ -258,11 +263,17 @@
 
   async function poll(run, job, providerSignal) {
     var errors = 0;
+    var first = true;
     while (!['done', 'failed', 'cancelled'].includes(job.state)) {
       ensureActive(run);
       if (Date.now() > job.expiresAt + 35000) throw new Error('任务等待超时，请稍后重试');
-      progress(run, job);
-      await pause(run, 1200);
+      if (!first) {
+        progress(run, job);
+        await pause(run, 800);
+      } else {
+        progress(run, job);
+      }
+      first = false;
       ensureActive(run);
       try {
         job = await api('/' + encodeURIComponent(job.id), { signal: providerSignal || run.controller.signal });
@@ -274,7 +285,7 @@
         errors += 1;
         if (errors >= 4) throw error;
         status('连接暂时中断，正在重新查询', '不会重复提交生图任务。', true);
-        await pause(run, Math.min(3000 + errors * 1500, 7000));
+        await pause(run, Math.min(2000 + errors * 1000, 5000));
       }
     }
     ensureActive(run);
@@ -885,30 +896,33 @@
           $('说明英文').textContent = (randomPair && randomPair.displayEnglish) || value('英文描述') || '';
         }
       }
+      var pendingLoads = [];
       while (run.completed < run.total) {
         ensureActive(run);
-        if (run.completed > 0 && !restored) {
-          status('准备下一张', '间隔片刻以免通道限流。', true);
-          await pause(run, 700);
-        }
         if (restored) {
           var done = await poll(run, run.job);
           status('图片已生成，正在加载', '', true);
-          await addImage(run, done.image, (done.provider || 'horde'));
+          pendingLoads.push(addImage(run, done.image, (done.provider || 'horde')));
         } else {
           var result = await generateOne(run, run.payload.prompt, run.completed);
           ensureActive(run);
-          status('图片已生成，正在加载', '', true);
-          await addImage(run, result, result.engine);
+          status(
+            '图片已生成，正在加载',
+            run.completed + 1 < run.total ? '下一张已开始提交，不空等本张下载。' : '',
+            true
+          );
+          pendingLoads.push(addImage(run, result, result.engine));
         }
         ensureActive(run);
         run.completed += 1;
         restored = false;
       }
+      await Promise.all(pendingLoads);
       // Hide the bulky status card so images sit directly under 「角色画廊」.
       hideStatusPanel();
     } catch (error) {
       if (active !== run) return;
+      try { await Promise.allSettled(pendingLoads || []); } catch (e) {}
       var cleanupError = '';
       try { await stopJob(run); } catch (e) { cleanupError = ' 未收到取消确认，任务最迟在 10 分钟上限后结束。'; }
       var title = run.cancelled ? '已停止本轮生成' : (run.completed ? '已生成 ' + run.completed + ' 张，后续未完成' : '本次未完成');

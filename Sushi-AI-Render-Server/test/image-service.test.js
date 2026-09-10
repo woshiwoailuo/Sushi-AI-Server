@@ -51,6 +51,8 @@ test('style pins Horde models for 写实 vs 动漫 without changing prompt text'
   assert.equal(anime.censor_nsfw, false);
   assert.ok(HORDE_REAL_MODELS.includes('AlbedoBase XL (SDXL)'));
   assert.ok(HORDE_REAL_MODELS.includes('AbsoluteReality'));
+  assert.ok(HORDE_REAL_MODELS.includes('Flux.1-Schnell fp8 (Compact)'));
+  assert.equal(HORDE_REAL_MODELS.includes('AlbedoBase XL 3.1'), false);
   assert.equal(HORDE_REAL_MODELS.some((name) => /deliberate|anima|anything|counterfeit|illustrious|wai-nsfw/i.test(name)), false);
   assert.ok(HORDE_ANIME_MODELS.includes('WAI-NSFW-illustrious-SDXL'));
   const forced = generationPayload({ prompt: 'anime style girl with red hair', style: 'real', width: 512, height: 512 });
