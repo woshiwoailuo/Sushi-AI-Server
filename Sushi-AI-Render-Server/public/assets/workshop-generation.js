@@ -293,60 +293,177 @@
     return job;
   }
 
-  function addImage(run, result, engine) {
-    return new Promise(function (resolve, reject) {
-      var card = document.createElement('figure');
-      card.className = '生图卡片';
-      var img = document.createElement('img');
-      img.alt = run.description || '生成的图片';
-      img.referrerPolicy = 'no-referrer';
-      img.setAttribute('data-engine', engine || 'horde');
-      var timer = setTimeout(failed, 45000);
-      var settled = false;
-      function cleanup() { clearTimeout(timer); img.onload = null; img.onerror = null; run.controller.signal.removeEventListener('abort', cancelled); }
-      function cancelled() {
-        if (settled) return;
-        settled = true; cleanup(); reject(new Error('已取消生成'));
-      }
-      function loaded() {
-        if (settled || !img.naturalWidth) return;
-        settled = true; cleanup();
-        lockImageProvider(engine || 'horde');
-        resolve();
-      }
-      function failed() {
-        if (settled) return;
-        settled = true; cleanup();
-        img.hidden = true;
-        var note = document.createElement('figcaption');
-        note.textContent = '图片已生成，但下载失败。';
-        var retry = document.createElement('button');
-        retry.type = 'button'; retry.className = '次按钮'; retry.textContent = '重新加载图片';
-        retry.onclick = function () {
-          retry.disabled = true; note.textContent = '正在重新加载…';
-          var retryTimer = setTimeout(retryFailed, 30000);
-          function retryFailed() {
-            clearTimeout(retryTimer); img.onload = null; img.onerror = null;
-            retry.disabled = false; note.textContent = '加载失败，请检查网络后重试。';
-          }
-          img.onload = function () {
-            clearTimeout(retryTimer); img.onload = null; img.onerror = null;
-            img.hidden = false; note.remove(); retry.remove();
-          };
-          img.onerror = retryFailed;
-          img.removeAttribute('src'); img.src = result.url;
-        };
-        card.append(note, retry);
-        var error = new Error('图片已生成，但未能加载。请点图片下方的“重新加载图片”，不会重复生成或扣除额度。');
-        error.code = 'IMAGE_DOWNLOAD'; reject(error);
-      }
-      img.onload = loaded; img.onerror = failed;
-      run.controller.signal.addEventListener('abort', cancelled, { once: true });
-      card.appendChild(img); $('图像输出').appendChild(card);
-      img.src = result.url;
-      if (img.complete && img.naturalWidth) loaded();
-    });
+  function galleryUrl(node) {
+    if (!node) return '';
+    var card = node.closest ? node.closest('.生图卡片') : null;
+    var img = node.tagName === 'IMG' ? node : (card && card.querySelector('img'));
+    return (card && card.getAttribute('data-full-url'))
+      || (img && img.getAttribute('data-full-url'))
+      || (img && (img.currentSrc || img.src))
+      || '';
   }
+
+  function ensurePreviewLayer() {
+    var layer = document.getElementById('图片预览层');
+    if (layer) return layer;
+    layer = document.createElement('div');
+    layer.id = '图片预览层';
+    layer.className = '图片预览层';
+    layer.setAttribute('hidden', '');
+    layer.innerHTML = '<button type="button" class="图片预览关闭" aria-label="关闭预览">×</button>'
+      + '<figure class="图片预览框">'
+      + '<img alt="预览大图" referrerpolicy="no-referrer">'
+      + '<figcaption class="图片预览状态"></figcaption>'
+      + '<button type="button" class="次按钮 图片预览重试" hidden>重新加载图片</button>'
+      + '</figure>';
+    document.body.appendChild(layer);
+    layer.addEventListener('click', function (e) {
+      if (e.target === layer || (e.target.classList && e.target.classList.contains('图片预览关闭'))) {
+        closeImagePreview();
+      }
+    });
+    var retry = layer.querySelector('.图片预览重试');
+    retry.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var url = layer.getAttribute('data-full-url');
+      var id = layer.getAttribute('data-thumb-id');
+      var thumb = id ? document.getElementById(id) : null;
+      if (url) loadPreviewImage(url, thumb);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeImagePreview();
+    });
+    return layer;
+  }
+
+  function closeImagePreview() {
+    var layer = document.getElementById('图片预览层');
+    if (!layer) return;
+    layer.setAttribute('hidden', '');
+    layer.classList.remove('开');
+  }
+
+  function markCardFailed(card, url, thumb) {
+    if (!card || card.querySelector('.生图重试')) return;
+    var note = document.createElement('figcaption');
+    note.className = '生图失败';
+    note.textContent = '图片已生成，但下载失败。';
+    var retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = '次按钮 生图重试';
+    retry.textContent = '重新加载图片';
+    retry.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openImagePreview(url, thumb);
+    });
+    card.append(note, retry);
+  }
+
+  function loadPreviewImage(url, thumb) {
+    var layer = ensurePreviewLayer();
+    var img = layer.querySelector('img');
+    var note = layer.querySelector('.图片预览状态');
+    var retry = layer.querySelector('.图片预览重试');
+    note.textContent = '正在加载大图…';
+    retry.hidden = true;
+    img.hidden = true;
+    img.onload = function () {
+      img.onload = null;
+      img.onerror = null;
+      if (!img.naturalWidth) {
+        img.dispatchEvent(new Event('error'));
+        return;
+      }
+      img.hidden = false;
+      note.textContent = '';
+      if (thumb) {
+        thumb.hidden = false;
+        if ((thumb.getAttribute('src') || '') !== url) thumb.src = url;
+        var card = thumb.closest && thumb.closest('.生图卡片');
+        if (card) {
+          card.classList.add('已加载');
+          var hint = card.querySelector('.点击查看');
+          if (hint) hint.hidden = true;
+          var fail = card.querySelector('.生图失败');
+          var failBtn = card.querySelector('.生图重试');
+          if (fail) fail.remove();
+          if (failBtn) failBtn.remove();
+        }
+      }
+    };
+    img.onerror = function () {
+      img.onload = null;
+      img.onerror = null;
+      img.hidden = true;
+      note.textContent = '图片已生成，但下载失败。';
+      retry.hidden = false;
+      if (thumb) {
+        var card = thumb.closest && thumb.closest('.生图卡片');
+        if (card) markCardFailed(card, url, thumb);
+      }
+    };
+    img.removeAttribute('src');
+    img.src = url;
+  }
+
+  function openImagePreview(url, thumb) {
+    if (!url) return;
+    var layer = ensurePreviewLayer();
+    layer.removeAttribute('hidden');
+    layer.classList.add('开');
+    layer.setAttribute('data-full-url', url);
+    if (thumb) {
+      if (!thumb.id) thumb.id = '生图预览_' + String(Date.now()) + '_' + Math.floor(Math.random() * 10000);
+      layer.setAttribute('data-thumb-id', thumb.id);
+    } else {
+      layer.removeAttribute('data-thumb-id');
+    }
+    loadPreviewImage(url, thumb);
+  }
+
+  function bindGalleryPreview() {
+    function bind(area) {
+      if (!area || area.getAttribute('data-preview') === '1') return;
+      area.setAttribute('data-preview', '1');
+      area.addEventListener('click', function (event) {
+        if (event.target.closest && event.target.closest('button')) return;
+        var card = event.target.closest ? event.target.closest('.生图卡片') : null;
+        var img = event.target.closest ? event.target.closest('img') : null;
+        var url = galleryUrl(card || img);
+        if (!url) return;
+        event.preventDefault();
+        openImagePreview(url, (card && card.querySelector('img')) || img);
+      });
+    }
+    bind($('图像输出'));
+    bind($('官方画廊'));
+  }
+
+  function addImage(run, result, engine) {
+    var url = result && result.url;
+    if (!url) return;
+    bindGalleryPreview();
+    var card = document.createElement('figure');
+    card.className = '生图卡片';
+    card.setAttribute('data-full-url', url);
+    card.setAttribute('data-engine', engine || 'horde');
+    card.setAttribute('data-lazy', '1');
+    var img = document.createElement('img');
+    img.alt = run.description || '生成的图片';
+    img.referrerPolicy = 'no-referrer';
+    img.setAttribute('data-engine', engine || 'horde');
+    img.setAttribute('data-full-url', url);
+    var hint = document.createElement('figcaption');
+    hint.className = '点击查看';
+    hint.textContent = '点击查看大图';
+    card.append(img, hint);
+    $('图像输出').appendChild(card);
+    lockImageProvider(engine || 'horde');
+    try { if (typeof window.收入历史 === 'function') window.收入历史(url); } catch (e) {}
+  }
+
+  window.打开图片预览 = openImagePreview;
+
 
   async function stopJob(run) {
     if (!run.job || ['done', 'failed', 'cancelled'].includes(run.job.state)) return;
@@ -896,33 +1013,24 @@
           $('说明英文').textContent = (randomPair && randomPair.displayEnglish) || value('英文描述') || '';
         }
       }
-      var pendingLoads = [];
       while (run.completed < run.total) {
         ensureActive(run);
         if (restored) {
           var done = await poll(run, run.job);
-          status('图片已生成，正在加载', '', true);
-          pendingLoads.push(addImage(run, done.image, (done.provider || 'horde')));
+          addImage(run, done.image, (done.provider || 'horde'));
         } else {
           var result = await generateOne(run, run.payload.prompt, run.completed);
           ensureActive(run);
-          status(
-            '图片已生成，正在加载',
-            run.completed + 1 < run.total ? '下一张已开始提交，不空等本张下载。' : '',
-            true
-          );
-          pendingLoads.push(addImage(run, result, result.engine));
+          addImage(run, result, result.engine);
         }
         ensureActive(run);
         run.completed += 1;
         restored = false;
       }
-      await Promise.all(pendingLoads);
-      // Hide the bulky status card so images sit directly under 「角色画廊」.
+      // Hide the bulky status card so placeholders sit directly under 「角色画廊」.
       hideStatusPanel();
     } catch (error) {
       if (active !== run) return;
-      try { await Promise.allSettled(pendingLoads || []); } catch (e) {}
       var cleanupError = '';
       try { await stopJob(run); } catch (e) { cleanupError = ' 未收到取消确认，任务最迟在 10 分钟上限后结束。'; }
       var title = run.cancelled ? '已停止本轮生成' : (run.completed ? '已生成 ' + run.completed + ' 张，后续未完成' : '本次未完成');
@@ -1091,6 +1199,7 @@
     }
     window.设平台提示(window.当前引擎());
     window.__sushiReady = true; window.__sushiLoadError = '';
+    bindGalleryPreview();
     controls(true); $('取消生成按钮').hidden = true;
     status('正在连接生图服务', '如果服务器刚休眠，首次连接会自动等待并重试。', true);
     try {
