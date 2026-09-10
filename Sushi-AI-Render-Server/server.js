@@ -10,7 +10,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const { ImageError, createImageService, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, sanitizeRealPrompt } = require('./lib/image-service');
+const { ImageError, createImageService, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('./lib/image-service');
 const workshopLoaderHtml = require('./lib/workshop-loader');
 const {
   openPostgres,
@@ -683,37 +683,13 @@ app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
     provider: 'horde',
     free: true,
     maxWaitSeconds: 600,
-    glm: Boolean(GLM_API_KEY),
-    race: GLM_API_KEY ? ['glm', 'horde-real', 'sana', 'horde-anime', 'perchance'] : ['horde-real', 'sana', 'horde-anime', 'perchance'],
-    realRace: GLM_API_KEY ? ['glm', 'horde-real'] : ['horde-real'],
+    race: ['horde-real', 'sana', 'horde-anime', 'perchance'],
+    realRace: ['horde-real'],
     animeRace: ['sana', 'horde-anime'],
   });
 });
 app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
 app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {
-  const style = String((req.body && req.body.style) || '').trim().toLowerCase();
-  if (style === 'glm') {
-    const prompt = sanitizeRealPrompt(String((req.body && req.body.prompt) || '').trim());
-    const width = Number(req.body && req.body.width) || 768;
-    const height = Number(req.body && req.body.height) || 768;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 80_000);
-    try {
-      const url = await glmGenerateImage(prompt, width, height, controller.signal);
-      return res.status(202).json({
-        id: crypto.randomUUID(),
-        state: 'done',
-        provider: 'glm',
-        image: { url },
-        expiresAt: Date.now() + 600000,
-      });
-    } catch (error) {
-      if (error && error.name === 'AbortError') throw new ImageError('智谱生图超时', 504, 'GLM_TIMEOUT');
-      throw error;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
   const job = await images.create(req.user.id, req.body);
   if (res.destroyed) { await images.cancel(req.user.id, job.id); return; }
   res.status(202).json(job);
@@ -1282,52 +1258,6 @@ const OPENROUTER_MODEL = String(process.env.OPENROUTER_MODEL || 'openrouter/free
 const GLM_API_KEY = String(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.ZAI_API_KEY || process.env.ZHIPU_API_KEY || '').trim();
 const GLM_MODEL = String(process.env.GLM_MODEL || 'glm-4.7-flash').trim() || 'glm-4.7-flash';
 const GLM_BASE_URL = String(process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/chat/completions').trim() || 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-const GLM_IMAGE_URL = String(process.env.GLM_IMAGE_URL || '').trim() || GLM_BASE_URL.replace(/\/chat\/completions\/?$/, '/images/generations');
-const GLM_IMAGE_MODEL = String(process.env.GLM_IMAGE_MODEL || 'cogview-3-flash').trim() || 'cogview-3-flash';
-
-function glmImageSize(width, height) {
-  const w = Number(width) || 1024;
-  const h = Number(height) || 1024;
-  const ratio = w / Math.max(1, h);
-  if (ratio > 1.35) return '1344x768';
-  if (ratio < 0.75) return '768x1344';
-  return '1024x1024';
-}
-
-async function glmGenerateImage(prompt, width, height, signal) {
-  if (!GLM_API_KEY) {
-    throw new ImageError('智谱 GLM 未配置，请填写 GLM_API_KEY', 503, 'NO_GLM');
-  }
-  const resp = await fetch(GLM_IMAGE_URL, {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer ' + GLM_API_KEY,
-    },
-    body: JSON.stringify({
-      model: GLM_IMAGE_MODEL,
-      prompt: String(prompt || '').slice(0, 1600),
-      size: glmImageSize(width, height),
-    }),
-  });
-  const json = await resp.json().catch(() => ({}));
-  if (!resp.ok) {
-    const detail = String((json && (json.error && (json.error.message || json.error) || json.msg || json.message)) || '').slice(0, 180);
-    throw new ImageError(detail ? ('智谱生图失败：' + detail) : '智谱生图通道繁忙', resp.status === 429 ? 429 : (resp.status === 401 ? 401 : 502), 'GLM_IMAGE');
-  }
-  const item = json && json.data && json.data[0];
-  if (item && item.b64_json) return 'data:image/png;base64,' + String(item.b64_json).replace(/\s/g, '');
-  if (item && item.url) {
-    const imgResp = await fetch(item.url, { signal });
-    if (!imgResp.ok) throw new ImageError('智谱图片下载失败', 502, 'GLM_IMAGE');
-    const buf = Buffer.from(await imgResp.arrayBuffer());
-    if (!buf.length || buf.length < 2500) throw new ImageError('智谱返回图片无效', 502, 'GLM_IMAGE');
-    const mime = String(imgResp.headers.get('content-type') || 'image/png').split(';')[0].trim() || 'image/png';
-    return 'data:' + mime + ';base64,' + buf.toString('base64');
-  }
-  throw new ImageError('智谱未返回图片', 502, 'GLM_IMAGE');
-}
 
 const HORDE_TEXT_API_KEY = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
 const HORDE_TEXT_CLIENT = 'sushi-club:1.1.21:https://aihorde.net';

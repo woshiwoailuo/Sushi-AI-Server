@@ -115,8 +115,8 @@ test('homepage image path uses workshop Horde API and never opens workshop loade
   const genFn = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
   assert.ok(genFn.length > 200);
   assert.match(genFn, /style: 'real'/);
-  assert.match(genFn, /style: 'glm'/);
-  assert.match(genFn, /chatReady\.glm/);
+  assert.doesNotMatch(genFn, /style: 'glm'/);
+  assert.doesNotMatch(genFn, /chatReady\.glm/);
   assert.doesNotMatch(genFn, /style: style/);
   assert.doesNotMatch(genFn, /style = 'anime'/);
   assert.doesNotMatch(genFn, /\/api\/workshop\/ticket/);

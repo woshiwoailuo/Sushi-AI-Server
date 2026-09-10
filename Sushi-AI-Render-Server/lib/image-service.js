@@ -78,7 +78,7 @@ function hordeModelsFor(input = {}, model = '') {
   const style = String((input && input.style) || '').trim().toLowerCase();
   const hasSource = !!(input && input.sourceImage);
   if (style === 'anime' || style === 'horde-anime' || style === 'auto-anime') return HORDE_ANIME_MODELS.slice();
-  if (style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance' || style === 'glm') {
+  if (style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance') {
     return hasSource ? HORDE_IMG2IMG_REAL_MODELS.slice() : HORDE_REAL_MODELS.slice();
   }
   // Unstyled img2img used to omit models → Horde picked WAI-NSFW-illustrious (anime). Always pin photoreal.
@@ -100,7 +100,7 @@ function generationPayload(input = {}, model = '') {
   };
   const negativeRaw = String(input.negativePrompt || '').trim().slice(0, 1000);
   const style = String((input && input.style) || '').trim().toLowerCase();
-  const isReal = style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance' || style === 'glm';
+  const isReal = style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance';
   let prompt = isReal ? sanitizeRealPrompt(promptRaw) : promptRaw;
   if (prompt.length > 2000) prompt = prompt.slice(0, 2000);
   let negative = negativeRaw;

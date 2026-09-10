@@ -697,26 +697,6 @@
     throw lastError || new Error(engineLabel(reported) + ' 提交失败');
   }
 
-  async function generateGlm(run, prompt, index, providerSignal) {
-    if (!glmImageReady) {
-      var missing = new Error('智谱生图未配置');
-      missing.status = 503;
-      throw missing;
-    }
-    ensureActive(run);
-    var payload = Object.assign({}, run.payload, {
-      prompt: prompt,
-      style: 'glm'
-    });
-    if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
-    status('正在用 智谱 GLM 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', 'CogView 写实通道，不走动漫模型。', true);
-    var job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: providerSignal || run.controller.signal });
-    if (job && job.state === 'done' && job.image && job.image.url) {
-      return { url: job.image.url, engine: 'glm', job: job };
-    }
-    throw new Error('智谱未返回图片');
-  }
-
   // Workshop image generation never imposes an application-side cool-down.
   // Upstream 429/5xx responses end the current attempt immediately; the user may retry.
   var ENGINE_COOLDOWN_MS = 0;
@@ -761,22 +741,17 @@
     return msgs.length ? msgs.join('；') : '自动抢出失败：各平台均未成功';
   }
 
-  var glmImageReady = false;
   var REAL_RACE_ENGINES = ['horde-real'];
   var ANIME_RACE_ENGINES = ['sana', 'horde-anime'];
   var FREE_RACE_ENGINES = REAL_RACE_ENGINES;
 
   function applyImageConfig(cfg) {
-    glmImageReady = !!(cfg && cfg.glm);
     var glmOpt = document.querySelector('#出图引擎 option[value="glm"]');
     var glmAdmin = document.querySelector('#管理默认平台 option[value="glm"]');
-    if (glmOpt) glmOpt.hidden = !glmImageReady;
-    if (glmAdmin) glmAdmin.hidden = !glmImageReady;
-    if (Array.isArray(cfg && cfg.realRace) && cfg.realRace.length) {
-      REAL_RACE_ENGINES = cfg.realRace.slice();
-    } else {
-      REAL_RACE_ENGINES = glmImageReady ? ['glm', 'horde-real'] : ['horde-real'];
-    }
+    if (glmOpt && glmOpt.parentNode) glmOpt.parentNode.removeChild(glmOpt);
+    if (glmAdmin && glmAdmin.parentNode) glmAdmin.parentNode.removeChild(glmAdmin);
+    var race = Array.isArray(cfg && cfg.realRace) ? cfg.realRace.filter(function (n) { return n && n !== 'glm'; }) : [];
+    REAL_RACE_ENGINES = race.length ? race : ['horde-real'];
     FREE_RACE_ENGINES = REAL_RACE_ENGINES;
   }
 
@@ -788,7 +763,7 @@
     if (name === 'anishort') return 'sana';
     if (name === 'horde') return 'horde-real';
     if (name === 'auto') return 'auto-real';
-    if (name === 'zhipu' || name === 'zhipuai' || name === 'chatglm' || name === 'cogview') return 'glm';
+    if (name === 'glm' || name === 'zhipu' || name === 'zhipuai' || name === 'chatglm' || name === 'cogview') return 'auto-real';
     return name || 'auto-real';
   }
 
@@ -803,8 +778,7 @@
     var map = {
       auto: '自动抢出 · 写实', 'auto-real': '自动抢出 · 写实', 'auto-anime': '自动抢出 · 动漫',
       turbo: 'Sana', horde: 'Horde · 写实', 'horde-real': 'Horde · 写实', 'horde-anime': 'Horde · 动漫',
-      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perch · 独立通道',
-      glm: '智谱 GLM · 写实'
+      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perch · 独立通道'
     };
     return map[name] || name;
   }
@@ -914,30 +888,7 @@
     else prompt = forcePhotorealPrompt(prompt);
     run.payload.style = family === 'anime' ? 'anime' : 'real';
     run.payload.prompt = prompt;
-    if (engine === 'auto' || engine === 'auto-real') {
-      if (glmImageReady) {
-        try {
-          return await runWithProviderBudget(run, 'glm', function (signal) {
-            return generateGlm(run, prompt, index, signal);
-          }, 80000);
-        } catch (error) {
-          if (run.cancelled || /取消|lost-race|已取消生成/.test(String(error && error.message || ''))) throw error;
-          status('智谱暂时无响应，改走 Horde 写实', '保留核心描述，切换写实模型重试。', true);
-        }
-      }
-      engine = 'horde-real';
-    }
-    if (engine === 'glm') {
-      try {
-        return await runWithProviderBudget(run, 'glm', function (signal) {
-          return generateGlm(run, prompt, index, signal);
-        }, 80000);
-      } catch (error) {
-        if (run.cancelled || /取消|lost-race|已取消生成/.test(String(error && error.message || ''))) throw error;
-        status('智谱暂时无响应，改走 Horde 写实', '保留核心描述，切换写实模型重试。', true);
-        engine = 'horde-real';
-      }
-    }
+    if (engine === 'auto' || engine === 'auto-real') engine = 'horde-real';
     if (engine === 'horde' || engine === 'horde-real' || engine === 'horde-anime') {
       var hordeName = engine === 'horde-anime' ? 'horde-anime' : 'horde-real';
       try {
@@ -956,15 +907,7 @@
           return generatePerchance(run, prompt, index, signal);
         }, HORDE_BUDGET_MS);
       } catch (error) {
-        if (run.cancelled || /取消|lost-race|已取消生成/.test(String(error && error.message || ''))) throw error;
-        if (glmImageReady) {
-          ensureActive(run);
-          status('Perch 暂时无响应，正在改走智谱写实', '保留核心描述，切换同源写实通道重试。', true);
-          var repaired = await runWithProviderBudget(run, 'glm', function (signal) {
-            return generateGlm(run, prompt, index, signal);
-          }, 80000);
-          return { url: repaired.url, engine: 'perchance' };
-        }
+        if (error && (error.status === 429 || error.status >= 500)) markEngineCool(engine, error.status);
         throw error;
       }
     }
@@ -1060,9 +1003,8 @@
 
   function resolveEngine() {
     var raw = normalizeEngineName(value('出图引擎') || window.__sushiPreferredProvider || 'auto-real');
-    if (raw === 'glm' && !glmImageReady) return 'auto-real';
     if (isEngineDisabled(raw)) return engineFamily(raw) === 'anime' ? 'auto-anime' : 'auto-real';
-    if (raw === 'auto-real' || raw === 'auto-anime' || raw === 'perchance' || raw === 'sana' || raw === 'horde-real' || raw === 'horde-anime' || raw === 'glm') return raw;
+    if (raw === 'auto-real' || raw === 'auto-anime' || raw === 'perchance' || raw === 'sana' || raw === 'horde-real' || raw === 'horde-anime') return raw;
     return engineFamily(raw) === 'anime' ? 'auto-anime' : 'auto-real';
   }
 
@@ -1242,14 +1184,13 @@
     if (!tip) return;
     engine = normalizeEngineName(engine);
     var tips = {
-      'auto-real': '自动抢出 · 写实：智谱优先，失败再走 Horde 写实，不含动漫通道',
+      'auto-real': '自动抢出 · 写实：只走 Horde 写实模型，不含动漫通道',
       'auto-anime': '自动抢出 · 动漫：Sana 与 Horde 动漫同时开跑，先到先得',
-      auto: '自动抢出 · 写实：智谱优先，失败再走 Horde 写实，不含动漫通道',
+      auto: '自动抢出 · 写实：只走 Horde 写实模型，不含动漫通道',
       perchance: 'Perch · 独立通道 · 官网无法内嵌，改用写实后端（不跳转官网）',
       'horde-real': 'Horde · 写实 · 免费共享算力，繁忙时需要排队',
       horde: 'Horde · 写实 · 免费共享算力，繁忙时需要排队',
       'horde-anime': 'Horde · 动漫 · 免费共享算力，繁忙时需要排队',
-      glm: '智谱 GLM · 写实 · CogView 文生图，不走动漫模型',
       sana: 'Sana · 动漫/插画 · Pollinations 目前唯一可用模型'
     };
     tip.textContent = tips[engine] || (engineLabel(engine) + ' · 应用内免费通道');
@@ -1265,7 +1206,7 @@
     });
     var engineSelect = $('出图引擎');
     if (engineSelect) {
-      ['turbo', 'flux', 'flux-real', 'flux-realism', 'horde', 'auto', 'zimage', 'sdxl', 'krea2', 'liblib', 'anishort'].forEach(function (dead) {
+      ['turbo', 'flux', 'flux-real', 'flux-realism', 'horde', 'auto', 'zimage', 'sdxl', 'krea2', 'liblib', 'anishort', 'glm'].forEach(function (dead) {
         var deadOpt = engineSelect.querySelector('option[value="' + dead + '"]');
         if (deadOpt && deadOpt.parentNode) deadOpt.parentNode.removeChild(deadOpt);
       });
