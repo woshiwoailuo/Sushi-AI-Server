@@ -30,8 +30,6 @@ function imageSource(value) {
 }
 
 const HORDE_REAL_MODELS = [
-  'Flux.1-Schnell fp8 (Compact)',
-  'Z-Image-Turbo',
   'ICBINP - I Can\'t Believe It\'s Not Photography',
   'AbsoluteReality',
   'Realistic Vision',
@@ -184,15 +182,20 @@ function createImageService(options = {}) {
       let data;
       try { data = JSON.parse(text); } catch { throw new ImageError('生图服务返回了非 JSON 响应，请稍后重试'); }
       if (!response.ok) {
+        const rc = data && data.rc;
+        const detail = String((data && data.message) || '');
         const messages = {
           400: '生图参数未被接受，请尝试较小尺寸或更简短的描述',
           401: '生图服务的密钥无效，请联系管理员检查配置',
-          403: '当前任务未获生图服务许可，请尝试 512×512 或稍后重试',
+          403: rc === 'KudosUpfront' || /kudos/i.test(detail)
+            ? '免费写实通道当前需要积分（Flux 等模型），请稍后重试'
+            : '当前任务未被生图节点接受，请稍后重试',
           404: '生图任务已过期，请重新生成',
           429: '免费生图服务繁忙，请稍后重试',
         };
         const error = new ImageError(messages[response.status] || '生图服务暂时不可用，请稍后重试', response.status === 429 ? 429 : 502, 'UPSTREAM_' + response.status);
         error.upstreamStatus = response.status;
+        error.upstreamRc = rc;
         throw error;
       }
       return data;
@@ -293,6 +296,16 @@ function createImageService(options = {}) {
         return snapshot(job);
       } catch (error) {
         lastError = error;
+        const kudosDenied = error && (error.upstreamStatus === 403 || error.upstreamRc === 'KudosUpfront');
+        if (kudosDenied && attempt < submitDelays.length - 1) {
+          payload.models = HORDE_REAL_MODELS.slice();
+          if (payload.params) {
+            payload.params.width = Math.min(Number(payload.params.width) || 512, 512);
+            payload.params.height = Math.min(Number(payload.params.height) || 512, 512);
+            payload.params.steps = Math.min(Number(payload.params.steps) || 16, 16);
+          }
+          continue;
+        }
         if (terminal(job) || !isRetryableSubmit(error) || attempt === submitDelays.length - 1) {
           if (!terminal(job)) await finish(job, 'failed', error.message);
           throw error;

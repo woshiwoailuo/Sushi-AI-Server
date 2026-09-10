@@ -50,9 +50,10 @@ test('style pins Horde models for 写实 vs 动漫 without changing prompt text'
   assert.equal(real.slow_workers, true);
   assert.equal(real.nsfw, true);
   assert.equal(anime.censor_nsfw, false);
-  assert.ok(HORDE_REAL_MODELS.includes('Z-Image-Turbo'));
+  assert.equal(HORDE_REAL_MODELS.includes('Z-Image-Turbo'), false);
   assert.ok(HORDE_REAL_MODELS.includes('AbsoluteReality'));
-  assert.ok(HORDE_REAL_MODELS.includes('Flux.1-Schnell fp8 (Compact)'));
+  assert.equal(HORDE_REAL_MODELS.includes('Flux.1-Schnell fp8 (Compact)'), false);
+  assert.equal(HORDE_REAL_MODELS.some((name) => /flux|z-image/i.test(name)), false);
   assert.equal(HORDE_REAL_MODELS.includes('AlbedoBase XL (SDXL)'), false);
   assert.equal(HORDE_REAL_MODELS.includes('AlbedoBase XL 3.1'), false);
   assert.equal(HORDE_REAL_MODELS.some((name) => /deliberate|anima|anything|counterfeit|illustrious|wai-nsfw|albedobase/i.test(name)), false);
@@ -144,6 +145,27 @@ test('create retries Horde 429 instead of failing the user immediately', async (
     return response({ done: false, is_possible: true, processing: 0 });
   });
   const job = await f.service.create(1, { prompt: 'A cat' });
+  assert.equal(job.state, 'queued');
+  assert.equal(posts, 2);
+  await f.service.cancel(1, job.id);
+});
+
+test('Horde 403 kudos retries without Flux and clamps to 512', async () => {
+  let posts = 0;
+  const f = fixture((url, options) => {
+    if (url.endsWith('/async') && options.method === 'POST') {
+      posts += 1;
+      const body = JSON.parse(options.body);
+      if (posts === 1) return response({ message: 'This request requires 7.13 kudos', rc: 'KudosUpfront' }, 403);
+      assert.deepEqual(body.models, HORDE_REAL_MODELS);
+      assert.equal(body.params.width, 512);
+      assert.equal(body.params.height, 512);
+      return response({ id: 'remote-ok' }, 202);
+    }
+    if (options.method === 'DELETE') return response({});
+    return response({ done: false, is_possible: true, processing: 0 });
+  });
+  const job = await f.service.create(1, { prompt: 'A cat', style: 'real', width: 768, height: 768 });
   assert.equal(job.state, 'queued');
   assert.equal(posts, 2);
   await f.service.cancel(1, job.id);
