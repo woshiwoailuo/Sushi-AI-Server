@@ -4,7 +4,6 @@
   var active = null;
   var lastEdited = '角色描述';
   var randomPair = null;
-  var lockedImageProvider = '';
   window.__sushiImageProviderLock = '';
   var $ = function (id) { return document.getElementById(id); };
   var value = function (id) { return ($(id) && $(id).value || '').trim(); };
@@ -33,23 +32,16 @@
     $('取消生成按钮').disabled = false;
   }
 
-  function lockPerchPicker() {
-    window.__sushiPreferredProvider = 'perchance';
-    window.__sushiImageProviderLock = 'perchance';
+  function enableProviderPickers() {
+    window.__sushiImageProviderLock = '';
     ['出图引擎', '管理默认平台', '图生图平台'].forEach(function (id) {
       var box = $(id);
-      if (!box) return;
-      box.value = 'perchance';
-      box.disabled = true;
-      box.setAttribute('disabled', 'disabled');
-      box.title = '生图已锁定 Perch，不再更换通道';
+      if (box) { box.disabled = false; box.removeAttribute('disabled'); box.title = '按所选通道生成，不自动切换'; }
     });
   }
 
-  function lockImageProvider(name) {
-    void name;
-    window.__sushiLastEngine = 'perchance';
-    lockPerchPicker();
+  function recordImageProvider(name) {
+    window.__sushiLastEngine = name;
   }
 
   // iOS Safari iframe: cookie alone can miss; same-origin localStorage JWT is reliable.
@@ -471,7 +463,7 @@
     card.appendChild(img);
     $('图像输出').appendChild(card);
     img.src = url;
-    lockImageProvider(engine || 'horde');
+    recordImageProvider(engine || 'horde');
     try { if (typeof window.收入历史 === 'function') window.收入历史(url); } catch (e) {}
   }
 
@@ -538,8 +530,8 @@
     } catch (error) {
       if (timedOut && !run.cancelled) {
         var isHorde = engine === 'horde' || engine === 'horde-real' || engine === 'horde-anime' || engine === 'perchance';
-        if (!isHorde) disableEngine(engine, '30秒内未返回图片');
-        var timeoutError = new Error(engineLabel(engine) + (isHorde ? ' 排队超时，请稍后重试' : ' 30秒内未返回图片，已自动移除本次可选平台'));
+
+        var timeoutError = new Error(engineLabel(engine) + (isHorde ? ' 排队超时，请稍后重试' : ' 30秒内未返回图片，仍保留当前平台'));
         timeoutError.code = 'ENGINE_TIMEOUT';
         timeoutError.engine = engine;
         throw timeoutError;
@@ -613,7 +605,7 @@
     if (!Number.isFinite(seedBase)) seedBase = Math.floor(Math.random() * 2147483646);
     var seed = seedBase + (index || 0) * 97;
     var label = engineLabel(requested);
-    status('正在用 ' + label + ' 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '同源代理出图；遇限流会立刻换引擎，不空等。', true);
+    status('正在用 ' + label + ' 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '同源代理出图；失败时保留所选通道，不自动切换。', true);
     var lastError = null;
     var maxAttempts = proxyModel === 'perchance' ? 1 : 3;
     for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -746,18 +738,13 @@
     if (glmAdmin && glmAdmin.parentNode) glmAdmin.parentNode.removeChild(glmAdmin);
     REAL_RACE_ENGINES = ['perchance'];
     FREE_RACE_ENGINES = REAL_RACE_ENGINES;
-    lockPerchPicker();
+    enableProviderPickers();
   }
 
   function normalizeEngineName(raw) {
     var name = String(raw || '').trim().toLowerCase();
     if (name === '官方' || name === 'perch') return 'perchance';
-    if (name === 'flux-real' || name === 'flux_realism' || name === 'turbo' || name === 'flux' || name === 'flux-realism') return 'auto-real';
-    if (name === 'zimage' || name === 'sdxl' || name === 'krea2' || name === 'liblib') return 'auto-real';
-    if (name === 'anishort') return 'sana';
     if (name === 'horde') return 'horde-real';
-    if (name === 'auto') return 'auto-real';
-    if (name === 'glm' || name === 'zhipu' || name === 'zhipuai' || name === 'chatglm' || name === 'cogview') return 'auto-real';
     return name || 'perchance';
   }
 
@@ -772,7 +759,7 @@
     var map = {
       auto: '自动抢出 · 写实', 'auto-real': '自动抢出 · 写实', 'auto-anime': '自动抢出 · 动漫',
       turbo: 'Sana', horde: 'Horde · 写实', 'horde-real': 'Horde · 写实', 'horde-anime': 'Horde · 动漫',
-      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perch · 独立通道'
+      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perchance 官方'
     };
     return map[name] || name;
   }
@@ -845,56 +832,30 @@
   }
 
   async function generatePerchance(run, prompt, index, providerSignal) {
-    // Official Perchance.org cannot be embedded (Cloudflare 403 + X-Frame-Options).
-    // In-app Perch is an independent photoreal channel on Horde 写实 models — never Sana.
-    // Never window.open perchance.org.
-    if (typeof window.update === 'function') {
-      try {
-        return await generatePerchancePlugin(run, prompt, index, 5000);
-      } catch (error) {
-        var pluginMsg = String(error && error.message || error || '');
-        if (!error || /已取消生成|lost-race/.test(pluginMsg)) throw error;
-      }
-    }
-    status(
-      '正在用 Perch 生成 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张',
-      '官网无法内嵌，改用写实后端；不跳转官网。',
-      true
-    );
-    var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
-    return { url: result.url, engine: 'perchance' };
+    if (run.payload.sourceImage) throw new Error('Perchance 当前未接入图生图，未切换平台。');
+    if (typeof window.update !== 'function') throw new Error('Perchance 官方生图组件不可用，未切换平台。可手动选择其他通道。');
+    return generatePerchancePlugin(run, prompt, index, 30000);
   }
 
   async function generateOne(run, prompt, index) {
-    lastRateLimited = false;
-    // Workshop: visible 核心描述 remains the source of truth and is never rewritten.
-    // Image channel is locked to Perch (Horde photoreal). Never Sana / 动漫.
-    prompt = String(prompt || '').replace(/\s+/g, ' ').trim();
-    if (prompt && !/fictional adult|18\+|no minors|虚构成年|无未成年人/i.test(prompt)) {
-      prompt += /[\u4e00-\u9fff]/.test(prompt)
-        ? '，虚构成年人，18+，无未成年人'
-        : ', fictional adult 18+ only, no minors';
-    }
-    prompt = forcePhotorealPrompt(prompt);
-    run.payload.style = 'real';
+    var engine = run.engine;
+    if (run.payload.sourceImage && engine === 'sana') throw new Error('Sana 当前未接入图生图，未切换平台。');
+    prompt = engineFamily(engine) === 'anime' ? prompt : forcePhotorealPrompt(prompt);
     run.payload.prompt = prompt;
-    try {
-      return await runWithProviderBudget(run, 'perchance', function (signal) {
-        return generatePerchance(run, prompt, index, signal);
-      }, HORDE_BUDGET_MS);
-    } catch (error) {
-      if (error && (error.status === 429 || error.status >= 500)) markEngineCool('perchance', error.status);
-      throw error;
-    }
+    return runWithProviderBudget(run, engine, function (signal) {
+      if (engine === 'perchance') return generatePerchance(run, prompt, index, signal);
+      if (engine === 'horde-real' || engine === 'horde-anime') return generateHorde(run, prompt, index, signal, engine);
+      if (engine === 'sana') return generatePollinations(run, prompt, index, engine, signal);
+      throw new Error('所选通道尚未接入，未切换平台。');
+    }, HORDE_BUDGET_MS);
   }
 
   function resolveEngine() {
-    return 'perchance';
+    return normalizeEngineName(value('出图引擎'));
   }
 
   function resolveImg2imgEngine(selected) {
-    void selected;
-    return 'perchance';
+    return normalizeEngineName(selected);
   }
 
   async function execute(run, restored) {
@@ -953,20 +914,15 @@
   }
 
   function newRun(description, total) {
-    return { description: description, total: total, completed: 0, payload: {}, job: null, cancelled: false, controller: new AbortController() };
+    return { engine: value('参考图地址') ? resolveImg2imgEngine(value('图生图平台')) : resolveEngine(), description: description, total: total, completed: 0, payload: {}, job: null, cancelled: false, controller: new AbortController() };
   }
 
   window.开始生成 = function () {
     var genBtn = $('生成按钮');
     if (active || (genBtn && genBtn.disabled)) return Promise.resolve();
-    // Image channel is locked to Perch.
-    var providerBox = $('出图引擎');
-    if (providerBox) {
-      providerBox.value = 'perchance';
-      providerBox.disabled = true;
-      providerBox.setAttribute('disabled', 'disabled');
-    }
-    lockPerchPicker();
+    // Preserve the user selection for the entire run.
+
+    enableProviderPickers();
 
     var description = lastEdited === '英文描述' ? value('英文描述') : value('角色描述');
     if (!description) description = value('角色描述') || value('英文描述');
@@ -983,8 +939,8 @@
     }
     var dimensions = value('图像比例').split('x');
     var negative = value('负面提示');
-    var family = 'real';
-    var styleAware = false;
+    var family = engineFamily(run.engine);
+    var styleAware = family === 'anime';
     if (!negative) {
       negative = styleAware
         ? 'lowres, blurry, bad anatomy, extra limbs, child, minor, watermark, text'
@@ -1016,13 +972,8 @@
   window.开始随机生成 = function () {
     var randBtn = $('随机按钮');
     if (active || (randBtn && randBtn.disabled)) return Promise.resolve();
-    var providerBox = $('出图引擎');
-    if (providerBox) {
-      providerBox.value = 'perchance';
-      providerBox.disabled = true;
-      providerBox.setAttribute('disabled', 'disabled');
-    }
-    lockPerchPicker();
+
+    enableProviderPickers();
     var item = typeof window.本地随机一项 === 'function' ? window.本地随机一项() : null;
     if (!item && typeof window.本地随机一对 === 'function') {
       var pair = window.本地随机一对();
@@ -1071,8 +1022,7 @@
   window.设平台提示 = function (engine) {
     var tip = $('平台提示');
     if (!tip) return;
-    void engine;
-    tip.textContent = 'Perch · 已锁定 · 官网无法内嵌，改用写实后端（不跳转官网）';
+    tip.textContent = engineLabel(engine) + ' · 未完成时不会自动更换平台';
   };
 
   async function init() {
@@ -1083,22 +1033,8 @@
         randomPair = null;
       });
     });
-    var engineSelect = $('出图引擎');
-    if (engineSelect) {
-      ['turbo', 'flux', 'flux-real', 'flux-realism', 'horde', 'auto', 'zimage', 'sdxl', 'krea2', 'liblib', 'anishort', 'glm', 'auto-real', 'auto-anime', 'horde-real', 'horde-anime', 'sana'].forEach(function (dead) {
-        var deadOpt = engineSelect.querySelector('option[value="' + dead + '"]');
-        if (deadOpt && deadOpt.parentNode) deadOpt.parentNode.removeChild(deadOpt);
-      });
-      if (!engineSelect.querySelector('option[value="perchance"]')) {
-        var perchOpt = document.createElement('option');
-        perchOpt.value = 'perchance';
-        perchOpt.textContent = 'Perch · 已锁定';
-        perchOpt.selected = true;
-        engineSelect.appendChild(perchOpt);
-      }
-    }
-    lockPerchPicker();
-    window.设平台提示('perchance');
+    enableProviderPickers();
+    window.设平台提示(resolveEngine());
     window.__sushiReady = true; window.__sushiLoadError = '';
     bindGalleryPreview();
     controls(true); $('取消生成按钮').hidden = true;
@@ -1113,7 +1049,7 @@
         run.promise = execute(run, true);
         return;
       }
-      status('生图服务已就绪', '可以开始生成图片（仅 Perch 通道）。', false);
+      status('生图服务已就绪', '可以按所选通道生成图片。', false);
     } catch (error) {
       status('暂时无法准备生图', error.message + ' 可稍后直接再次点击生成。', false);
     }

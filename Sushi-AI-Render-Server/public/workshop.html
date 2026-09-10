@@ -73,9 +73,7 @@
 
         <label>
           生图平台
-          <select id="出图引擎" name="出图引擎" disabled aria-label="Perch 已锁定">
-            <option value="perchance" selected>Perch · 已锁定</option>
-          </select>
+          <select id="出图引擎" onchange="保存默认平台(this.value, true); 设平台提示(this.value)"><option value="perchance">Perchance 官方</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
         </label>
         <input id="备用引擎" type="hidden" value="perchance">
 
@@ -104,9 +102,7 @@
         <div id="管理面板" class="分区" hidden>
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
-            <select id="管理默认平台" disabled aria-label="Perch 已锁定">
-              <option value="perchance" selected>Perch · 已锁定</option>
-            </select>
+            <select id="管理默认平台" onchange="保存默认平台(this.value, true)"><option value="perchance">Perchance 官方</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
           </label>
           <label class="换背景行">
             <input id="调试开关" type="checkbox" onchange="切换调试(this.checked)">
@@ -356,9 +352,7 @@
           </label>
           <label>
             图生图平台
-            <select id="图生图平台" name="图生图平台" disabled aria-label="Perch 已锁定">
-              <option value="perchance" selected>Perch · 已锁定</option>
-            </select>
+            <select id="图生图平台" onchange="保存图生图平台(this.value)"><option value="perchance">Perchance 官方</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
           </label>
           <div class="核心操作">
             <button type="button" class="次按钮" onclick="document.getElementById('参考图文件').click()">插入图片</button>
@@ -373,10 +367,8 @@
         <summary>AI 对话</summary>
           <label>
             回答通道
-          <select id="AI通道" disabled aria-label="GLM 已锁定">
-            <option value="glm" selected>GLM · 已锁定</option>
-          </select>
-          <span id="对话通道状态" class="说明文字" role="status">对话已锁定 GLM，不再更换通道。</span>
+          <select id="AI通道" onchange="对话通道已改()"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
+          <span id="对话通道状态" class="说明文字" role="status">使用所选对话通道，失败时不会自动更换。</span>
         </label>
         <label class="换背景行">
           <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
@@ -451,7 +443,7 @@
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">生图平台：Perch · 已锁定</p>
+      <p id="平台提示" class="平台提示">生图平台：Perchance 官方</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -595,22 +587,10 @@
     载入记忆开关();
     载入图生图平台();
     载入已配置通道();
-    var 平台框 = document.getElementById("出图引擎");
-    if (平台框) {
-      平台框.disabled = true;
-      平台框.setAttribute("disabled", "disabled");
-      平台框.value = "perchance";
-      用户选定平台 = "perchance";
-      保存默认平台("perchance", false);
-    }
-    var 对话框 = document.getElementById("AI通道");
-    if (对话框) {
-      对话框.disabled = true;
-      对话框.setAttribute("disabled", "disabled");
-      对话框.value = "glm";
-      保存对话通道("glm", false);
-      刷新对话通道状态();
-    }
+    try {
+      保存默认平台(localStorage.getItem("角色生成器_默认平台") || "perchance", false);
+      保存对话通道(localStorage.getItem("角色生成器_对话通道") || "glm", false);
+    } catch (e) {}
     var 核心 = document.getElementById("角色描述");
     var 英文 = document.getElementById("英文描述");
     var 中文 = document.getElementById("中文译文");
@@ -704,9 +684,7 @@
     try { return localStorage.getItem("角色生成器_用户选过对话") === "1"; } catch (e) { return false; }
   }
   function 规范化出图平台(值, 用户选过) {
-    void 值;
-    void 用户选过;
-    return "perchance";
+    return ["perchance", "horde-real", "horde-anime", "sana"].indexOf(值) >= 0 ? 值 : "perchance";
   }
 
   function 图生图平台键() {
@@ -714,29 +692,21 @@
     return "苏轼AI_图生图平台" + (邮箱 ? "_" + 邮箱 : "");
   }
   function 规范化图生图平台(值) {
-    void 值;
-    return "perchance";
+    return 规范化出图平台(值, true);
   }
   function 载入图生图平台() {
-    用户选定图生图平台 = "perchance";
-    var 框 = document.getElementById("图生图平台");
-    if (框) {
-      框.value = "perchance";
-      框.disabled = true;
-      框.setAttribute("disabled", "disabled");
-    }
+    var 值 = "perchance";
+    try { 值 = localStorage.getItem(图生图平台键()) || 值; } catch (e) {}
+    保存图生图平台(值);
   }
   function 保存图生图平台(值) {
-    void 值;
-    用户选定图生图平台 = "perchance";
-    try { localStorage.setItem(图生图平台键(), "perchance"); } catch (e) {}
-    var 状态 = document.getElementById("工具状态");
-    if (状态) 状态.textContent = "图生图平台已锁定：Perch";
+    用户选定图生图平台 = 规范化图生图平台(值);
+    var 框 = document.getElementById("图生图平台");
+    if (框) { 框.value = 用户选定图生图平台; 框.disabled = false; }
+    try { localStorage.setItem(图生图平台键(), 用户选定图生图平台); } catch (e) {}
   }
   function 规范化对话通道(值, 用户选过) {
-    void 值;
-    void 用户选过;
-    return "glm";
+    return ["glm","deepseek","groq","gemini","openrouter","grok","horde","openai","openai-fast"].indexOf(值) >= 0 ? 值 : "glm";
   }
 
 
@@ -773,19 +743,8 @@
       var 框 = document.getElementById("角色描述");
       var 旧 = localStorage.getItem("角色生成器_上次描述") || "";
       if (框 && 旧 && !(框.value || "").trim()) 框.value = 旧;
-      var 平台框 = document.getElementById("出图引擎");
-      if (平台框) {
-        平台框.value = "perchance";
-        平台框.disabled = true;
-        平台框.setAttribute("disabled", "disabled");
-        用户选定平台 = "perchance";
-      }
-      var 对话框 = document.getElementById("AI通道");
-      if (对话框) {
-        对话框.value = "glm";
-        对话框.disabled = true;
-        对话框.setAttribute("disabled", "disabled");
-      }
+      保存默认平台(localStorage.getItem("角色生成器_默认平台") || "perchance", false);
+      保存对话通道(localStorage.getItem("角色生成器_对话通道") || "glm", false);
     } catch (e) {}
     刷新画面说明();
   }
@@ -1084,29 +1043,12 @@
 
   function 同步对话通道选项() {
     var 框 = document.getElementById("AI通道");
-    if (!框) return;
-    框.disabled = true;
-    框.setAttribute("disabled", "disabled");
-    框.value = "glm";
-    var i;
-    for (i = 框.options.length - 1; i >= 0; i--) {
-      if (框.options[i].value !== "glm") 框.remove(i);
-    }
-    if (!框.querySelector('option[value="glm"]')) {
-      var opt = document.createElement("option");
-      opt.value = "glm";
-      opt.textContent = "GLM · 已锁定";
-      opt.selected = true;
-      框.appendChild(opt);
-    }
+    if (框) 框.disabled = false;
   }
 
   function 刷新对话通道状态() {
-    var 框 = document.getElementById("AI通道");
     var 状态 = document.getElementById("对话通道状态");
-    if (!框 || !状态) return;
-    框.value = "glm";
-    状态.textContent = "对话已锁定 GLM，不再更换通道。";
+    if (状态) 状态.textContent = "使用你选择的对话通道；失败时不会自动更换。";
   }
 
   function 读取登录邮箱() {
@@ -1199,7 +1141,7 @@
     var 区 = document.getElementById("对话列表");
     if (!区) return;
     if (!对话历史.length) {
-      区.innerHTML = '<div class="对话空">还没有对话。对话已锁定 GLM。</div>';
+      区.innerHTML = '<div class="对话空">还没有对话。请选择对话通道。</div>';
       return;
     }
     var html = "";
@@ -1261,7 +1203,7 @@
     if (中文) 中文.value = 文;
     if (英文) 英文.value = "";
     刷新画面说明();
-    工具提示("已把 AI 回复填入画面描述，正在准备生成图片…");
+    工具提示("已填入画面描述，正在准备生成图片…");
     try {
       if (含中文(文)) {
         var 译 = await 调用开源翻译(文.slice(0, 800), "en");
@@ -1273,7 +1215,7 @@
 
   function 对话通道已改() {
     对话抢出通道 = "";
-    保存对话通道("glm", false);
+    保存对话通道(document.getElementById("AI通道").value, true);
     刷新对话通道状态();
   }
 
@@ -1614,7 +1556,7 @@
   }
 
   async function 问免费模型(问句, 模型) {
-    void 模型;
+    模型 = 规范化对话通道(模型, true);
     return await new Promise(function (成功, 失败) {
       var 已中 = false;
       var 定时 = setTimeout(function () {
@@ -1622,7 +1564,7 @@
         已中 = true;
         失败(new Error("抢答超时"));
       }, 30000);
-      问花粉(问句, "glm").then(function (文) {
+      问花粉(问句, 模型).then(function (文) {
         if (已中) return;
         已中 = true;
         clearTimeout(定时);
@@ -1645,8 +1587,13 @@
     var 问 = document.getElementById("AI问题");
     var 文本 = 问 && 问.value ? 问.value.trim() : "";
     if (!文本) return;
-    var 选择通道 = "glm";
-    var 本轮通道 = "glm";
+    if (含生图指令(文本)) {
+      问.value = "";
+      按对话生成图片(文本).catch(function (e) { 工具提示(e.message || "生图失败"); });
+      return;
+    }
+    var 选择通道 = document.getElementById("AI通道").value;
+    var 本轮通道 = 选择通道;
     问.value = "";
     正在回答对话 = true;
     var 用户项 = { role: "user", text: 文本, channel: 选择通道, t: Date.now() };
@@ -1677,10 +1624,7 @@
     var 区 = document.getElementById("对话列表");
     if (区) 区.scrollTop = 区.scrollHeight;
     后台译成中文(回复, 助手项, 助手泡);
-    if (含生图指令(文本)) {
-      var 画面 = (回复 && 回复.indexOf("没问到") !== 0) ? 回复 : 文本;
-      按对话生成图片(画面).catch(function () {});
-    }
+
   }
 
   function 像中文回复(文) {
@@ -2700,7 +2644,7 @@
   }
 
   function 当前引擎() {
-    return "perchance";
+    return document.getElementById("出图引擎").value || "perchance";
   }
 
 
@@ -2882,7 +2826,7 @@
 
   function 引擎名称(值) {
     void 值;
-    return "Perch · 已锁定";
+    return "Perchance 官方";
   }
 
   function 刷新管理员界面() {
@@ -2905,27 +2849,16 @@
   }
 
   function 保存默认平台(值, 用户选的) {
-    void 值;
-    void 用户选的;
-    用户选定平台 = "perchance";
+    用户选定平台 = 规范化出图平台(值, 用户选的);
     var 框 = document.getElementById("出图引擎");
-    if (框) {
-      框.value = "perchance";
-      框.disabled = true;
-      框.setAttribute("disabled", "disabled");
-    }
-    try { localStorage.setItem("角色生成器_默认平台", "perchance"); } catch (e) {}
+    if (框) { 框.value = 用户选定平台; 框.disabled = false; }
+    try { localStorage.setItem("角色生成器_默认平台", 用户选定平台); } catch (e) {}
   }
   function 保存对话通道(值, 用户选的) {
-    void 值;
-    void 用户选的;
+    值 = 规范化对话通道(值, 用户选的);
     var 框 = document.getElementById("AI通道");
-    if (框) {
-      框.value = "glm";
-      框.disabled = true;
-      框.setAttribute("disabled", "disabled");
-    }
-    try { localStorage.setItem("角色生成器_对话通道", "glm"); } catch (e) {}
+    if (框) { 框.value = 值; 框.disabled = false; }
+    try { localStorage.setItem("角色生成器_对话通道", 值); } catch (e) {}
   }
 
   function 切换调试(开) {
@@ -3456,7 +3389,7 @@
     用官方插件出图(false);
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.41" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.42" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

@@ -132,11 +132,11 @@ test('buildKeyedChatRequest: Gemini header auth, OpenRouter free router', () => 
   assert.equal(ds.body.thinking.type, 'disabled');
 });
 
-test('homepage and workshop skip unconfigured auto-race lanes', () => {
+test('homepage and workshop preserve manual model selection', () => {
   assert.match(home, /function autoRaceList/);
   assert.match(home, /function loadChatReady/);
   assert.match(home, /chatReady\.groq/);
-  assert.match(home, /var models = autoRaceList\(\)/);
+  assert.match(home, /var model = normalizeChatChannel\(channel\)/);
   assert.match(home, /Gemini 未配置：请在 Vercel 环境变量填写 GEMINI_API_KEY/);
   assert.match(home, /OpenRouter 未配置：请在 Vercel 环境变量填写 OPENROUTER_API_KEY/);
   assert.match(home, /function syncChatPicker/);
@@ -151,7 +151,7 @@ test('homepage and workshop skip unconfigured auto-race lanes', () => {
   assert.match(workshop, /var 已配置通道/);
   assert.match(workshop, /function 载入已配置通道/);
   assert.match(workshop, /function 同步对话通道选项/);
-  assert.match(workshop, /问花粉\(问句, "glm"\)/);
+  assert.match(workshop, /问花粉\(问句, 模型\)/);
   assert.doesNotMatch(workshop, /if \(已配置通道\.groq\) 赛道模型\.push\("groq"\)/);
   assert.doesNotMatch(workshop, /if \(已配置通道\.gemini\) 赛道模型\.push\("gemini"\)/);
   assert.doesNotMatch(workshop, /赛道\.push\(问群体模型/);

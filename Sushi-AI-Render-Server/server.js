@@ -1172,7 +1172,7 @@ async function sendWorkshopLoader(req, res) {
   // Encrypted ticket loader remains available when ?k= is present and valid
   // (Android WebView / legacy clients).
   if (user && !user.banned && !k) {
-    res.status(200).type('html').send(readWorkshopPlaintext());
+    res.status(200).set('Content-Type', 'text/html; charset=utf-8').send(readWorkshopPlaintext().toString('utf8'));
     return;
   }
 
@@ -1180,7 +1180,7 @@ async function sendWorkshopLoader(req, res) {
   if (!ticket) {
     if (user && !user.banned) {
       // Cross-instance / expired ticket but session still valid → open without AES.
-      res.status(200).type('html').send(readWorkshopPlaintext());
+      res.status(200).set('Content-Type', 'text/html; charset=utf-8').send(readWorkshopPlaintext().toString('utf8'));
       return;
     }
     res.status(401).type('html').send(WORKSHOP_401);

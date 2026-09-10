@@ -22,45 +22,14 @@ test('homepage chat timeouts and short-reply match workshop #14 values', () => {
   assert.match(server, /cleaned\.length < 1/);
 });
 
-test('homepage and workshop lock chat channel switching to GLM', () => {
-  assert.match(home, /id="chatChannel"/);
-  assert.match(home, /function selectedChatChannel/);
-  assert.match(home, /function raceChat\(question, channel\)/);
-  assert.match(home, /localStorage\.setItem\(chatChannelKey\(\), 'glm'\)/);
-  assert.match(home, /function syncChatPicker/);
-  assert.match(home, /var CHAT_PICKER/);
-  assert.match(home, /id: 'groq'/);
-  assert.match(home, /id: 'grok'/);
-  assert.match(home, /var models = autoRaceList\(\)/);
-  assert.match(home, /function autoRaceList/);
-  assert.match(home, /function loadChatReady/);
-  assert.match(home, /\/api\/health/);
-  assert.match(home, /对话已锁定 GLM|GLM 已锁定/);
-  assert.match(home, /不再更换通道/);
-  const picker = home.slice(home.indexOf('id="chatChannel"'), home.indexOf('</select>', home.indexOf('id="chatChannel"')) + 9);
-  assert.match(picker, /disabled/);
-  assert.match(picker, /value="glm"/);
-  assert.doesNotMatch(picker, /value="horde"/);
-  assert.doesNotMatch(picker, /value="auto"/);
-  assert.doesNotMatch(picker, /value="openai"/);
-  assert.doesNotMatch(picker, /value="groq"/);
-  assert.doesNotMatch(picker, /value="grok"/);
-  assert.doesNotMatch(picker, /value="gemini"/);
-  assert.doesNotMatch(picker, /value="openrouter"/);
-  assert.doesNotMatch(picker, /value="deepseek"/);
-  assert.match(workshop, /id="AI通道"/);
-  assert.match(workshop, /问免费模型\(文本, 本轮通道\)/);
-  assert.match(workshop, /问花粉\(问句, "glm"\)/);
-  const wsPicker = workshop.slice(workshop.indexOf('id="AI通道"'), workshop.indexOf('</select>', workshop.indexOf('id="AI通道"')) + 9);
-  assert.match(wsPicker, /disabled/);
-  assert.match(wsPicker, /value="glm"/);
-  assert.doesNotMatch(wsPicker, /value="auto"/);
-  assert.doesNotMatch(wsPicker, /value="horde"/);
-  assert.doesNotMatch(wsPicker, /value="openai"/);
-  assert.doesNotMatch(wsPicker, /value="groq"/);
-  assert.doesNotMatch(wsPicker, /value="deepseek"/);
-  assert.match(workshop, /var 选择通道 = "glm"/);
-  assert.match(workshop, /function 规范化对话通道[\s\S]*return "glm"/);
+test('homepage and workshop offer manual chat channel selection', () => {
+  for (const [html, id] of [[home, 'chatChannel'], [workshop, 'AI通道']]) {
+    const picker = html.slice(html.indexOf('id="' + id + '"'), html.indexOf('</select>', html.indexOf('id="' + id + '"')));
+    assert.doesNotMatch(picker, /disabled/);
+    for (const channel of ['glm','horde','openai','groq','grok','gemini','openrouter','deepseek']) {
+      assert.ok(picker.includes('value="' + channel + '"'));
+    }
+  }
 });
 
 test('homepage and server wire Groq + Grok OpenAI-compatible chat', () => {
@@ -96,7 +65,7 @@ test('free chat providers keep provider-specific errors and Gemini system instru
 test('homepage can generate images directly from chat intent', () => {
   assert.match(home, /function wantsImageGen/);
   assert.match(home, /function generateHomeImage/);
-  assert.match(home, /style: 'real'/);
+  assert.match(home, /style: engine === 'horde-anime' \? 'anime' : 'real'/);
   assert.match(home, /item\.image/);
   assert.match(home, /class="chat-img"/);
   assert.match(home, /data-full-url/);
@@ -113,7 +82,7 @@ test('homepage image path uses workshop Horde API and never opens workshop loade
   assert.match(home, /api\('\/api\/images'/);
   const genFn = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
   assert.ok(genFn.length > 200);
-  assert.match(genFn, /style: 'real'/);
+  assert.match(genFn, /style: engine === 'horde-anime' \? 'anime' : 'real'/);
   assert.doesNotMatch(genFn, /style: 'glm'/);
   assert.doesNotMatch(genFn, /chatReady\.glm/);
   assert.doesNotMatch(genFn, /style: style/);
@@ -143,7 +112,7 @@ test('homepage photoreal enrichment strips anime keywords on the default 写实 
   const gen = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
   assert.doesNotMatch(gen, /styleAware/);
   assert.match(gen, /negativePrompt: negative/);
-  assert.match(gen, /style: 'real'/);
+  assert.match(gen, /style: engine === 'horde-anime' \? 'anime' : 'real'/);
   assert.doesNotMatch(gen, /\/api\/chat\/image/);
   assert.doesNotMatch(gen, /style = 'anime'/);
 });
