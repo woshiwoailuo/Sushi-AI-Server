@@ -683,9 +683,9 @@ app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
     provider: 'horde',
     free: true,
     maxWaitSeconds: 600,
-    race: ['horde-real', 'sana', 'horde-anime', 'perchance'],
-    realRace: ['horde-real'],
-    animeRace: ['sana', 'horde-anime'],
+    race: ['perchance'],
+    realRace: ['perchance'],
+    animeRace: [],
   });
 });
 app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
