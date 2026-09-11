@@ -741,11 +741,23 @@
         var HOME_HORDE_ANIME = [
           'Counterfeit', 'Anima-Turbo-v1.1', 'Anything v5', 'Flat-2D Animerge', 'Rev Animated', 'WAI-NSFW-illustrious-SDXL'
         ];
+        async function translateHomePrompt(text) {
+      var src = String(text || '').trim();
+      if (!src || !/[\u4e00-\u9fff]/.test(src)) return src;
+      try {
+        var g = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=' + encodeURIComponent(src.slice(0, 400)));
+        var data = await g.json();
+        var out = (data[0] || []).map(function (row) { return row[0] || ''; }).join('').trim();
+        if (out && !/[\u4e00-\u9fff]/.test(out)) return out;
+      } catch (e) {}
+      return src;
+    }
         async function generateHomeImage(promptText) {
       // Home image requests honor the saved provider and never fall back to another service.
       // Chat bubble text stays as typed; only the generator prompt is enriched.
       // Platform-direct: browser talks to Horde and displays the image URL.
       try {
+        promptText = await translateHomePrompt(promptText);
         var engine = localStorage.getItem('角色生成器_默认平台') || 'perchance';
         if (engine === '官方' || engine === 'perch') engine = 'perchance';
         if (engine === 'sana' || engine === 'auto-anime') {

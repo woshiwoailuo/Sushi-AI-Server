@@ -490,20 +490,25 @@
 <div id="成人确认层" class="确认遮罩" hidden role="dialog" aria-modal="true" aria-labelledby="成人确认标题">
   <div class="确认卡">
     <span class="年龄标志" aria-hidden="true">18+</span>
-    <h2 id="成人确认标题">危险内容与成人提示</h2>
-    <p class="确认说明">本页可能生成敏感、裸露或成人向画面，效果类似官方生成器的危险/成人提示。仅限虚构成年人。未满 18 岁请离开。</p>
+    <h2 id="成人确认标题">Danger / 危险内容与成人提示</h2>
+    <p class="确认说明">Official warning：本页可能生成敏感、裸露或成人向画面。未满 18 岁请离开。仅限虚构成年人。</p>
     <div class="规则列表">
-      <p>可能出现裸露、性暗示或成人情节的图像，请自行判断是否继续。</p>
-      <p>只允许虚构成年角色（18+）。禁止未成年人、儿童体态及相关暗示。</p>
+      <p>Warning：可能出现裸露、性暗示或成人情节的图像。请自行判断是否继续显示。</p>
+      <p>18+ only：只允许虚构成年角色。禁止未成年人、儿童体态及相关暗示。</p>
       <p>不针对真实名人；生成内容仅供私人娱乐，请勿公开传播违法内容。</p>
       <p>开始后将按你的核心描述出图；描述为裸露时不会擅自加衣服。</p>
     </div>
     <label class="统一确认 对勾行">
+      <input id="官方警告确认" type="checkbox" onchange="检查成人确认按钮()">
+      <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
+      <span>Okay to show · 我已知晓危险内容警告</span>
+    </label>
+    <label class="统一确认 对勾行">
       <input id="成人统一确认" type="checkbox" onchange="检查成人确认按钮()">
       <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
-      <span>我已年满 18 岁，已阅读危险与成人提示</span>
+      <span>I am 18+ · 我已年满 18 岁</span>
     </label>
-    <small>此提示对应官方生成器的危险/成人确认。勾选即开始，之后可在顶栏用对勾关闭。</small>
+    <small>此为官网危险/18+ 提示在应用内弹出。两项都打勾即可开始，之后可在顶栏用对勾关闭。</small>
   </div>
 </div>
 
@@ -579,7 +584,7 @@
       for (i = 0; i < 节点.length; i++) {
         var el = 节点[i];
         if (根 && d === document && (el === 根 || 根.contains(el))) continue;
-        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog'], .成人开关, #成人开关按钮, .对勾行, .对勾盒")) continue;
+        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog'], .成人开关, #成人开关按钮, .对勾行, .对勾盒, #官方警告确认, #成人统一确认")) continue;
         var 字 = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
         var 址 = String(el.getAttribute("href") || "").toLowerCase();
         var 类名 = "";
@@ -718,7 +723,9 @@
     层.hidden = false;
     层.removeAttribute("hidden");
     document.body.classList.add("禁止滚动");
+    var 警 = document.getElementById("官方警告确认");
     var 框 = document.getElementById("成人统一确认");
+    if (警) 警.checked = false;
     if (框) 框.checked = false;
   }
 
@@ -836,13 +843,16 @@
   }
 
   function 检查成人确认按钮() {
+    var 警 = document.getElementById("官方警告确认");
     var 框 = document.getElementById("成人统一确认");
-    if (框 && 框.checked) 确认开启成人主题();
+    if (警 && 框 && 警.checked && 框.checked) 确认开启成人主题();
   }
 
   function 确认开启成人主题() {
+    var 警 = document.getElementById("官方警告确认");
     var 框 = document.getElementById("成人统一确认");
     if (!框 || !框.checked) return;
+    if (警 && !警.checked) return;
 
     设置成人主题状态(true);
     关闭成人确认();
@@ -3449,7 +3459,7 @@
     用官方插件出图(false);
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.49" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.50" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -3971,6 +3981,15 @@
       rgba(255, 102, 143, 0.10);
   }
 
+  .对勾行 {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+
   .成人开关 {
     display: inline-flex;
     align-items: center;
@@ -3982,24 +4001,24 @@
     cursor: pointer;
     user-select: none;
     border-radius: 8px;
-    border: 1px solid var(--边框);
-    background: rgba(255, 255, 255, 0.03);
+    border: 2px solid #111827;
+    background: #ffffff;
   }
 
   .成人开关 .对勾符 {
     font-size: 16px;
-    font-weight: 800;
+    font-weight: 900;
     line-height: 1;
     color: transparent;
   }
 
   .成人开关.已开启 {
-    border-color: rgba(255, 102, 143, 0.35);
-    background: rgba(255, 102, 143, 0.12);
+    border-color: #E11D48;
+    background: #fff1f2;
   }
 
   .成人开关.已开启 .对勾符 {
-    color: var(--成人色);
+    color: #E11D48;
   }
 
   #成人状态标签 {
@@ -4510,6 +4529,7 @@
   }
 
   .统一确认 {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4518,29 +4538,18 @@
     cursor: pointer;
   }
 
-  .统一确认 input {
+  .对勾行 input[type="checkbox"],
+  .统一确认 input[type="checkbox"] {
     position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
+    left: 0;
+    top: 50%;
+    width: 22px;
+    height: 22px;
     margin: 0;
-  }
-
-  .对勾行 {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .对勾行 input[type="checkbox"] {
-    position: absolute;
+    transform: translateY(-50%);
     opacity: 0;
-    width: 1px;
-    height: 1px;
-    margin: 0;
+    -webkit-appearance: none;
+    appearance: none;
   }
 
   .对勾盒 {
@@ -4551,24 +4560,26 @@
     height: 22px;
     min-width: 22px;
     border-radius: 6px;
-    border: 1px solid var(--边框);
-    background: rgba(255, 255, 255, 0.03);
+    border: 2px solid #111827;
+    background: #ffffff;
   }
 
   .对勾盒 .对勾符 {
-    font-size: 14px;
-    font-weight: 800;
+    font-size: 15px;
+    font-weight: 900;
     line-height: 1;
     color: transparent;
   }
 
-  .对勾行 input:checked + .对勾盒 {
-    border-color: rgba(255, 102, 143, 0.35);
-    background: rgba(255, 102, 143, 0.12);
+  .对勾行 input:checked + .对勾盒,
+  .统一确认 input:checked + .对勾盒 {
+    border-color: #E11D48;
+    background: #fff1f2;
   }
 
-  .对勾行 input:checked + .对勾盒 .对勾符 {
-    color: var(--成人色);
+  .对勾行 input:checked + .对勾盒 .对勾符,
+  .统一确认 input:checked + .对勾盒 .对勾符 {
+    color: #E11D48;
   }
 
   .官网信息 {

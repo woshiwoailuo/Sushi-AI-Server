@@ -653,11 +653,12 @@ test('shows danger/adult warning overlay then enables adult mode on confirm', as
   assert.ok(layer, 'official-style warning overlay required');
   assert.match(layer.textContent, /危险内容与成人提示/);
   assert.match(layer.textContent, /我已年满 18 岁/);
+  assert.match(layer.textContent, /Okay to show/);
   assert.equal(layer.hidden, false);
   assert.equal(f.w.document.getElementById('成人图标按钮'), null);
   assert.doesNotMatch(f.w.document.querySelector('.顶栏右侧').textContent, /成人模式/);
   const sw = f.w.document.getElementById('成人开关按钮');
-  assert.ok(layer.querySelector('.对勾盒 .对勾符'));
+  assert.ok(layer.querySelectorAll('.对勾盒 .对勾符').length >= 2);
   assert.ok(f.w.document.querySelector('#只换背景') && f.w.document.querySelector('#只换背景').nextElementSibling.classList.contains('对勾盒'));
   assert.ok(sw);
   assert.equal(sw.textContent.trim(), '✓');
@@ -667,6 +668,9 @@ test('shows danger/adult warning overlay then enables adult mode on confirm', as
   assert.equal(f.w.成人主题已开启, true);
   assert.equal(f.w.document.getElementById('确认开启按钮'), null);
   f.w.document.getElementById('成人统一确认').checked = true;
+  f.w.检查成人确认按钮();
+  assert.equal(layer.hidden, false);
+  f.w.document.getElementById('官方警告确认').checked = true;
   f.w.检查成人确认按钮();
   assert.equal(layer.hidden, true);
   assert.equal(f.w.成人主题已开启, true);
