@@ -807,7 +807,7 @@
         var body = {
           prompt: prompt + ' ### ' + negative,
           params: { n: 1, width: 768, height: 768, steps: 16, cfg_scale: 7 },
-          r2: true, nsfw: true, censor_nsfw: false, slow_workers: false,
+          r2: true, nsfw: true, censor_nsfw: false, slow_workers: true,
           models: isAnime ? HOME_HORDE_ANIME.slice() : HOME_HORDE_REAL.slice()
         };
         for (var attempt = 0; attempt < 10; attempt += 1) {

@@ -252,11 +252,12 @@
   }
 
   function progress(run, job) {
-    var detail = '免费共享算力的等待时间会变化，最多等待 10 分钟。';
-    if (job.queuePosition !== null && job.queuePosition !== undefined) detail = '当前排队位置：' + job.queuePosition + '。' + detail;
-    if (job.waitTimeSeconds > 0) detail += ' 服务估计还需约 ' + Math.ceil(job.waitTimeSeconds) + ' 秒。';
+    var detail = '有结果立即显示。';
+    if (job.waitTimeSeconds > 0 && job.waitTimeSeconds < 45) {
+      detail = '大约 ' + Math.ceil(job.waitTimeSeconds) + ' 秒。';
+    }
     if (run.translationNote) detail += ' ' + run.translationNote;
-    status((job.state === 'processing' ? '正在生成' : '正在排队') + ' · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', detail, true);
+    status('正在出图 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', detail, true);
   }
 
   async function poll(run, job, providerSignal) {
@@ -714,7 +715,7 @@
       r2: true,
       nsfw: nsfwOn,
       censor_nsfw: !nsfwOn,
-      slow_workers: false,
+      slow_workers: true,
       models: isReal ? HORDE_REAL_MODELS.slice() : HORDE_ANIME_MODELS.slice()
     };
     var source = run.payload && run.payload.sourceImage;
@@ -799,13 +800,10 @@
     var signal = providerSignal || run.controller.signal;
     var lastError = null;
     var shrink = false;
-    for (var attempt = 0; attempt < 10; attempt += 1) {
+    for (var attempt = 0; attempt < 4; attempt += 1) {
       ensureActive(run);
       var payload = buildHordeBody(run, prompt, index, styleName, shrink);
-      var waitHint = attempt
-        ? ('通道忙，正在排队重试第 ' + (attempt + 1) + ' 次。')
-        : '平台直出显示，不经过本站服务器。';
-      status('正在提交 ' + engineLabel(reported) + ' · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', waitHint, true);
+      status('正在出图 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '有结果立即显示。', true);
       try {
         var accepted = await hordeFetch('/generate/async', 'POST', payload, signal);
         if (!accepted || !accepted.id) throw new Error('平台没有返回任务编号');
@@ -817,13 +815,13 @@
         lastError = error;
         if (run.cancelled || (error && error.name === 'AbortError')) throw error;
         var statusCode = error && error.status;
-        if (statusCode === 403) {
+        if (statusCode === 403 && !shrink) {
           shrink = true;
-          await pause(run, 400);
+          await pause(run, 300);
           continue;
         }
-        if (statusCode === 429 || statusCode === 409 || statusCode === 503) {
-          await pause(run, Math.min(2000 + attempt * 2200, 14000));
+        if ((statusCode === 429 || statusCode === 409 || statusCode === 503) && attempt < 3) {
+          await pause(run, 800);
           continue;
         }
         throw error;
