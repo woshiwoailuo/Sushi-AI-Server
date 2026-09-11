@@ -460,7 +460,6 @@
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
       <p id="平台提示" class="平台提示">生图平台：Perch · 官网出图</p>
-      <p id="官网信息" class="官网信息">官网 perchance.org/ai-text-to-image-generator · 不嵌入 · 官方出图 · 不转接</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -3384,13 +3383,9 @@
 
   function 设平台提示(引擎) {
     var 行 = document.getElementById("平台提示");
-    var 官 = document.getElementById("官网信息");
     if (!行) return;
-    if (!引擎) 行.textContent = "生图平台：Perch · 官方出图";
+    if (!引擎) 行.textContent = "生图平台：Perch · 官网出图";
     else 行.textContent = "生图平台：" + 引擎名称(引擎);
-    if (官) {
-      官.hidden = String(引擎 || "perchance") !== "perchance" && 引擎 !== "官方" && 引擎 !== "perch";
-    }
   }
 
   function 按指定引擎出图(引擎) {
@@ -3454,7 +3449,7 @@
     用官方插件出图(false);
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.46" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.47" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

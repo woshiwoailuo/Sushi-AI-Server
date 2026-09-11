@@ -393,6 +393,25 @@ test('failed Perchance page plugin uses official generate without Horde', async 
   assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
+test('Perch official Load failed uses in-app photoreal', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
+  const inner = f.w.fetch;
+  f.w.fetch = (url, options) => {
+    if (/image-generation\.perchance\.org/.test(String(url))) {
+      return Promise.reject(Object.assign(new TypeError('Load failed'), { name: 'TypeError' }));
+    }
+    return inner(url, options);
+  };
+  const opened = [];
+  f.w.open = (url) => { opened.push(String(url)); return null; };
+  await f.w.开始生成();
+  assert.equal(opened.length, 0, 'must never open perchance.org');
+  assert.ok(f.calls.filter(isImageSubmit).length >= 1, 'blocked official uses in-app photoreal');
+  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
+  assert.doesNotMatch(f.text(), /Load failed/);
+});
+
 test('photorealPrompt enriches by default but style-keyword bypass keeps anime/二次元/插画', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.equal(typeof f.w.photorealPrompt, 'function');
