@@ -18,15 +18,15 @@
     </div>
 
     <div class="顶栏右侧">
-      <span id="成人状态标签" class="状态标签 已关闭">18+</span>
-      <button
-        type="button"
-        id="成人图标按钮"
-        class="次按钮 顶栏操作 已关闭"
-        aria-pressed="false"
-        title="成人模式已关闭（点击开启）"
-        onclick="请求切换成人主题()"
-      >成人模式</button>
+      <label class="成人对勾" title="勾选开始成人内容，取消则关闭">
+        <input
+          id="成人模式对勾"
+          type="checkbox"
+          checked
+          onchange="切换成人对勾(this.checked)"
+        >
+        <span id="成人状态标签" class="状态标签 已开启">18+</span>
+      </label>
       <button
         type="button"
         class="次按钮 顶栏操作"
@@ -489,19 +489,18 @@
       <p>可能出现裸露、性暗示或成人情节的图像，请自行判断是否继续。</p>
       <p>只允许虚构成年角色（18+）。禁止未成年人、儿童体态及相关暗示。</p>
       <p>不针对真实名人；生成内容仅供私人娱乐，请勿公开传播违法内容。</p>
-      <p>开启成人模式后，将按你的核心描述出图；描述为裸露时不会擅自加衣服。</p>
+      <p>开始后将按你的核心描述出图；描述为裸露时不会擅自加衣服。</p>
     </div>
     <label class="统一确认">
       <input id="成人统一确认" type="checkbox" onchange="检查成人确认按钮()">
-      <span>我已年满 18 岁，已阅读危险与成人提示，同意开启成人模式</span>
+      <span>我已年满 18 岁，已阅读危险与成人提示</span>
     </label>
-    <button type="button" id="确认开启按钮" class="成人开启按钮" disabled onclick="确认开启成人主题()">开启成人模式</button>
-    <small>此提示对应官方生成器的危险/成人确认。确认后可在顶栏随时关闭。</small>
+    <small>此提示对应官方生成器的危险/成人确认。勾选即开始，之后可在顶栏用对勾关闭。</small>
   </div>
 </div>
 
 <script>
-  var 成人主题已开启 = false;
+  var 成人主题已开启 = true;
   var 正在生成图片 = false;
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
@@ -572,7 +571,7 @@
       for (i = 0; i < 节点.length; i++) {
         var el = 节点[i];
         if (根 && d === document && (el === 根 || 根.contains(el))) continue;
-        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog']")) continue;
+        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog'], .成人对勾")) continue;
         var 字 = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
         var 址 = String(el.getAttribute("href") || "").toLowerCase();
         var 类名 = "";
@@ -712,19 +711,25 @@
     层.removeAttribute("hidden");
     document.body.classList.add("禁止滚动");
     var 框 = document.getElementById("成人统一确认");
-    var 钮 = document.getElementById("确认开启按钮");
     if (框) 框.checked = false;
-    if (钮) 钮.disabled = true;
   }
 
   function 恢复成人主题状态() {
-    if (已确认成人提示()) {
-      try { localStorage.setItem("角色生成器_成人主题", "enabled"); } catch (错误) {}
-      设置成人主题状态(true);
-      关闭成人确认();
-      return;
-    }
-    设置成人主题状态(false);
+    try {
+      var 确认 = localStorage.getItem("角色生成器_成人确认");
+      var 主题 = localStorage.getItem("角色生成器_成人主题");
+      if (确认 === "1") {
+        设置成人主题状态(主题 !== "disabled");
+        关闭成人确认();
+        return;
+      }
+      if (主题 === "disabled") {
+        设置成人主题状态(false);
+        关闭成人确认();
+        return;
+      }
+    } catch (错误) {}
+    设置成人主题状态(true);
     打开成人确认();
   }
 
@@ -801,25 +806,35 @@
   }
 
   function 请求切换成人主题() {
-    if (成人主题已开启) {
-      关闭成人主题();
+    切换成人对勾(!成人主题已开启);
+  }
+
+  function 切换成人对勾(开) {
+    if (开) {
+      if (已确认成人提示()) {
+        设置成人主题状态(true);
+        try { localStorage.setItem("角色生成器_成人主题", "enabled"); } catch (错误) {}
+        return;
+      }
+      设置成人主题状态(true);
+      打开成人确认();
       return;
     }
-    打开成人确认();
+    设置成人主题状态(false);
+    try {
+      localStorage.setItem("角色生成器_成人主题", "disabled");
+    } catch (错误) {}
+    关闭成人确认();
   }
 
   function 检查成人确认按钮() {
     var 框 = document.getElementById("成人统一确认");
-    var 钮 = document.getElementById("确认开启按钮");
-    if (钮) 钮.disabled = !(框 && 框.checked);
+    if (框 && 框.checked) 确认开启成人主题();
   }
 
   function 确认开启成人主题() {
     var 框 = document.getElementById("成人统一确认");
-    if (!框 || !框.checked) {
-      alert("请先阅读并勾选统一确认。");
-      return;
-    }
+    if (!框 || !框.checked) return;
 
     设置成人主题状态(true);
     关闭成人确认();
@@ -833,22 +848,7 @@
   }
 
   function 关闭成人主题() {
-    var 是否关闭 = confirm(
-      "确定关闭成人主题吗？关闭后将恢复普通生成模式。"
-    );
-
-    if (!是否关闭) {
-      return;
-    }
-
-    设置成人主题状态(false);
-
-    try {
-      localStorage.setItem("角色生成器_成人主题", "disabled");
-      localStorage.setItem("角色生成器_成人确认", "0");
-    } catch (错误) {
-      console.log("浏览器不允许修改设置");
-    }
+    切换成人对勾(false);
   }
 
   function 设置成人主题状态(开启) {
@@ -866,12 +866,14 @@
     var 后台状态 =
       document.getElementById("成人功能状态");
 
-    var 图标 =
-      document.getElementById("成人图标按钮");
+    var 勾 =
+      document.getElementById("成人模式对勾");
+
+    if (勾) 勾.checked = !!开启;
 
     if (开启) {
       if (标签) {
-        标签.textContent = "已开启 · 18+";
+        标签.textContent = "18+";
         标签.className = "状态标签 已开启";
       }
 
@@ -884,20 +886,13 @@
         提示.hidden = true;
       }
 
-      if (图标) {
-        图标.classList.add("已开启");
-        图标.classList.remove("已关闭");
-        图标.title = "成人模式已开启（点击可关闭）";
-        图标.setAttribute("aria-pressed", "true");
-      }
-
       if (后台状态) {
         后台状态.value =
           "adult mode enabled; NSFW allowed; nudity and adult sexual content allowed; follow the core description literally; do not add clothes if described as nude; fictional consenting adults 18+";
       }
     } else {
       if (标签) {
-        标签.textContent = "已关闭";
+        标签.textContent = "18+";
         标签.className = "状态标签 已关闭";
       }
 
@@ -908,13 +903,6 @@
 
       if (提示) {
         提示.hidden = true;
-      }
-
-      if (图标) {
-        图标.classList.add("已关闭");
-        图标.classList.remove("已开启");
-        图标.title = "成人模式已关闭（点击开启）";
-        图标.setAttribute("aria-pressed", "false");
       }
 
       if (后台状态) {
@@ -3964,6 +3952,39 @@
       rgba(255, 102, 143, 0.30);
     background:
       rgba(255, 102, 143, 0.10);
+  }
+
+  .成人对勾 {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 4px 8px 4px 6px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 99px;
+    border: 1px solid var(--边框);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .成人对勾 input {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    accent-color: var(--成人色);
+    cursor: pointer;
+  }
+
+  .成人对勾:has(input:checked) {
+    border-color: rgba(255, 102, 143, 0.30);
+    background: rgba(255, 102, 143, 0.10);
+  }
+
+  .成人对勾 .状态标签 {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
   }
 
   .主按钮,
