@@ -718,34 +718,27 @@
   }
 
   function 打开成人确认() {
-    var 层 = document.getElementById("成人确认层");
-    if (!层) return;
-    层.hidden = false;
-    层.removeAttribute("hidden");
-    document.body.classList.add("禁止滚动");
-    var 警 = document.getElementById("官方警告确认");
-    var 框 = document.getElementById("成人统一确认");
-    if (警) 警.checked = false;
-    if (框) 框.checked = false;
+    关闭成人确认();
+    设置成人主题状态(true);
+    try {
+      localStorage.setItem("角色生成器_成人主题", "enabled");
+      localStorage.setItem("角色生成器_成人确认", "1");
+    } catch (e) {}
   }
 
   function 恢复成人主题状态() {
     try {
-      var 确认 = localStorage.getItem("角色生成器_成人确认");
       var 主题 = localStorage.getItem("角色生成器_成人主题");
-      if (确认 === "1") {
-        设置成人主题状态(主题 !== "disabled");
-        关闭成人确认();
-        return;
-      }
       if (主题 === "disabled") {
         设置成人主题状态(false);
-        关闭成人确认();
-        return;
+      } else {
+        设置成人主题状态(true);
+        try { localStorage.setItem("角色生成器_成人确认", "1"); } catch (e) {}
       }
-    } catch (错误) {}
-    设置成人主题状态(true);
-    打开成人确认();
+    } catch (错误) {
+      设置成人主题状态(true);
+    }
+    关闭成人确认();
   }
 
   function 读取是否用户选过平台() {
@@ -825,19 +818,10 @@
   }
 
   function 切换成人对勾(开) {
-    if (开) {
-      if (已确认成人提示()) {
-        设置成人主题状态(true);
-        try { localStorage.setItem("角色生成器_成人主题", "enabled"); } catch (错误) {}
-        return;
-      }
-      设置成人主题状态(true);
-      打开成人确认();
-      return;
-    }
-    设置成人主题状态(false);
+    设置成人主题状态(!!开);
     try {
-      localStorage.setItem("角色生成器_成人主题", "disabled");
+      localStorage.setItem("角色生成器_成人主题", 开 ? "enabled" : "disabled");
+      if (开) localStorage.setItem("角色生成器_成人确认", "1");
     } catch (错误) {}
     关闭成人确认();
   }
@@ -3459,7 +3443,7 @@
     用官方插件出图(false);
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.50" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.51" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
