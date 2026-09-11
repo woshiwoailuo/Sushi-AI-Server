@@ -18,6 +18,15 @@
     </div>
 
     <div class="顶栏右侧">
+      <span id="成人状态标签" class="状态标签 已关闭">18+</span>
+      <button
+        type="button"
+        id="成人图标按钮"
+        class="次按钮 顶栏操作 已关闭"
+        aria-pressed="false"
+        title="成人模式已关闭（点击开启）"
+        onclick="请求切换成人主题()"
+      >成人模式</button>
       <button
         type="button"
         class="次按钮 顶栏操作"
@@ -471,6 +480,26 @@
 
 </div>
 
+<div id="成人确认层" class="确认遮罩" hidden role="dialog" aria-modal="true" aria-labelledby="成人确认标题">
+  <div class="确认卡">
+    <span class="年龄标志" aria-hidden="true">18+</span>
+    <h2 id="成人确认标题">危险内容与成人提示</h2>
+    <p class="确认说明">本页可能生成敏感、裸露或成人向画面，效果类似官方生成器的危险/成人提示。仅限虚构成年人。未满 18 岁请离开。</p>
+    <div class="规则列表">
+      <p>可能出现裸露、性暗示或成人情节的图像，请自行判断是否继续。</p>
+      <p>只允许虚构成年角色（18+）。禁止未成年人、儿童体态及相关暗示。</p>
+      <p>不针对真实名人；生成内容仅供私人娱乐，请勿公开传播违法内容。</p>
+      <p>开启成人模式后，将按你的核心描述出图；描述为裸露时不会擅自加衣服。</p>
+    </div>
+    <label class="统一确认">
+      <input id="成人统一确认" type="checkbox" onchange="检查成人确认按钮()">
+      <span>我已年满 18 岁，已阅读危险与成人提示，同意开启成人模式</span>
+    </label>
+    <button type="button" id="确认开启按钮" class="成人开启按钮" disabled onclick="确认开启成人主题()">开启成人模式</button>
+    <small>此提示对应官方生成器的危险/成人确认。确认后可在顶栏随时关闭。</small>
+  </div>
+</div>
+
 <script>
   var 成人主题已开启 = false;
   var 正在生成图片 = false;
@@ -543,12 +572,14 @@
       for (i = 0; i < 节点.length; i++) {
         var el = 节点[i];
         if (根 && d === document && (el === 根 || 根.contains(el))) continue;
+        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog']")) continue;
         var 字 = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
         var 址 = String(el.getAttribute("href") || "").toLowerCase();
         var 类名 = "";
         try { 类名 = typeof el.className === "string" ? el.className : (el.className && el.className.baseVal) || ""; } catch (e4) {}
         var 名 = String(el.id || "") + " " + 类名 + " " + String(el.getAttribute("title") || "") + " " + String(el.getAttribute("aria-label") || "");
-        if (字 === "edit" || 字 === "编辑" || 字 === "🛠️" || 址.indexOf("#edit") !== -1 || /headerButton|minimizedHeader|minimalMode|menuBarEl|perchance/i.test(名)) {
+        if (/危险内容|成人提示|年满 18|allow adult|okaytoshow|nsfw warning|content warning/i.test(字 + " " + 名)) continue;
+        if (字 === "edit" || 字 === "编辑" || 字 === "🛠️" || 址.indexOf("#edit") !== -1 || /headerButton|minimizedHeader|minimalMode|menuBarEl/i.test(名)) {
           藏站点元素(el, 根);
           continue;
         }
@@ -564,7 +595,10 @@
 
 
 
-  document.addEventListener("DOMContentLoaded", function () {
+  var 工坊已启动 = false;
+  function 启动工坊界面() {
+    if (工坊已启动) return;
+    工坊已启动 = true;
     恢复成人主题状态();
     绑定贴图();
     藏编辑钮();
@@ -620,8 +654,9 @@
         }
       });
     }
-
-  });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", 启动工坊界面);
+  else 启动工坊界面();
 
   function 刷新出图进度(已完成, 成功) {
     进度已报 = Number(已完成) || 0;
@@ -666,15 +701,31 @@
     框.scrollTop = 框.scrollHeight;
   }
 
+  function 已确认成人提示() {
+    try { return localStorage.getItem("角色生成器_成人确认") === "1"; } catch (e) { return false; }
+  }
+
+  function 打开成人确认() {
+    var 层 = document.getElementById("成人确认层");
+    if (!层) return;
+    层.hidden = false;
+    层.removeAttribute("hidden");
+    document.body.classList.add("禁止滚动");
+    var 框 = document.getElementById("成人统一确认");
+    var 钮 = document.getElementById("确认开启按钮");
+    if (框) 框.checked = false;
+    if (钮) 钮.disabled = true;
+  }
+
   function 恢复成人主题状态() {
-    try {
-      localStorage.setItem("角色生成器_成人主题", "enabled");
-      localStorage.setItem("角色生成器_十八禁行", "0");
-    } catch (错误) {}
-    设置成人主题状态(true);
-    十八禁行已开 = false;
-    var 行 = document.getElementById("十八禁开关行");
-    if (行) 行.hidden = true;
+    if (已确认成人提示()) {
+      try { localStorage.setItem("角色生成器_成人主题", "enabled"); } catch (错误) {}
+      设置成人主题状态(true);
+      关闭成人确认();
+      return;
+    }
+    设置成人主题状态(false);
+    打开成人确认();
   }
 
   function 读取是否用户选过平台() {
@@ -750,22 +801,22 @@
   }
 
   function 请求切换成人主题() {
-    设置成人主题状态(true);
+    if (成人主题已开启) {
+      关闭成人主题();
+      return;
+    }
+    打开成人确认();
   }
 
   function 检查成人确认按钮() {
-    var 已勾选 =
-      document.getElementById("成人统一确认").checked;
-
-    document.getElementById("确认开启按钮").disabled =
-      !已勾选;
+    var 框 = document.getElementById("成人统一确认");
+    var 钮 = document.getElementById("确认开启按钮");
+    if (钮) 钮.disabled = !(框 && 框.checked);
   }
 
   function 确认开启成人主题() {
-    var 已勾选 =
-      document.getElementById("成人统一确认").checked;
-
-    if (!已勾选) {
+    var 框 = document.getElementById("成人统一确认");
+    if (!框 || !框.checked) {
       alert("请先阅读并勾选统一确认。");
       return;
     }
@@ -774,10 +825,8 @@
     关闭成人确认();
 
     try {
-      localStorage.setItem(
-        "角色生成器_成人主题",
-        "enabled"
-      );
+      localStorage.setItem("角色生成器_成人主题", "enabled");
+      localStorage.setItem("角色生成器_成人确认", "1");
     } catch (错误) {
       console.log("浏览器不允许保存设置");
     }
@@ -795,10 +844,8 @@
     设置成人主题状态(false);
 
     try {
-      localStorage.setItem(
-        "角色生成器_成人主题",
-        "disabled"
-      );
+      localStorage.setItem("角色生成器_成人主题", "disabled");
+      localStorage.setItem("角色生成器_成人确认", "0");
     } catch (错误) {
       console.log("浏览器不允许修改设置");
     }
@@ -878,9 +925,11 @@
   }
 
   function 关闭成人确认() {
-    document.getElementById("成人确认层").hidden =
-      true;
-
+    var 层 = document.getElementById("成人确认层");
+    if (层) {
+      层.hidden = true;
+      层.setAttribute("hidden", "");
+    }
     document.body.classList.remove("禁止滚动");
   }
 
