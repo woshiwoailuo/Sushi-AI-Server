@@ -65,7 +65,7 @@ test('free chat providers keep provider-specific errors and Gemini system instru
 test('homepage can generate images directly from chat intent', () => {
   assert.match(home, /function wantsImageGen/);
   assert.match(home, /function generateHomeImage/);
-  assert.match(home, /style: engine === 'horde-anime' \? 'anime' : 'real'/);
+  assert.match(home, /horde-anime/);
   assert.match(home, /item\.image/);
   assert.match(home, /class="chat-img"/);
   assert.match(home, /data-full-url/);
@@ -79,18 +79,18 @@ test('homepage can generate images directly from chat intent', () => {
 test('homepage image path uses workshop Horde API and never opens workshop loader', () => {
   assert.match(home, /function homeImageError/);
   assert.doesNotMatch(home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat')), /\/api\/chat\/image/);
-  assert.match(home, /api\('\/api\/images'/);
+  assert.match(home, /aihorde\.net\/api\/v2\/generate\/async/);
   const genFn = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
   assert.ok(genFn.length > 200);
-  assert.match(genFn, /style: engine === 'horde-anime' \? 'anime' : 'real'/);
+  assert.match(genFn, /engine === 'horde-anime'/);
   assert.doesNotMatch(genFn, /style: 'glm'/);
   assert.doesNotMatch(genFn, /chatReady\.glm/);
-  assert.doesNotMatch(genFn, /style: style/);
   assert.doesNotMatch(genFn, /style = 'anime'/);
   assert.doesNotMatch(genFn, /\/api\/workshop\/ticket/);
   assert.doesNotMatch(genFn, /\/workshop\?/);
   assert.doesNotMatch(genFn, /enterGen|openWorkshop|data-tab="gen"/);
   assert.doesNotMatch(genFn, /工坊未能打开|打开工坊超时/);
+  assert.doesNotMatch(genFn, /\/api\/images/);
   assert.match(home, /点一下直接出图/);
   assert.match(home, /input\.value = '画一张：' \+ item\[1\]/);
   assert.match(home, /sendChat\(\)/);
@@ -111,10 +111,11 @@ test('homepage photoreal enrichment strips anime keywords on the default 写实 
   assert.doesNotMatch(fn, /hasExplicitArtStyle\(t\)/);
   const gen = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
   assert.doesNotMatch(gen, /styleAware/);
-  assert.match(gen, /negativePrompt: negative/);
-  assert.match(gen, /style: engine === 'horde-anime' \? 'anime' : 'real'/);
+  assert.match(gen, /negative/);
+  assert.match(gen, /engine === 'horde-anime'/);
   assert.doesNotMatch(gen, /\/api\/chat\/image/);
   assert.doesNotMatch(gen, /style = 'anime'/);
+  assert.match(gen, /aihorde\.net\/api\/v2\/generate\/async/);
 });
 
 

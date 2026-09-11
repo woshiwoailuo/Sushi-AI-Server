@@ -472,6 +472,17 @@
 
   async function stopJob(run) {
     if (!run.job || ['done', 'failed', 'cancelled'].includes(run.job.state)) return;
+    if (run.job.upstream === 'horde' && run.job.id) {
+      try {
+        await fetch(HORDE_API + '/generate/status/' + encodeURIComponent(run.job.id), {
+          method: 'DELETE',
+          headers: hordeHeaders()
+        });
+      } catch (e) {}
+      run.job.state = 'cancelled';
+      return;
+    }
+    if (!run.job.id) return;
     run.job = await api('/' + encodeURIComponent(run.job.id), { method: 'DELETE', timeoutMs: 30000 });
   }
 
@@ -648,30 +659,169 @@
     return generatePollinations(run, prompt, index, 'sana');
   }
 
+  var HORDE_API = 'https://aihorde.net/api/v2';
+  var HORDE_ANON_KEY = '0000000000';
+  var HORDE_REAL_MODELS = [
+    "ICBINP - I Can't Believe It's Not Photography",
+    'AbsoluteReality',
+    'Realistic Vision',
+    'Photon',
+    'ICBINP XL',
+    'Edge Of Realism',
+    'majicMIX realistic'
+  ];
+  var HORDE_ANIME_MODELS = [
+    'Counterfeit',
+    'Anima-Turbo-v1.1',
+    'Anything v5',
+    'Flat-2D Animerge',
+    'Rev Animated',
+    'WAI-NSFW-illustrious-SDXL'
+  ];
+  var HORDE_REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render';
+
+  function hordeHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      apikey: HORDE_ANON_KEY,
+      'Client-Agent': 'sushi-club:1.1.45:https://aihorde.net'
+    };
+  }
+
+  function buildHordeBody(run, prompt, index, styleName, shrink) {
+    var width = Number(run.payload && run.payload.width) || 512;
+    var height = Number(run.payload && run.payload.height) || 512;
+    if (shrink) {
+      width = Math.min(width, 512);
+      height = Math.min(height, 512);
+    }
+    var negative = String((run.payload && run.payload.negativePrompt) || '');
+    var isReal = styleName !== 'anime';
+    if (isReal) negative = negative ? (negative + ', ' + HORDE_REAL_NEGATIVE) : HORDE_REAL_NEGATIVE;
+    var params = {
+      n: 1,
+      width: width,
+      height: height,
+      steps: shrink ? 16 : 16,
+      cfg_scale: Number((run.payload && run.payload.cfgScale) || 7)
+    };
+    var seed = run.payload && run.payload.seed;
+    if (seed !== '' && seed != null) params.seed = String(Number(seed) + (index || 0));
+    var nsfwOn = typeof window.成人主题已开启 === 'undefined' ? true : !!window.成人主题已开启;
+    var body = {
+      prompt: String(prompt || '') + (negative ? ' ### ' + negative : ''),
+      params: params,
+      r2: true,
+      nsfw: nsfwOn,
+      censor_nsfw: !nsfwOn,
+      slow_workers: true,
+      models: isReal ? HORDE_REAL_MODELS.slice() : HORDE_ANIME_MODELS.slice()
+    };
+    var source = run.payload && run.payload.sourceImage;
+    if (source) {
+      var text = String(source);
+      var comma = text.indexOf(',');
+      body.source_image = comma >= 0 ? text.slice(comma + 1) : text;
+      body.source_processing = 'img2img';
+      params.denoising_strength = Number((run.payload && run.payload.strength) || 0.45);
+    }
+    return body;
+  }
+
+  async function hordeFetch(path, method, body, signal) {
+    var response = await fetch(HORDE_API + path, {
+      method: method || 'GET',
+      headers: hordeHeaders(),
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: signal
+    });
+    var data;
+    try { data = await response.json(); } catch (e) { throw new Error('平台返回异常，请稍后重试'); }
+    if (!response.ok) {
+      var err = new Error(
+        response.status === 429 ? '免费生图服务繁忙，请稍后重试'
+          : (data && (data.error || data.message)) || '生图服务暂时不可用，请稍后重试'
+      );
+      err.status = response.status === 429 ? 429 : response.status;
+      throw err;
+    }
+    return data;
+  }
+
+  async function pollHorde(run, id, signal) {
+    var errors = 0;
+    var first = true;
+    while (true) {
+      ensureActive(run);
+      if (!first) await pause(run, 800);
+      first = false;
+      ensureActive(run);
+      var check;
+      try {
+        check = await hordeFetch('/generate/check/' + encodeURIComponent(id), 'GET', undefined, signal);
+        errors = 0;
+      } catch (error) {
+        ensureActive(run);
+        if (error.status && error.status < 500 && error.status !== 429) throw error;
+        errors += 1;
+        if (errors >= 4) throw error;
+        status('连接暂时中断，正在重新查询', '不会重复提交生图任务。', true);
+        await pause(run, Math.min(2000 + errors * 1000, 5000));
+        continue;
+      }
+      run.job = {
+        id: id,
+        state: check.done ? 'processing' : (check.processing > 0 ? 'processing' : 'queued'),
+        upstream: 'horde',
+        queuePosition: check.queue_position,
+        waitTimeSeconds: check.wait_time
+      };
+      progress(run, run.job);
+      if (check.faulted) throw new Error('生图任务失败，请重新尝试');
+      if (!check.done && check.is_possible === false) throw new Error('当前没有可处理此任务的工作节点，请减小尺寸或稍后重试');
+      if (!check.done) continue;
+      var result = await hordeFetch('/generate/status/' + encodeURIComponent(id), 'GET', undefined, signal);
+      var gens = Array.isArray(result.generations) ? result.generations : [];
+      var image = null;
+      var i = 0;
+      for (; i < gens.length; i += 1) {
+        if (gens[i] && gens[i].img && !gens[i].censored) { image = gens[i]; break; }
+      }
+      if (!image || !image.img) throw new Error('任务结束但没有可显示的图片，请修改描述后重试');
+      run.job.state = 'done';
+      return image.img;
+    }
+  }
+
   async function generateHorde(run, prompt, index, providerSignal, engineName) {
     var reported = engineName === 'perchance' ? 'perchance' : (engineName === 'horde-anime' ? 'horde-anime' : 'horde-real');
     var styleName = reported === 'horde-anime' ? 'anime' : 'real';
+    var signal = providerSignal || run.controller.signal;
     var lastError = null;
+    var shrink = false;
     for (var attempt = 0; attempt < 10; attempt += 1) {
       ensureActive(run);
-      var payload = Object.assign({}, run.payload, {
-        prompt: prompt,
-        style: styleName
-      });
-      if (payload.seed !== '' && payload.seed != null) payload.seed = String(Number(payload.seed) + (index || 0));
+      var payload = buildHordeBody(run, prompt, index, styleName, shrink);
       var waitHint = attempt
-        ? ('通道忙，正在排队重试第 ' + (attempt + 1) + ' 次，不会重复扣额度。')
-        : '服务器如刚启动可能稍慢；重复点击不会创建新任务。';
+        ? ('通道忙，正在排队重试第 ' + (attempt + 1) + ' 次。')
+        : '平台直出显示，不经过本站服务器。';
       status('正在提交 ' + engineLabel(reported) + ' · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', waitHint, true);
       try {
-        run.job = await api('', { method: 'POST', body: payload, timeoutMs: 90000, signal: providerSignal || run.controller.signal });
+        var accepted = await hordeFetch('/generate/async', 'POST', payload, signal);
+        if (!accepted || !accepted.id) throw new Error('平台没有返回任务编号');
+        run.job = { id: accepted.id, state: 'queued', upstream: 'horde' };
         ensureActive(run);
-        var done = await poll(run, run.job, providerSignal);
-        return { url: done.image.url, engine: reported, job: done };
+        var url = await pollHorde(run, accepted.id, signal);
+        return { url: url, engine: reported };
       } catch (error) {
         lastError = error;
         if (run.cancelled || (error && error.name === 'AbortError')) throw error;
         var statusCode = error && error.status;
+        if (statusCode === 403) {
+          shrink = true;
+          await pause(run, 400);
+          continue;
+        }
         if (statusCode === 429 || statusCode === 409 || statusCode === 503) {
           await pause(run, Math.min(2000 + attempt * 2200, 14000));
           continue;
@@ -845,7 +995,7 @@
     }
     status(
       '正在用 Perch 生成 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
-      '官网无法内嵌，改用写实后端；不跳转官网。',
+      '平台直出显示，不经过本站服务器。',
       true
     );
     var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
