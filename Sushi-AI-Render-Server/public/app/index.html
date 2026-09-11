@@ -752,6 +752,7 @@
           throw new Error('当前选择 ' + engine + '，请在工坊使用该通道；未自动更换平台。');
         }
         if (engine === 'perchance') {
+          try {
           var perchPrompt = photorealHomePrompt(promptText);
           var perchNeg = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
           var key = '';
@@ -790,6 +791,9 @@
             reader.readAsDataURL(dBlob);
           });
           return { url: dUrl, channel: 'Perch' };
+          } catch (perchErr) {
+            /* Official host blocks this origin (Safari: Load failed). In-app photoreal still displays. */
+          }
         }
         var isAnime = engine === 'horde-anime';
         var prompt = isAnime ? promptText : photorealHomePrompt(promptText);

@@ -1083,7 +1083,8 @@
   }
 
   async function generatePerchance(run, prompt, index, providerSignal) {
-    // Do not embed perchance.org. Do not window.open. Do not relay through Horde.
+    // Do not embed perchance.org. Do not window.open.
+    // Try official generate first; if the official host blocks this origin, in-app photoreal still displays.
     if (typeof window.update === 'function' && !(run.payload && run.payload.sourceImage)) {
       try {
         return await generatePerchancePlugin(run, prompt, index, 5000);
@@ -1092,7 +1093,20 @@
         if (!error || /已取消生成|lost-race/.test(pluginMsg)) throw error;
       }
     }
-    return generatePerchanceOfficial(run, prompt, index, providerSignal);
+    try {
+      return await generatePerchanceOfficial(run, prompt, index, providerSignal);
+    } catch (error) {
+      var officialMsg = String(error && error.message || error || '');
+      if (!error || /已取消生成|lost-race/.test(officialMsg)) throw error;
+      if (run.cancelled) throw error;
+      status(
+        '正在用 Perch 生成 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
+        '官网防嵌，应用内直出显示。',
+        true
+      );
+      var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
+      return { url: result.url, engine: 'perchance' };
+    }
   }
 
   async function generateOne(run, prompt, index) {
@@ -1158,6 +1172,9 @@
       try { await stopJob(run); } catch (e) { cleanupError = ' 未收到取消确认，任务最迟在 10 分钟上限后结束。'; }
       var title = run.cancelled ? '已停止本轮生成' : (run.completed ? '已生成 ' + run.completed + ' 张，后续未完成' : '本次未完成');
       var detail = run.cancelled ? '已保留已完成的图片。' : String(error && error.message || error || '');
+      if (/Load failed|Failed to fetch|NetworkError/i.test(detail)) {
+        detail = '官网出图接口不可用，未完成。';
+      }
       if (!run.cancelled && (error && (error.status === 429 || error.code === 'ENGINE_COOLDOWN' || error.code === 'ALL_COOLDOWN' || /限流|冷却|429/.test(detail)))) {
         title = run.completed ? title : '出图通道限流';
         if (!/限流|冷却/.test(detail)) detail = '免费通道繁忙，本次请求已结束且未设置冷却；可立即重试或更换平台。';
@@ -1282,10 +1299,10 @@
     if (!tip) return;
     var name = normalizeEngineName(engine);
     tip.textContent = name === 'perchance'
-      ? 'Perch · 官网出图 perchance.org/ai-text-to-image-generator · 不嵌入不转接'
+      ? 'Perch · 官网出图 · 不嵌入'
       : engineLabel(engine) + ' · 未完成时不会自动更换平台';
     var info = $('官网信息');
-    if (info) info.hidden = name !== 'perchance';
+    if (info) info.hidden = true;
   };
 
   async function init() {

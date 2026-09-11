@@ -30,6 +30,13 @@ test('Perch uses official generate without Horde relay',async()=>{
  const result=await ctx.generatePerchance({payload:{},completed:0,total:1},'landscape',0);
  assert.deepEqual(calls,['official']);assert.equal(result.engine,'perchance');
 });
+test('blocked official Perch uses in-app photoreal',async()=>{
+ const calls=[];
+ const ctx={window:{},status:()=>{},generatePerchanceOfficial:async()=>{calls.push('official');throw Object.assign(new TypeError('Load failed'),{name:'TypeError'})},generateHorde:async()=>{calls.push('horde');return {url:'https://example.com/h.png',engine:'perchance'}}};
+ vm.createContext(ctx);vm.runInContext(extract(generation,'generatePerchance'),ctx);
+ const result=await ctx.generatePerchance({payload:{},completed:0,total:1},'landscape',0);
+ assert.deepEqual(calls,['official','horde']);assert.equal(result.engine,'perchance');
+});
 test('unsupported reference image remains on selected provider',async()=>{
  const ctx={};vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
  await assert.rejects(ctx.generateOne({engine:'sana',payload:{sourceImage:'image'}},'landscape',0),/未切换平台/);
