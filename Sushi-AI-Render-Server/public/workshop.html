@@ -114,16 +114,19 @@
           <label>默认平台
             <select id="管理默认平台" onchange="保存默认平台(this.value, true)"><option value="perchance">Perch</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
           </label>
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input id="调试开关" type="checkbox" onchange="切换调试(this.checked)">
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>显示调试信息</span>
           </label>
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input id="显示图生图" type="checkbox" checked onchange="切换区块('图生图区', this.checked)">
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>显示图生图</span>
           </label>
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input id="显示问答" type="checkbox" checked onchange="切换区块('问答区', this.checked)">
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>显示AI问答</span>
           </label>
           <p id="失败原因" class="说明文字">失败原因：暂无</p>
@@ -333,22 +336,24 @@
             type="hidden"
             value=""
           >
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input
               id="只换背景"
               type="checkbox"
               checked
               onchange="同步换背景强度()"
             >
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>只换背景，人物、衣服、姿势尽量保持原图</span>
           </label>
 
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input
               id="纯背景出图"
               type="checkbox"
               onchange="同步纯背景()"
             >
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>纯场景 / 插图生背景（不要人物，只画环境）</span>
           </label>
           <label>
@@ -380,8 +385,9 @@
           <select id="AI通道" onchange="对话通道已改()"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
           <span id="对话通道状态" class="说明文字" role="status">使用所选对话通道，失败时不会自动更换。</span>
         </label>
-        <label class="换背景行">
+        <label class="换背景行 对勾行">
           <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
+          <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
           <span>启用记忆</span>
         </label>
         <label>
@@ -453,7 +459,8 @@
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">生图平台：Perch</p>
+      <p id="平台提示" class="平台提示">生图平台：Perch · 官网出图</p>
+      <p id="官网信息" class="官网信息">官网 perchance.org/ai-text-to-image-generator · 不嵌入 · 官方出图 · 不转接</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -492,8 +499,9 @@
       <p>不针对真实名人；生成内容仅供私人娱乐，请勿公开传播违法内容。</p>
       <p>开始后将按你的核心描述出图；描述为裸露时不会擅自加衣服。</p>
     </div>
-    <label class="统一确认">
+    <label class="统一确认 对勾行">
       <input id="成人统一确认" type="checkbox" onchange="检查成人确认按钮()">
+      <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
       <span>我已年满 18 岁，已阅读危险与成人提示</span>
     </label>
     <small>此提示对应官方生成器的危险/成人确认。勾选即开始，之后可在顶栏用对勾关闭。</small>
@@ -572,7 +580,7 @@
       for (i = 0; i < 节点.length; i++) {
         var el = 节点[i];
         if (根 && d === document && (el === 根 || 根.contains(el))) continue;
-        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog'], .成人开关, #成人开关按钮")) continue;
+        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog'], .成人开关, #成人开关按钮, .对勾行, .对勾盒")) continue;
         var 字 = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
         var 址 = String(el.getAttribute("href") || "").toLowerCase();
         var 类名 = "";
@@ -2873,7 +2881,7 @@
 
   function 引擎名称(值) {
     var 真 = {
-      perchance: "Perch",
+      perchance: "Perch · 官方",
       "horde-real": "Horde · 写实",
       horde: "Horde · 写实",
       "horde-anime": "Horde · 动漫",
@@ -3295,10 +3303,10 @@
   }
 
   function 用官方插件出图(竞速) {
-    // 应用内 Perchance：有嵌入插件则走官方画廊；否则回落到应用内免费通道（绝不 window.open 官网）
+    // 不嵌入官网。有官方组件则用；否则走官方出图接口，绝不转接其他平台、绝不 window.open。
     if (typeof update !== "function") {
       设平台提示("perchance");
-      用群体出图();
+      if (typeof window.开始生成 === "function") window.开始生成();
       return;
     }
     上次官方张数 = 0;
@@ -3311,9 +3319,9 @@
     if (typeof update !== "function") {
       输出区.innerHTML = "";
       状态区.style.display = "flex";
-      状态区.innerHTML = '<div class="加载动画"></div><b>Perchance 官方组件未加载</b><p>已自动切换免费写实线路，请稍候。</p>';
-      记录失败原因("Perchance 官方组件未加载，已切换写实备用线路");
-      用写实引擎出图("perchance", 0);
+      状态区.innerHTML = '<div class="加载动画"></div><b>正在用 Perch 官方出图</b><p>官网 perchance.org/ai-text-to-image-generator · 不嵌入、不转接。</p>';
+      记录失败原因("Perchance 页面组件未加载，改走官方出图接口");
+      if (typeof window.开始生成 === "function") window.开始生成();
       return;
     }
     执行生成.value =
@@ -3332,7 +3340,8 @@
       update(输出区);
     } catch (错误) {
       console.error(错误);
-      切换备用引擎("官方插件没有启动");
+      设平台提示("perchance");
+      if (typeof window.开始生成 === "function") window.开始生成();
       return;
     }
     var 检查次数 = 0;
@@ -3364,9 +3373,8 @@
           /* Turbo / Horde 已在跑，官方迟到不再挡 */
         } else if (!抢出已定) {
           var 行 = document.getElementById("平台提示");
-          if (行) 行.textContent = "生图平台：官方超时，改抢写实备用";
-          用写实引擎出图("perchance");
-          用群体出图探测();
+          if (行) 行.textContent = "生图平台：Perch 官方出图超时，未转接其他平台";
+          结束本次生成("生成角色图片");
         } else {
           结束本次生成("生成角色图片");
         }
@@ -3376,9 +3384,13 @@
 
   function 设平台提示(引擎) {
     var 行 = document.getElementById("平台提示");
+    var 官 = document.getElementById("官网信息");
     if (!行) return;
-    if (!引擎) 行.textContent = "生图平台：Turbo";
+    if (!引擎) 行.textContent = "生图平台：Perch · 官方出图";
     else 行.textContent = "生图平台：" + 引擎名称(引擎);
+    if (官) {
+      官.hidden = String(引擎 || "perchance") !== "perchance" && 引擎 !== "官方" && 引擎 !== "perch";
+    }
   }
 
   function 按指定引擎出图(引擎) {
@@ -3442,7 +3454,7 @@
     用官方插件出图(false);
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.45" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.46" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4512,9 +4524,63 @@
   }
 
   .统一确认 input {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--成人色);
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+  }
+
+  .对勾行 {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .对勾行 input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+  }
+
+  .对勾盒 {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 6px;
+    border: 1px solid var(--边框);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .对勾盒 .对勾符 {
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+    color: transparent;
+  }
+
+  .对勾行 input:checked + .对勾盒 {
+    border-color: rgba(255, 102, 143, 0.35);
+    background: rgba(255, 102, 143, 0.12);
+  }
+
+  .对勾行 input:checked + .对勾盒 .对勾符 {
+    color: var(--成人色);
+  }
+
+  .官网信息 {
+    margin: 4px 0 0;
+    color: var(--淡色);
+    font-size: 10px;
+    line-height: 1.5;
   }
 
   .成人开启按钮,
