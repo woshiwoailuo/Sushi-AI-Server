@@ -752,12 +752,15 @@
           throw new Error('当前选择 ' + engine + '，请在工坊使用该通道；未自动更换平台。');
         }
         if (engine === 'perchance') {
+          var perchTimer = 0;
           try {
-          var perchPrompt = photorealHomePrompt(promptText);
+            var perchCtrl = new AbortController();
+            perchTimer = setTimeout(function () { try { perchCtrl.abort(); } catch (e) {} }, 1000);
+            var perchPrompt = photorealHomePrompt(promptText);
           var perchNeg = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
           var key = '';
           try {
-            var vRes = await fetch('https://image-generation.perchance.org/api/verifyUser?thread=0&__cacheBust=' + Math.random(), { cache: 'no-store' });
+            var vRes = await fetch('https://image-generation.perchance.org/api/verifyUser?thread=0&__cacheBust=' + Math.random(), { cache: 'no-store', signal: perchCtrl.signal });
             var vText = await vRes.text();
             if (vText && vText.trim().charAt(0) !== '<') {
               var vJson = JSON.parse(vText);
@@ -776,12 +779,12 @@
             requestId: String(Math.random()),
             __cache_bust: String(Math.random())
           });
-          var gRes = await fetch('https://image-generation.perchance.org/api/generate?' + q.toString(), { cache: 'no-store' });
+          var gRes = await fetch('https://image-generation.perchance.org/api/generate?' + q.toString(), { cache: 'no-store', signal: perchCtrl.signal });
           var gText = await gRes.text();
           if (!gText || gText.trim().charAt(0) === '<') throw new Error('官方出图接口被拦截，未转接其他平台');
           var gJson = JSON.parse(gText);
           if (!gJson || !gJson.imageId) throw new Error((gJson && (gJson.message || gJson.status)) || '官方没有返回图片，未转接其他平台');
-          var dRes = await fetch('https://image-generation.perchance.org/api/downloadTemporaryImage?imageId=' + encodeURIComponent(gJson.imageId), { cache: 'no-store' });
+          var dRes = await fetch('https://image-generation.perchance.org/api/downloadTemporaryImage?imageId=' + encodeURIComponent(gJson.imageId), { cache: 'no-store', signal: perchCtrl.signal });
           if (!dRes.ok) throw new Error('官方图片下载失败，未转接其他平台');
           var dBlob = await dRes.blob();
           var dUrl = await new Promise(function (resolve, reject) {
@@ -790,9 +793,10 @@
             reader.onerror = function () { reject(new Error('官方图片读取失败')); };
             reader.readAsDataURL(dBlob);
           });
+          if (perchTimer) clearTimeout(perchTimer);
           return { url: dUrl, channel: 'Perch' };
           } catch (perchErr) {
-            /* Official host blocks this origin (Safari: Load failed). In-app photoreal still displays. */
+            if (perchTimer) clearTimeout(perchTimer);
           }
         }
         var isAnime = engine === 'horde-anime';
@@ -803,7 +807,7 @@
         var body = {
           prompt: prompt + ' ### ' + negative,
           params: { n: 1, width: 768, height: 768, steps: 16, cfg_scale: 7 },
-          r2: true, nsfw: true, censor_nsfw: false, slow_workers: true,
+          r2: true, nsfw: true, censor_nsfw: false, slow_workers: false,
           models: isAnime ? HOME_HORDE_ANIME.slice() : HOME_HORDE_REAL.slice()
         };
         for (var attempt = 0; attempt < 10; attempt += 1) {

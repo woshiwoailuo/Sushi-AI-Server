@@ -702,7 +702,7 @@
       n: 1,
       width: width,
       height: height,
-      steps: shrink ? 16 : 16,
+      steps: shrink ? 8 : 12,
       cfg_scale: Number((run.payload && run.payload.cfgScale) || 7)
     };
     var seed = run.payload && run.payload.seed;
@@ -714,7 +714,7 @@
       r2: true,
       nsfw: nsfwOn,
       censor_nsfw: !nsfwOn,
-      slow_workers: true,
+      slow_workers: false,
       models: isReal ? HORDE_REAL_MODELS.slice() : HORDE_ANIME_MODELS.slice()
     };
     var source = run.payload && run.payload.sourceImage;
@@ -753,7 +753,7 @@
     var first = true;
     while (true) {
       ensureActive(run);
-      if (!first) await pause(run, 800);
+      if (!first) await pause(run, 400);
       first = false;
       ensureActive(run);
       var check;
@@ -1002,6 +1002,27 @@
     return '512x768';
   }
 
+  function signalWithTimeout(parent, ms) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () {
+      try { ctrl.abort(); } catch (e) {}
+    }, ms);
+    function onParent() {
+      clearTimeout(timer);
+      try { ctrl.abort(); } catch (e) {}
+    }
+    if (parent) {
+      if (parent.aborted) onParent();
+      else parent.addEventListener('abort', onParent);
+    }
+    ctrl.signal.__clearTimeout = function () { clearTimeout(timer); };
+    return ctrl.signal;
+  }
+
+  function parentAborted(parent, run) {
+    return !!(run && run.cancelled) || !!(parent && parent.aborted);
+  }
+
   async function perchanceOfficialJson(url, signal) {
     var response = await fetch(url, { method: 'GET', cache: 'no-store', signal: signal });
     var text = await response.text();
@@ -1060,7 +1081,7 @@
     });
     var created = null;
     var attempt = 0;
-    for (; attempt < 8; attempt += 1) {
+    for (; attempt < 2; attempt += 1) {
       ensureActive(run);
       created = await perchanceOfficialJson(
         'https://image-generation.perchance.org/api/generate?' + params.toString(),
@@ -1070,7 +1091,6 @@
       if (created && /invalid_key|failed_verification/i.test(String(created.status || created.message || ''))) {
         throw new Error('官方校验未通过，未转接其他平台');
       }
-      await pause(run, 4000);
     }
     if (!created || !created.imageId) throw new Error('官方没有返回图片，未转接其他平台');
     var imageUrl = 'https://image-generation.perchance.org/api/downloadTemporaryImage?imageId=' + encodeURIComponent(created.imageId);
@@ -1093,15 +1113,20 @@
         if (!error || /已取消生成|lost-race/.test(pluginMsg)) throw error;
       }
     }
+    var parent = providerSignal || (run && run.controller && run.controller.signal);
+    var officialSignal = signalWithTimeout(parent, 1200);
     try {
-      return await generatePerchanceOfficial(run, prompt, index, providerSignal);
+      var official = await generatePerchanceOfficial(run, prompt, index, officialSignal);
+      if (officialSignal.__clearTimeout) officialSignal.__clearTimeout();
+      return official;
     } catch (error) {
+      if (officialSignal.__clearTimeout) officialSignal.__clearTimeout();
       var officialMsg = String(error && error.message || error || '');
       if (!error || /已取消生成|lost-race/.test(officialMsg)) throw error;
-      if (run.cancelled) throw error;
+      if (parentAborted(parent, run)) throw error;
       status(
-        '正在用 Perch 生成 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
-        '官网防嵌，应用内直出显示。',
+        '正在出图 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
+        '官网防嵌，应用内直出，有结果立即显示。',
         true
       );
       var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
