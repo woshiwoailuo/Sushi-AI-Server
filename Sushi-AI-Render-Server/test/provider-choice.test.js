@@ -25,14 +25,14 @@ test('manual image choice survives both successful and failed generation',async(
 });
 test('Perch uses official generate without Horde relay',async()=>{
  const calls=[];
- const ctx={window:{},status:()=>{},generatePerchanceOfficial:async()=>{calls.push('official');return {url:'https://example.com/p.png',engine:'perchance'}},generateHorde:async()=>{calls.push('horde');return {url:'https://example.com/h.png',engine:'perchance'}}};
+ const ctx={window:{},status:()=>{},signalWithTimeout:(p)=>p||{aborted:false},parentAborted:()=>false,generatePerchanceOfficial:async()=>{calls.push('official');return {url:'https://example.com/p.png',engine:'perchance'}},generateHorde:async()=>{calls.push('horde');return {url:'https://example.com/h.png',engine:'perchance'}}};
  vm.createContext(ctx);vm.runInContext(extract(generation,'generatePerchance'),ctx);
  const result=await ctx.generatePerchance({payload:{},completed:0,total:1},'landscape',0);
  assert.deepEqual(calls,['official']);assert.equal(result.engine,'perchance');
 });
 test('blocked official Perch uses in-app photoreal',async()=>{
  const calls=[];
- const ctx={window:{},status:()=>{},generatePerchanceOfficial:async()=>{calls.push('official');throw Object.assign(new TypeError('Load failed'),{name:'TypeError'})},generateHorde:async()=>{calls.push('horde');return {url:'https://example.com/h.png',engine:'perchance'}}};
+ const ctx={window:{},status:()=>{},signalWithTimeout:(p)=>p||{aborted:false},parentAborted:()=>false,generatePerchanceOfficial:async()=>{calls.push('official');throw Object.assign(new TypeError('Load failed'),{name:'TypeError'})},generateHorde:async()=>{calls.push('horde');return {url:'https://example.com/h.png',engine:'perchance'}}};
  vm.createContext(ctx);vm.runInContext(extract(generation,'generatePerchance'),ctx);
  const result=await ctx.generatePerchance({payload:{},completed:0,total:1},'landscape',0);
  assert.deepEqual(calls,['official','horde']);assert.equal(result.engine,'perchance');
