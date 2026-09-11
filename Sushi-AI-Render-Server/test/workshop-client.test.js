@@ -13,6 +13,9 @@ const client = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-g
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6JkAAAAASUVORK5CYII=';
 const response = (data, status = 200) => ({ ok: status < 400, status, json: async () => data });
 const job = (state = 'queued') => ({ id: 'test-job', state, expiresAt: Date.now() + 600000, queuePosition: 5, waitTimeSeconds: 60, image: state === 'done' ? { url: PNG } : null });
+function isPerchOfficial(c) {
+  return /image-generation\.perchance\.org\/api\/generate/.test(String(c.url));
+}
 function isImageSubmit(c) {
   return c.method === 'POST' && /aihorde\.net\/api\/v2\/generate\/async|\/api\/images\/?$/.test(String(c.url));
 }
@@ -50,6 +53,26 @@ async function setup(t, handler, imageFails = false) {
   w.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
     const href = String(url);
+    if (href.includes('image-generation.perchance.org')) {
+      if (href.includes('verifyUser')) {
+        const data = { userKey: 'test-key', status: 'ok' };
+        return { ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) };
+      }
+      if (href.includes('/generate')) {
+        const data = { status: 'success', imageId: 'pc-img' };
+        return { ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) };
+      }
+      if (href.includes('downloadTemporaryImage')) {
+        const raw = Buffer.from(PNG.split(',')[1], 'base64');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({}),
+          text: async () => '',
+          blob: async () => new w.Blob([raw], { type: 'image/png' })
+        };
+      }
+    }
     if (href.includes('/api/images/config')) return response({ perchanceUrl: 'https://perchance.org/ai-text-to-image-generator' });
     if (href.includes('/api/images/current')) return response({ job: null });
     if (href.includes('aihorde.net')) {
@@ -183,7 +206,8 @@ test('failed translation preserves core; Perch stays selected and generates in-a
   await f.w.开始生成();
   assert.equal(box.value, 'perchance');
   assert.equal(opened.length, 0, 'must never open perchance.org');
-  assert.ok(f.calls.filter(isImageSubmit).length > posts);
+  assert.equal(f.calls.filter(isImageSubmit).length, posts, 'Perch must not relay Horde');
+  assert.ok(f.calls.some(isPerchOfficial), 'Perch uses official generate');
   assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
@@ -308,7 +332,7 @@ test('Perchance uses its official component when available without Horde calls',
   assert.equal(f.calls.filter(isImageSubmit).length, 0);
 });
 
-test('Perch without official plugin uses Horde photoreal in-app', async t => {
+test('Perch without official plugin uses official generate in-app', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
   const opened = [];
@@ -316,11 +340,10 @@ test('Perch without official plugin uses Horde photoreal in-app', async t => {
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must never open perchance.org');
   assert.equal(typeof f.w.update, 'undefined');
-  const posts = f.calls.filter(isImageSubmit);
-  assert.ok(posts.length >= 1, 'in-app Perch uses Horde photoreal');
-  const payload = JSON.parse(posts[0].body);
-  assert.ok(isRealHorde(payload));
-  assert.match(payload.prompt, /photorealistic RAW photo/i);
+  assert.equal(f.calls.filter(isImageSubmit).length, 0, 'must not relay Horde');
+  assert.ok(f.calls.some(isPerchOfficial), 'in-app Perch uses official generate');
+  const gen = f.calls.find(isPerchOfficial);
+  assert.match(decodeURIComponent(String(gen.url).replace(/\+/g, '%20')), /photorealistic RAW photo/i);
   assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
@@ -354,7 +377,7 @@ test('server keeps leftover Pollinations aliases on sana; Perchance no longer ro
 });
 
 
-test('failed Perchance official plugin falls back to Horde photoreal', async t => {
+test('failed Perchance page plugin uses official generate without Horde', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
   let plugin = 0;
@@ -365,10 +388,8 @@ test('failed Perchance official plugin falls back to Horde photoreal', async t =
   assert.equal(plugin, 1);
   assert.equal(box.value, 'perchance');
   assert.equal(opened.length, 0, 'must never open perchance.org');
-  const posts = f.calls.filter(isImageSubmit);
-  assert.ok(posts.length >= 1, 'falls back to Horde photoreal');
-  const payload = JSON.parse(posts[0].body);
-  assert.ok(isRealHorde(payload));
+  assert.equal(f.calls.filter(isImageSubmit).length, 0, 'must not relay Horde');
+  assert.ok(f.calls.some(isPerchOfficial), 'falls back to official generate');
   assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
@@ -617,6 +638,8 @@ test('shows danger/adult warning overlay then enables adult mode on confirm', as
   assert.equal(f.w.document.getElementById('成人图标按钮'), null);
   assert.doesNotMatch(f.w.document.querySelector('.顶栏右侧').textContent, /成人模式/);
   const sw = f.w.document.getElementById('成人开关按钮');
+  assert.ok(layer.querySelector('.对勾盒 .对勾符'));
+  assert.ok(f.w.document.querySelector('#只换背景') && f.w.document.querySelector('#只换背景').nextElementSibling.classList.contains('对勾盒'));
   assert.ok(sw);
   assert.equal(sw.textContent.trim(), '✓');
   assert.equal(sw.getAttribute('aria-pressed'), 'true');

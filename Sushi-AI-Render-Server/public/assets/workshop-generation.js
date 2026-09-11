@@ -909,7 +909,7 @@
     var map = {
       auto: '自动抢出 · 写实', 'auto-real': '自动抢出 · 写实', 'auto-anime': '自动抢出 · 动漫',
       turbo: 'Sana', horde: 'Horde · 写实', 'horde-real': 'Horde · 写实', 'horde-anime': 'Horde · 动漫',
-      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perch'
+      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perch · 官方'
     };
     return map[name] || name;
   }
@@ -981,10 +981,109 @@
     }
   }
 
+  function blobToDataUrl(blob) {
+    return new Promise(function (resolve, reject) {
+      if (!blob) {
+        reject(new Error('官方没有返回图片'));
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = function () { reject(new Error('官方图片读取失败')); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function perchanceResolution(run) {
+    var w = Number(run && run.payload && run.payload.width) || 512;
+    var h = Number(run && run.payload && run.payload.height) || 512;
+    if (w === h) return '512x512';
+    if (w > h) return '768x512';
+    return '512x768';
+  }
+
+  async function perchanceOfficialJson(url, signal) {
+    var response = await fetch(url, { method: 'GET', cache: 'no-store', signal: signal });
+    var text = await response.text();
+    if (!text || text.trim().charAt(0) === '<' || /Just a moment|cf-mitigated|cloudflare/i.test(text)) {
+      var blocked = new Error('官方出图接口被拦截，未转接其他平台');
+      blocked.code = 'PERCH_CF';
+      blocked.status = response.status;
+      throw blocked;
+    }
+    var data;
+    try { data = JSON.parse(text); } catch (e) {
+      var bad = new Error('官方返回异常，未转接其他平台');
+      bad.status = response.status;
+      throw bad;
+    }
+    if (!response.ok) {
+      var err = new Error((data && (data.message || data.status || data.error)) || '官方出图失败');
+      err.status = response.status;
+      throw err;
+    }
+    return data;
+  }
+
+  async function generatePerchanceOfficial(run, prompt, index, providerSignal) {
+    if (run.payload && run.payload.sourceImage) {
+      throw new Error('Perch 官方出图暂不支持参考图，未转接其他平台。');
+    }
+    var signal = providerSignal || run.controller.signal;
+    status(
+      '正在用 Perch 官方出图 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
+      '官网 perchance.org/ai-text-to-image-generator · 不嵌入、不跳转、不转接。',
+      true
+    );
+    var key = '';
+    try {
+      var verified = await perchanceOfficialJson(
+        'https://image-generation.perchance.org/api/verifyUser?thread=0&__cacheBust=' + Math.random(),
+        signal
+      );
+      key = (verified && verified.userKey) || '';
+    } catch (error) {
+      ensureActive(run);
+      if (run.cancelled || (error && error.name === 'AbortError')) throw error;
+    }
+    var params = new URLSearchParams({
+      prompt: String(prompt || ''),
+      negativePrompt: String((run.payload && run.payload.negativePrompt) || ''),
+      userKey: key,
+      seed: '-1',
+      resolution: perchanceResolution(run),
+      guidanceScale: String((run.payload && run.payload.cfgScale) || 7),
+      channel: 'ai-text-to-image-generator',
+      subChannel: 'public',
+      requestId: String(Math.random()) + '-p' + String(index || 0),
+      __cache_bust: String(Math.random())
+    });
+    var created = null;
+    var attempt = 0;
+    for (; attempt < 8; attempt += 1) {
+      ensureActive(run);
+      created = await perchanceOfficialJson(
+        'https://image-generation.perchance.org/api/generate?' + params.toString(),
+        signal
+      );
+      if (created && created.imageId) break;
+      if (created && /invalid_key|failed_verification/i.test(String(created.status || created.message || ''))) {
+        throw new Error('官方校验未通过，未转接其他平台');
+      }
+      await pause(run, 4000);
+    }
+    if (!created || !created.imageId) throw new Error('官方没有返回图片，未转接其他平台');
+    var imageUrl = 'https://image-generation.perchance.org/api/downloadTemporaryImage?imageId=' + encodeURIComponent(created.imageId);
+    var imgRes = await fetch(imageUrl, { method: 'GET', cache: 'no-store', signal: signal });
+    if (!imgRes.ok) throw new Error('官方图片下载失败，未转接其他平台');
+    var blob = await imgRes.blob();
+    if (!blob || !blob.size || blob.size < 32) throw new Error('官方图片无效，未转接其他平台');
+    var url = await blobToDataUrl(blob);
+    return { url: url, engine: 'perchance' };
+  }
+
   async function generatePerchance(run, prompt, index, providerSignal) {
-    // Official Perchance.org cannot be embedded (Cloudflare 403 + X-Frame-Options).
-    // In-app Perch is an independent photoreal channel on Horde 写实 models — never Sana.
-    // Never window.open perchance.org.
+    // Do not embed perchance.org. Do not window.open. Do not relay through Horde.
     if (typeof window.update === 'function' && !(run.payload && run.payload.sourceImage)) {
       try {
         return await generatePerchancePlugin(run, prompt, index, 5000);
@@ -993,13 +1092,7 @@
         if (!error || /已取消生成|lost-race/.test(pluginMsg)) throw error;
       }
     }
-    status(
-      '正在用 Perch 生成 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
-      '平台直出显示，不经过本站服务器。',
-      true
-    );
-    var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
-    return { url: result.url, engine: 'perchance' };
+    return generatePerchanceOfficial(run, prompt, index, providerSignal);
   }
 
   async function generateOne(run, prompt, index) {
@@ -1187,7 +1280,12 @@
   window.设平台提示 = function (engine) {
     var tip = $('平台提示');
     if (!tip) return;
-    tip.textContent = engineLabel(engine) + ' · 未完成时不会自动更换平台';
+    var name = normalizeEngineName(engine);
+    tip.textContent = name === 'perchance'
+      ? 'Perch · 官网出图 perchance.org/ai-text-to-image-generator · 不嵌入不转接'
+      : engineLabel(engine) + ' · 未完成时不会自动更换平台';
+    var info = $('官网信息');
+    if (info) info.hidden = name !== 'perchance';
   };
 
   async function init() {

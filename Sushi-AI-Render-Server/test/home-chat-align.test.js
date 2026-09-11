@@ -79,6 +79,7 @@ test('homepage can generate images directly from chat intent', () => {
 test('homepage image path uses workshop Horde API and never opens workshop loader', () => {
   assert.match(home, /function homeImageError/);
   assert.doesNotMatch(home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat')), /\/api\/chat\/image/);
+  assert.match(home, /image-generation\.perchance\.org\/api\/generate/);
   assert.match(home, /aihorde\.net\/api\/v2\/generate\/async/);
   const genFn = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
   assert.ok(genFn.length > 200);
