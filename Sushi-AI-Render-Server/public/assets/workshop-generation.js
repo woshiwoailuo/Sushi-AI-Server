@@ -153,13 +153,16 @@
     if (randomPair && randomPair.chinese === source) return randomPair.english;
     if (!/[\u4e00-\u9fff]/.test(source)) return source;
     if (promptCache[source]) return promptCache[source];
-    if (source.length <= 400 && typeof window.调用开源翻译 === 'function') {
-      status('正在翻译画面描述', '翻译完成后提交；连接失败时使用本次原文。', true);
+    status('正在翻译为英文', '出图指令先译成英文再提交。', true);
+    var tries = 0;
+    for (; tries < 2; tries += 1) {
+      if (typeof window.调用开源翻译 !== 'function') break;
       try {
         var translated = await within(window.调用开源翻译(source, 'en'), 8000);
         ensureActive(run);
         if (translated && !/[\u4e00-\u9fff]/.test(translated)) {
           promptCache[source] = translated;
+          if ($('英文描述')) $('英文描述').value = translated;
           return translated;
         }
       } catch (e) { ensureActive(run); }
@@ -1222,8 +1225,7 @@
 
     enableProviderPickers();
 
-    var description = lastEdited === '英文描述' ? value('英文描述') : value('角色描述');
-    if (!description) description = value('角色描述') || value('英文描述');
+    var description = value('角色描述') || value('英文描述');
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
     resetDisabledEnginesForNewRun();
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
