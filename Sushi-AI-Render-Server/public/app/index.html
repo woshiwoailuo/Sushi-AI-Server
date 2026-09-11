@@ -734,47 +734,65 @@
       if (err && err.name === 'AbortError') return '出图超时，请稍后重试';
       return msg || '出图失败，请换描述再试';
     }
-    async function generateHomeImage(promptText) {
+        var HOME_HORDE_REAL = [
+          "ICBINP - I Can't Believe It's Not Photography",
+          'AbsoluteReality', 'Realistic Vision', 'Photon', 'ICBINP XL', 'Edge Of Realism', 'majicMIX realistic'
+        ];
+        var HOME_HORDE_ANIME = [
+          'Counterfeit', 'Anima-Turbo-v1.1', 'Anything v5', 'Flat-2D Animerge', 'Rev Animated', 'WAI-NSFW-illustrious-SDXL'
+        ];
+        async function generateHomeImage(promptText) {
       // Home image requests honor the saved provider and never fall back to another service.
       // Chat bubble text stays as typed; only the generator prompt is enriched.
+      // Platform-direct: browser talks to Horde and displays the image URL.
       try {
         var engine = localStorage.getItem('角色生成器_默认平台') || 'perchance';
         if (engine === '官方' || engine === 'perch') engine = 'perchance';
         if (engine === 'sana' || engine === 'auto-anime') {
           throw new Error('当前选择 ' + engine + '，请在工坊使用该通道；未自动更换平台。');
         }
-        var prompt = engine === 'horde-anime' ? promptText : photorealHomePrompt(promptText);
-        var negative = engine === 'horde-anime' ? 'lowres, blurry, watermark, text' : 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
+        var isAnime = engine === 'horde-anime';
+        var prompt = isAnime ? promptText : photorealHomePrompt(promptText);
+        var negative = isAnime ? 'lowres, blurry, watermark, text' : 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
         var lastErr = null;
-        var channelLabel = engine === 'perchance' ? 'Perch' : (engine === 'horde-anime' ? 'Horde · 动漫' : 'Horde · 写实');
+        var channelLabel = engine === 'perchance' ? 'Perch' : (isAnime ? 'Horde · 动漫' : 'Horde · 写实');
+        var body = {
+          prompt: prompt + ' ### ' + negative,
+          params: { n: 1, width: 768, height: 768, steps: 16, cfg_scale: 7 },
+          r2: true, nsfw: true, censor_nsfw: false, slow_workers: true,
+          models: isAnime ? HOME_HORDE_ANIME.slice() : HOME_HORDE_REAL.slice()
+        };
         for (var attempt = 0; attempt < 10; attempt += 1) {
           try {
-            var created = await api('/api/images', {
+            var createdRes = await fetch('https://aihorde.net/api/v2/generate/async', {
               method: 'POST',
-              body: JSON.stringify({
-                prompt: prompt,
-                width: 768,
-                height: 768,
-                negativePrompt: negative,
-                style: engine === 'horde-anime' ? 'anime' : 'real'
-              }),
-              timeoutMs: 90000
+              headers: { 'Content-Type': 'application/json', apikey: '0000000000', 'Client-Agent': 'sushi-club:1.1.45:https://aihorde.net' },
+              body: JSON.stringify(body)
             });
-            var job = created && (created.job || created);
-            if (job && job.state === 'done' && job.image && job.image.url) {
-              return { url: job.image.url, channel: channelLabel };
+            var created = await createdRes.json().catch(function () { return {}; });
+            if (!createdRes.ok) {
+              var err = new Error(created.message || created.error || '出图失败');
+              err.status = createdRes.status;
+              throw err;
             }
-            if (!job || !job.id) throw new Error('工坊未受理出图，请稍后重试');
+            if (!created || !created.id) throw new Error('工坊未受理出图，请稍后重试');
             var deadline = Date.now() + 180000;
             var firstPoll = true;
             while (Date.now() < deadline) {
-              var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
-              var cur = st && (st.job || st);
-              if (cur && cur.state === 'done' && cur.image && cur.image.url) {
-                return { url: cur.image.url, channel: engine === 'horde-anime' ? 'Horde · 动漫' : 'Horde · 写实' };
-              }
-              if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
-                throw new Error((cur && cur.error) || '出图失败');
+              var stRes = await fetch('https://aihorde.net/api/v2/generate/check/' + encodeURIComponent(created.id), {
+                headers: { apikey: '0000000000', 'Client-Agent': 'sushi-club:1.1.45:https://aihorde.net' }
+              });
+              var st = await stRes.json().catch(function () { return {}; });
+              if (st && st.faulted) throw new Error('出图失败');
+              if (st && st.done) {
+                var fullRes = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(created.id), {
+                  headers: { apikey: '0000000000', 'Client-Agent': 'sushi-club:1.1.45:https://aihorde.net' }
+                });
+                var full = await fullRes.json().catch(function () { return {}; });
+                var gens = (full && full.generations) || [];
+                var hit = gens.find(function (g) { return g && g.img && !g.censored; });
+                if (hit && hit.img) return { url: hit.img, channel: channelLabel };
+                throw new Error('出图失败');
               }
               await new Promise(function (r) { setTimeout(r, firstPoll ? 400 : 800); });
               firstPoll = false;

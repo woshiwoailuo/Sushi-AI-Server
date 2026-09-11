@@ -18,15 +18,16 @@
     </div>
 
     <div class="顶栏右侧">
-      <label class="成人对勾" title="勾选开始成人内容，取消则关闭">
-        <input
-          id="成人模式对勾"
-          type="checkbox"
-          checked
-          onchange="切换成人对勾(this.checked)"
-        >
-        <span id="成人状态标签" class="状态标签 已开启">18+</span>
-      </label>
+      <button
+        type="button"
+        id="成人开关按钮"
+        class="成人开关 已开启"
+        aria-pressed="true"
+        title="已开启，点击关闭"
+        onclick="切换成人对勾(!成人主题已开启)"
+      ><span class="对勾符" aria-hidden="true">✓</span></button>
+      <input id="成人模式对勾" type="checkbox" checked hidden>
+      <span id="成人状态标签" class="状态标签 已开启" hidden>18+</span>
       <button
         type="button"
         class="次按钮 顶栏操作"
@@ -571,7 +572,7 @@
       for (i = 0; i < 节点.length; i++) {
         var el = 节点[i];
         if (根 && d === document && (el === 根 || 根.contains(el))) continue;
-        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog'], .成人对勾")) continue;
+        if (el.closest && el.closest("#成人确认层, .确认遮罩, [role='dialog'], .成人开关, #成人开关按钮")) continue;
         var 字 = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
         var 址 = String(el.getAttribute("href") || "").toLowerCase();
         var 类名 = "";
@@ -870,6 +871,15 @@
       document.getElementById("成人模式对勾");
 
     if (勾) 勾.checked = !!开启;
+    var 开关 = document.getElementById("成人开关按钮");
+    if (开关) {
+      开关.classList.toggle("已开启", !!开启);
+      开关.classList.toggle("已关闭", !开启);
+      开关.setAttribute("aria-pressed", 开启 ? "true" : "false");
+      开关.title = 开启 ? "已开启，点击关闭" : "已关闭，点击开启";
+      var 符 = 开关.querySelector(".对勾符");
+      if (符) 符.textContent = 开启 ? "✓" : "";
+    }
 
     if (开启) {
       if (标签) {
@@ -3432,7 +3442,7 @@
     用官方插件出图(false);
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.44" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.45" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -3954,37 +3964,39 @@
       rgba(255, 102, 143, 0.10);
   }
 
-  .成人对勾 {
+  .成人开关 {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    min-height: 28px;
-    padding: 4px 8px 4px 6px;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    padding: 0;
     cursor: pointer;
     user-select: none;
-    border-radius: 99px;
+    border-radius: 8px;
     border: 1px solid var(--边框);
     background: rgba(255, 255, 255, 0.03);
   }
 
-  .成人对勾 input {
-    width: 16px;
-    height: 16px;
-    min-width: 16px;
-    accent-color: var(--成人色);
-    cursor: pointer;
+  .成人开关 .对勾符 {
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1;
+    color: transparent;
   }
 
-  .成人对勾:has(input:checked) {
-    border-color: rgba(255, 102, 143, 0.30);
-    background: rgba(255, 102, 143, 0.10);
+  .成人开关.已开启 {
+    border-color: rgba(255, 102, 143, 0.35);
+    background: rgba(255, 102, 143, 0.12);
   }
 
-  .成人对勾 .状态标签 {
-    min-height: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
+  .成人开关.已开启 .对勾符 {
+    color: var(--成人色);
+  }
+
+  #成人状态标签 {
+    display: none !important;
   }
 
   .主按钮,
