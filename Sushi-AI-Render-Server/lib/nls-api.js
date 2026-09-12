@@ -139,8 +139,8 @@ function registerNls(app, deps) {
         'INSERT INTO nls_rooms (id, question_ids, option_key, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'
       ).run(id, JSON.stringify(ids), optionKey, now.toISOString(), expires);
       await db().prepare(
-        'INSERT INTO nls_room_players (room_id, user_id, nickname, done, joined_at) VALUES (?, ?, ?, 0, ?) RETURNING room_id'
-      ).run(id, uid, name, now.toISOString());
+        'INSERT INTO nls_room_players (id, room_id, user_id, nickname, done, joined_at) VALUES (?, ?, ?, ?, 0, ?)'
+      ).run(id + ':' + uid, id, uid, name, now.toISOString());
       persistSqlJs();
       const packed = await loadRoom(id, uid);
       res.json(packed.view);
@@ -199,8 +199,8 @@ function registerNls(app, deps) {
         }
         if (!packed.view.joined) {
           await db().prepare(
-            'INSERT INTO nls_room_players (room_id, user_id, nickname, done, joined_at) VALUES (?, ?, ?, 0, ?) RETURNING room_id'
-          ).run(roomId, uid, name, new Date().toISOString());
+            'INSERT INTO nls_room_players (id, room_id, user_id, nickname, done, joined_at) VALUES (?, ?, ?, ?, 0, ?)'
+          ).run(roomId + ':' + uid, roomId, uid, name, new Date().toISOString());
           persistSqlJs();
         }
         const ids = parseIds(packed.room.question_ids);

@@ -32,6 +32,7 @@ const NLS_SQL = `
     expires_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS nls_room_players (
+    id TEXT PRIMARY KEY,
     room_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     nickname TEXT NOT NULL,
