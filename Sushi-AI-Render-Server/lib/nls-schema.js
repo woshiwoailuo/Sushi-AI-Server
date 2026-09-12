@@ -42,7 +42,7 @@ const NLS_SQL = `
     answers TEXT,
     payload TEXT,
     joined_at TEXT NOT NULL,
-    PRIMARY KEY (room_id, user_id)
+    UNIQUE (room_id, user_id)
   );
   CREATE INDEX IF NOT EXISTS nls_room_players_room_idx ON nls_room_players (room_id, joined_at);
 `;
