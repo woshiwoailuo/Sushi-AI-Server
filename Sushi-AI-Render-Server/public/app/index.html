@@ -17,6 +17,7 @@
       --danger: #E11D48;
       --line: rgba(27,31,42,.08);
       --radius: 12px;
+      --nls: #2458ed;
       --safe-t: env(safe-area-inset-top);
       --safe-b: env(safe-area-inset-bottom);
       --user-bg: #3B6FF5;
@@ -53,7 +54,7 @@
     .muted { color: var(--muted); font-size: 13px; }
     .content { flex: 1; overflow: auto; padding: 8px 16px 110px; }
     .card { background: var(--card); border-radius: var(--radius); padding: 16px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(27,31,42,.04); }
-    .nav { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); height: 64px; background: #FFFFFF; border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; box-shadow: 0 8px 24px rgba(27,31,42,.08); }
+    .nav { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); height: 64px; background: #FFFFFF; border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; box-shadow: 0 8px 24px rgba(27,31,42,.08); }
     .nav button { background: none; border: 0; color: var(--muted); font-size: 12px; }
     .nav button.active { color: var(--accent); font-weight: 640; }
     .gen-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -205,6 +206,15 @@
     </div>
   </section>
 
+  <section id="nls" class="screen app">
+    <div class="top">
+      <div class="hello">脑力十题</div>
+    </div>
+    <div class="content gen-wrap" id="nlsBody" style="padding-bottom: 96px;">
+      <div class="card paywall"><h3>正在打开脑力十题…</h3></div>
+    </div>
+  </section>
+
   <section id="me" class="screen app">
     <div class="top">
       <div class="hello">我的</div>
@@ -217,7 +227,12 @@
         <dt>每日额度</dt><dd id="meQuota">—</dd>
         <dt>会员至</dt><dd id="meVip">—</dd>
         <dt>今日剩余</dt><dd id="meRemain">—</dd>
-        <dt>版本</dt><dd id="meVer">1.1.20</dd>
+        <dt>版本</dt><dd id="meVer">1.1.21</dd>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <dt>脑力十题</dt>
+        <dd class="muted" style="margin-bottom:10px">106 道题，邮箱登录后成绩记入本账号。</dd>
+        <button class="btn btn-lime" type="button" id="openNlsBtn">开始答题</button>
       </div>
       <button class="btn btn-ghost" type="button" id="checkUpdateBtn" style="margin-top:16px;background:var(--card);border:1px solid var(--line);color:var(--text)">检查更新</button>
       <button class="btn btn-ghost" type="button" id="downloadApkBtn" style="margin-top:10px;background:var(--card);border:1px solid var(--line);color:var(--text)">下载安装包</button>
@@ -228,6 +243,7 @@
   <nav class="nav hidden" id="tabbar">
     <button data-tab="home" class="active">对话</button>
     <button data-tab="gen">工坊</button>
+    <button data-tab="nls">脑力</button>
     <button data-tab="me">我的</button>
   </nav>
 
@@ -238,6 +254,7 @@
     let mode = 'login';
     let me = null;
     let genLoaded = false;
+    let nlsLoaded = false;
     let pendingEmail = '';
     let chatBusy = false;
     let chatHistory = [];
@@ -328,7 +345,7 @@
     function show(id) {
       document.querySelectorAll('.screen').forEach((el) => el.classList.remove('on'));
       $(id).classList.add('on');
-      const app = ['home','gen','me'].includes(id);
+      const app = ['home','gen','me','nls'].includes(id);
       $('tabbar').classList.toggle('hidden', !app);
       document.querySelectorAll('.nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
       if (id === 'home') {
@@ -1112,7 +1129,9 @@
     function goWorkshop() { document.querySelector('[data-tab="gen"]').click(); }
     $('openWorkshopBtn').onclick = goWorkshop;
     $('toImageTools').onclick = goWorkshop;
-    $('logoutBtn').onclick = () => { setToken(''); me = null; genLoaded = false; show('auth'); };
+    $('logoutBtn').onclick = () => { setToken(''); me = null; genLoaded = false; nlsLoaded = false; show('auth'); };
+    var nlsOpen = $('openNlsBtn');
+    if (nlsOpen) nlsOpen.onclick = function () { document.querySelector('[data-tab="nls"]').click(); };
     var chk = $('checkUpdateBtn');
     if (chk) chk.onclick = async function () {
       try {
@@ -1128,10 +1147,41 @@
       btn.onclick = async () => {
         const tab = btn.dataset.tab;
         if (tab === 'gen') await enterGen();
+        else if (tab === 'nls') enterNls();
         else if (tab === 'home') await enterHome();
         else show(tab);
       };
     });
+
+    function enterNls() {
+      show('nls');
+      const body = $('nlsBody');
+      if (nlsLoaded && body.querySelector('iframe')) {
+        try {
+          var frame = body.querySelector('iframe');
+          var tok = token();
+          if (tok && frame && frame.contentWindow) {
+            frame.contentWindow.postMessage({ type: 'sushi_auth', token: tok }, location.origin);
+          }
+        } catch (e) {}
+        return;
+      }
+      body.innerHTML = '';
+      const iframe = document.createElement('iframe');
+      iframe.src = '/nls/';
+      iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
+      iframe.style.borderRadius = '12px';
+      iframe.addEventListener('load', function () {
+        try {
+          var tok = token();
+          if (tok && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ type: 'sushi_auth', token: tok }, location.origin);
+          }
+        } catch (e2) {}
+      });
+      body.appendChild(iframe);
+      nlsLoaded = true;
+    }
 
     async function enterGen() {
       show('gen');

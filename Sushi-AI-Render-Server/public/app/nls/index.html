@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2458ed" />
+  <title>脑力十题 · 苏轼AI</title>
+  <style>
+    :root {
+      --ink: #18223b; --paper: #f2f5fa; --card: #fff; --brand: #2458ed;
+      --brand-hover: #1745ca; --brand-soft: #edf2ff; --lime: #d4fc76;
+      --muted: #667188; --line: #e5eaf3; --ok: #187048; --bad: #b44b30;
+      --warn: #9b431e; --hero: #e0e9ff;
+      --font: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--paper); color: var(--ink); font-family: var(--font); line-height: 1.6; }
+    button, input { font: inherit; }
+    button:not(:disabled) { cursor: pointer; }
+    button:disabled { opacity: .45; cursor: default; }
+    a { color: inherit; }
+    header { max-width: 1056px; margin: auto; display: flex; align-items: center; justify-content: space-between; padding: calc(16px + env(safe-area-inset-top)) 20px 12px; }
+    .brand { text-decoration: none; display: flex; gap: 10px; align-items: center; font-weight: 750; font-size: 18px; }
+    .logo { display: grid; place-items: center; background: var(--brand); color: #fff; width: 36px; height: 36px; border-radius: 12px; font-weight: 800; letter-spacing: -2px; padding-right: 2px; }
+    .text-btn { border: 0; background: none; color: var(--brand); font-size: 14px; font-weight: 650; padding: 10px; min-height: 44px; }
+    main { max-width: 1000px; margin: 0 auto; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
+    .start { display: grid; background: var(--card); border-radius: 22px; overflow: hidden; box-shadow: 0 18px 70px #19275314; }
+    .intro { background: var(--brand); color: #fff; padding: 28px 24px; position: relative; }
+    .eyebrow { text-transform: uppercase; font-size: 12px; letter-spacing: 2px; font-weight: 650; }
+    .intro h1 { font-size: 32px; line-height: 1.3; margin: 14px 0 10px; font-weight: 700; }
+    .intro p { color: var(--hero); margin: 0; font-size: 14px; max-width: 280px; }
+    .big { position: absolute; right: 18px; bottom: 18px; font-size: 64px; font-weight: 850; letter-spacing: -6px; color: var(--lime); }
+    .setup { padding: 22px 20px 18px; }
+    .setup h2 { margin: 0 0 14px; font-size: 20px; font-weight: 650; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { background: var(--brand-soft); color: #2a4f9c; font-size: 13px; border-radius: 7px; padding: 5px 10px; }
+    .modes { display: grid; gap: 10px; margin: 16px 0 8px; }
+    .mode, .option { background: var(--card); border: 1px solid #dce3ef; border-radius: 12px; text-align: left; padding: 14px 16px; color: var(--ink); min-height: 58px; width: 100%; }
+    .mode:hover, .option:hover { border-color: var(--brand); background: #f4f7ff; }
+    .mode b { display: block; font-size: 17px; }
+    .mode span { display: block; color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .mode em { font-size: 12px; font-style: normal; background: var(--brand-soft); color: var(--brand); border-radius: 4px; padding: 2px 6px; margin-left: 5px; }
+    .links { display: flex; justify-content: space-between; gap: 4px; flex-wrap: wrap; }
+    .note { font-size: 13px; color: var(--muted); line-height: 1.8; }
+    .status { font-size: 14px; color: var(--warn); min-height: 22px; }
+    .primary { border: 0; border-radius: 12px; background: var(--brand); color: #fff; font-weight: 650; min-height: 52px; padding: 13px 22px; width: 100%; }
+    .primary:hover { background: var(--brand-hover); }
+    .quiz-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .quiz-top strong { font-size: 22px; }
+    .quiz-top span { font-size: 14px; color: var(--muted); }
+    .bar { height: 6px; background: #dde4f0; border-radius: 20px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--brand); }
+    .card { background: var(--card); padding: 22px 18px; border: 1px solid var(--line); border-radius: 20px; margin-top: 18px; }
+    .qmeta { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); }
+    .card h1 { font-size: 21px; line-height: 1.6; margin: 18px 0; }
+    .visual { background: #f4f7fd; border-radius: 14px; text-align: center; font-size: 26px; letter-spacing: 3px; white-space: pre-line; padding: 18px 12px; margin-bottom: 18px; color: var(--brand); }
+    .options { display: grid; gap: 12px; }
+    .option { display: flex; align-items: center; gap: 14px; }
+    .option .letter { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: #f0f3f9; color: var(--muted); flex-shrink: 0; }
+    .option.on { border: 2px solid var(--brand); background: #f1f5ff; padding: 13px 15px; }
+    .option.on .letter { background: var(--brand); color: #fff; }
+    .actions { display: flex; gap: 10px; margin-top: 22px; align-items: center; }
+    .actions .primary { flex: 1; }
+    .fill { font-size: 20px; min-height: 56px; border: 2px solid #c8d5ef; background: #f8faff; width: 100%; padding: 12px; border-radius: 8px; }
+    .hero { background: var(--brand); border-radius: 20px; color: #fff; padding: 24px; text-align: center; }
+    .score { font-size: 72px; font-weight: 800; letter-spacing: -4px; color: var(--lime); line-height: 1.15; }
+    .tier { display: inline-block; background: #ffffff20; border-radius: 20px; padding: 4px 18px; font-weight: 700; }
+    .dim { display: grid; grid-template-columns: 80px 1fr 40px; gap: 12px; align-items: center; font-size: 14px; margin: 10px 0; }
+    .dim i { display: block; height: 8px; background: var(--brand); border-radius: 20px; }
+    .track { height: 8px; background: #edf1f8; border-radius: 20px; overflow: hidden; }
+    .ok { color: var(--ok); } .no { color: var(--bad); }
+    details { border-top: 1px solid #e6ebf3; padding: 14px 0; }
+    details p { font-size: 14px; color: #59677e; margin: 10px 0; }
+    .rank { display: grid; grid-template-columns: 48px 1fr 60px; gap: 10px; border-bottom: 1px solid #e6ebf3; padding: 14px 4px; }
+    .pk { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .pk > div { border: 1px solid #dce3ef; border-radius: 12px; padding: 16px 10px; text-align: center; }
+    .gate { max-width: 420px; margin: 40px auto; background: var(--card); border-radius: 20px; padding: 28px 22px; text-align: center; }
+    .hidden { display: none !important; }
+    @media (min-width: 720px) {
+      .start { grid-template-columns: 1.05fr 1fr; }
+      .intro { padding: 44px 36px; }
+      .intro h1 { font-size: 42px; }
+      .big { position: static; font-size: 120px; }
+      .setup { padding: 30px 36px 24px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/nls/" id="homeLink"><span class="logo">10</span>脑力十题</a>
+    <button class="text-btn" type="button" id="shareBtn">邀请朋友</button>
+  </header>
+  <main id="app"></main>
+  <script>
+    const CATEGORIES = ["数字规律", "图形推理", "语言类比", "逻辑判断", "空间方向"];
+    const LETTERS = "ABCD";
+    const MODE_LABEL = { daily: "每日挑战", practice: "随机练习", pk: "好友 PK" };
+    const PROGRESS_KEY = "brain-ten-progress";
+    const $app = document.getElementById("app");
+    const state = { screen: "home", me: null, busy: false, status: "", current: null, answers: Array(10).fill(null), index: 0, room: null, board: null, remain: "" };
+
+    function token() { return localStorage.getItem("sushi_jwt") || ""; }
+    function qsPk() { const v = new URLSearchParams(location.search).get("pk"); return v ? v.trim().toUpperCase() : ""; }
+
+    window.addEventListener("message", function (e) {
+      if (e.origin !== location.origin) return;
+      if (e.data && e.data.type === "sushi_auth" && e.data.token) {
+        localStorage.setItem("sushi_jwt", e.data.token);
+        boot();
+      }
+    });
+
+    async function api(path, body) {
+      const headers = { "Content-Type": "application/json" };
+      if (token()) headers.Authorization = "Bearer " + token();
+      const res = await fetch(path, { method: body ? "POST" : "GET", credentials: "include", headers, body: body ? JSON.stringify(body) : undefined });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(data.error || "请求失败");
+      return data;
+    }
+
+    function typeLabel(q) {
+      if (q.fillKind === "poetry") return "古诗词填空";
+      return { fill: "数字填空", boolean: "判断题", choice: "选择题" }[q.type] || "选择题";
+    }
+    function diffLabel(d) { return ["", "基础", "进阶", "挑战"][d] || ""; }
+    function answered(v) { return v !== null && (typeof v !== "string" || v.trim().length > 0); }
+    function errMsg(e) { return e instanceof Error ? e.message : "请求失败，请重试"; }
+
+    function tickRemain() {
+      const now = Date.now();
+      const day = new Date(now + 8 * 3600 * 1000).toISOString().slice(0, 10);
+      const next = Date.parse(day + "T00:00:00+08:00") + 24 * 3600 * 1000;
+      const ms = Math.max(0, next - now);
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      state.remain = h + " 小时 " + m + " 分后换题";
+    }
+
+    async function run(fn) {
+      if (state.busy) return;
+      state.busy = true;
+      state.status = "正在连接…";
+      draw();
+      try {
+        await fn();
+        state.status = "";
+      } catch (e) {
+        state.status = errMsg(e);
+      } finally {
+        state.busy = false;
+        draw();
+      }
+    }
+
+    function goHome() {
+      sessionStorage.removeItem(PROGRESS_KEY);
+      state.current = null;
+      state.room = null;
+      state.board = null;
+      state.answers = Array(10).fill(null);
+      state.index = 0;
+      state.status = "";
+      state.screen = "home";
+      history.replaceState({}, "", "/nls/");
+      draw();
+    }
+
+    function begin(mode, roomId) {
+      run(async function () {
+        const att = await api("/api/nls/start", { mode: mode, roomId: roomId });
+        state.current = att;
+        if (att.room) state.room = att.room;
+        if (att.score !== null) {
+          sessionStorage.removeItem(PROGRESS_KEY);
+          state.screen = "result";
+        } else {
+          state.answers = att.answers || Array(10).fill(null);
+          state.index = 0;
+          state.screen = "quiz";
+        }
+      });
+    }
+
+    function html(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return ({ "&": "&", "<": "<", ">": ">", '"': """, "'": "&#39;" })[c];
+      });
+    }
+
+    function gate() {
+      return '<div class="gate"><div class="logo" style="margin:0 auto 16px">苏</div><h2>请先登录苏轼AI</h2><p class="note">脑力十题已做进苏轼AI 页面。用 163、QQ 等邮箱登录后，成绩记入你的账号。</p><p><a class="primary" style="display:inline-block;width:auto;padding:12px 28px;text-decoration:none;margin-top:12px" href="/">去登录</a></p></div>';
+    }
+
+    function viewHome() {
+      return '<section class="start"><div class="intro"><div class="eyebrow">THE THINKING BREAK</div><h1>给大脑，<br>一个小挑战。</h1><p>苏轼AI 同页答题。十道题，换个角度想一想。</p><div class="big">10</div></div><div class="setup"><h2>今天，怎么挑战？</h2><div class="chips">' +
+        CATEGORIES.map(function (c) { return '<span class="chip">' + html(c) + "</span>"; }).join("") +
+        '</div><div class="modes"><button class="mode" data-act="practice" type="button"><b>随机练习</b><span>106 道题库 · 每轮 10 题 · 不计入排行</span></button><button class="mode" data-act="daily" type="button"><b>每日挑战 <em>上榜</em></b><span>点选为主 · 古诗词与计算仍填空 · ' + html(state.remain) + '</span></button><button class="mode" data-act="pk" type="button"><b>好友 PK <em>1 对 1</em></b><span>创建房间，发链接邀请朋友应战</span></button></div><div class="links"><button class="text-btn" data-act="board" type="button">查看今日排行榜</button><span class="note">' + html(state.me && state.me.name || "") + '</span></div><p class="note">登录账号后成绩可跨设备保留。计算题写半角数字，诗词只填缺的那句。</p><p class="status">' + html(state.status) + "</p></div></section>";
+    }
+
+    function viewQuiz() {
+      const cur = state.current;
+      const q = cur.questions[state.index];
+      const ans = state.answers[state.index];
+      let body = "";
+      if (q.type === "fill") {
+        body = '<label class="note" for="fillAnswer">填写你的答案</label><input id="fillAnswer" class="fill" type="text" maxlength="80" value="' + html(typeof ans === "string" ? ans : "") + '" inputmode="' + (q.inputMode === "decimal" ? "decimal" : "text") + '" />';
+      } else {
+        body = '<div class="options">' + q.options.map(function (opt, i) {
+          return '<button class="option' + (ans === i ? " on" : "") + '" data-opt="' + i + '" type="button"><span class="letter">' + LETTERS[i] + "</span><span>" + html(opt) + "</span></button>";
+        }).join("") + "</div>";
+      }
+      const last = state.index === 9;
+      return '<section><div class="quiz-top"><strong>第 ' + String(state.index + 1).padStart(2, "0") + ' 题 <span>/ 10</span></strong><span>' + html(MODE_LABEL[cur.mode]) + '</span></div><div class="bar"><i style="width:' + (state.index * 10) + '%"></i></div><div class="card"><div class="qmeta"><span class="chip">' + html(q.category) + "</span><span>" + typeLabel(q) + " · " + diffLabel(q.difficulty) + '</span></div><h1>' + html(q.title) + "</h1>" +
+        (q.visual ? '<div class="visual">' + html(q.visual) + "</div>" : "") + body +
+        '<div class="actions"><button class="text-btn" data-act="prev" type="button"' + (state.index === 0 ? " disabled" : "") + '>上一题</button><button class="primary" data-act="next" type="button">' + (last ? "交卷" : "下一题") + '</button></div><p class="status">' + html(state.status) + "</p></div></section>";
+    }
+
+    function viewResult() {
+      const cur = state.current;
+      const a = cur.assessment || {};
+      const dims = (a.dimensions || []).map(function (d) {
+        const pct = d.possible ? Math.round((d.earned / d.possible) * 100) : 0;
+        return '<div class="dim"><span>' + html(d.name) + '</span><div class="track"><i style="width:' + pct + '%"></i></div><b>' + d.correct + "/" + d.total + "</b></div>";
+      }).join("");
+      const review = (cur.review || []).map(function (q, i) {
+        return "<details><summary><span class='" + (q.correct ? "ok" : "no") + "'>" + (q.correct ? "✓" : "×") + "</span> 第 " + (i + 1) + " 题 · " + html(q.category) + "</summary><p>" + html(q.title) + "</p>" + (q.visual ? "<p>" + html(q.visual) + "</p>" : "") + "<p>你的答案：" + html(q.chosenLabel || "（未作答）") + "<br>正确答案：" + html(q.answer) + "</p><p>" + html(q.explanation) + "</p></details>";
+      }).join("");
+      let pk = "";
+      if (cur.room) {
+        pk = '<div class="pk">' + cur.room.players.map(function (p) {
+          return "<div><strong>" + html(p.name) + (p.me ? "（我）" : "") + "</strong><span>" + (p.done ? (p.score == null ? "已交卷" : p.score + " 分") : "答题中") + "</span></div>";
+        }).join("") + "</div>";
+      }
+      return '<section><div class="hero"><div class="score">' + html(String(cur.score == null ? "—" : cur.score)) + '</div><h1>' + html(a.tier || "") + '</h1><p>答对 ' + html(String(a.correct || 0)) + " / 10</p><div class='tier'>苏轼AI · 脑力十题</div></div><div class='card'><h2>锐评</h2><p>" + html(a.roast || "") + "</p><p class='note'>" + html(a.advice || "") + "</p>" + dims + pk + '<div class="actions"><button class="primary" data-act="home" type="button">返回首页</button><button class="text-btn" data-act="board" type="button">排行榜</button></div></div><div class="card"><h2>答案与思路</h2>' + review + "</div></section>";
+    }
+
+    function viewBoard() {
+      const rows = (state.board && state.board.rows) || [];
+      const list = rows.length ? rows.map(function (r) {
+        return '<div class="rank"><span>' + r.rank + "</span><span>" + html(r.name) + "</span><strong>" + r.score + "</strong></div>";
+      }).join("") : '<p class="note">今天还没有人上榜。</p>';
+      return '<section><div class="card"><h2>今日排行 · ' + html(state.board && state.board.date || "") + '</h2>' + list + '<div class="actions"><button class="primary" data-act="home" type="button">返回</button></div><p class="status">' + html(state.status) + "</p></div></section>";
+    }
+
+    function viewRoom() {
+      const r = state.room;
+      if (!r) return "";
+      const players = (r.players || []).map(function (p) {
+        return "<div><strong>" + html(p.name) + (p.me ? "（我）" : "") + "</strong><span>" + (p.done ? "已交卷" : "等待中") + "</span></div>";
+      }).join("");
+      return '<section><div class="card"><h2>房间 ' + html(r.id) + "</h2><p class='note'>把链接发给朋友，双方同一套题。</p><div class='pk'>" + players + '</div><div class="actions"><button class="primary" data-act="pkstart" type="button">开始答题</button><button class="text-btn" data-act="home" type="button">返回</button></div><p class="status">' + html(state.status) + "</p></div></section>";
+    }
+
+    function draw() {
+      if (!token() || !state.me) { $app.innerHTML = gate(); return; }
+      if (state.screen === "quiz" && state.current) $app.innerHTML = viewQuiz();
+      else if (state.screen === "result" && state.current) $app.innerHTML = viewResult();
+      else if (state.screen === "board") $app.innerHTML = viewBoard();
+      else if (state.screen === "room" && state.room) $app.innerHTML = viewRoom();
+      else $app.innerHTML = viewHome();
+      bind();
+      if (state.screen === "quiz") {
+        const inp = document.getElementById("fillAnswer");
+        if (inp) inp.addEventListener("input", function () { state.answers[state.index] = inp.value; });
+      }
+    }
+
+    function bind() {
+      $app.querySelectorAll("[data-act]").forEach(function (el) {
+        el.onclick = function () {
+          const act = el.getAttribute("data-act");
+          if (act === "practice") begin("practice");
+          else if (act === "daily") begin("daily");
+          else if (act === "pk") {
+            run(async function () {
+              const r = await api("/api/nls/room", {});
+              state.room = r;
+              state.screen = "room";
+              history.replaceState({}, "", "/nls/?pk=" + encodeURIComponent(r.id));
+            });
+          } else if (act === "board") {
+            state.screen = "board";
+            state.board = null;
+            run(async function () { state.board = await api("/api/nls/board"); });
+          } else if (act === "home") goHome();
+          else if (act === "prev") { if (state.index > 0) { state.index -= 1; draw(); } }
+          else if (act === "next") {
+            const q = state.current.questions[state.index];
+            if (q.type === "fill") {
+              const inp = document.getElementById("fillAnswer");
+              state.answers[state.index] = inp ? inp.value : "";
+            }
+            if (!answered(state.answers[state.index])) { state.status = "请先作答本题"; draw(); return; }
+            if (state.index < 9) { state.index += 1; state.status = ""; draw(); }
+            else {
+              run(async function () {
+                const att = await api("/api/nls/submit", { attemptId: state.current.id, answers: state.answers });
+                sessionStorage.removeItem(PROGRESS_KEY);
+                state.current = att;
+                if (att.room) state.room = att.room;
+                state.screen = "result";
+              });
+            }
+          } else if (act === "pkstart") begin("pk", state.room && state.room.id);
+        };
+      });
+      $app.querySelectorAll("[data-opt]").forEach(function (el) {
+        el.onclick = function () {
+          state.answers[state.index] = Number(el.getAttribute("data-opt"));
+          draw();
+        };
+      });
+    }
+
+    document.getElementById("homeLink").onclick = function (e) { e.preventDefault(); goHome(); };
+    document.getElementById("shareBtn").onclick = function () {
+      const pk = (state.room && state.room.id) || qsPk();
+      const url = location.origin + "/nls/" + (pk ? ("?pk=" + encodeURIComponent(pk)) : "");
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () { state.status = "链接已复制，发给朋友即可。"; draw(); }).catch(function () { prompt("复制链接", url); });
+      } else prompt("复制链接", url);
+    };
+
+    async function boot() {
+      tickRemain();
+      setInterval(tickRemain, 30000);
+      if (!token()) { state.me = null; draw(); return; }
+      try {
+        state.me = await api("/api/nls/me");
+      } catch (e) {
+        state.me = null;
+        draw();
+        return;
+      }
+      const pk = qsPk();
+      if (pk) {
+        try {
+          state.room = await api("/api/nls/room/fetch", { roomId: pk });
+          state.screen = "room";
+        } catch (e) {
+          state.status = errMsg(e);
+        }
+      } else {
+        try {
+          const raw = sessionStorage.getItem(PROGRESS_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved && saved.attempt && saved.attempt.id && saved.attempt.score == null) {
+              state.current = saved.attempt;
+              state.answers = saved.answers;
+              state.index = saved.index || 0;
+              state.screen = "quiz";
+            }
+          }
+        } catch (e) {}
+      }
+      draw();
+    }
+
+    setInterval(function () {
+      if (state.screen === "quiz" && state.current) {
+        sessionStorage.setItem(PROGRESS_KEY, JSON.stringify({ attempt: state.current, answers: state.answers, index: state.index }));
+      }
+    }, 800);
+
+    boot();
+  </script>
+</body>
+</html>

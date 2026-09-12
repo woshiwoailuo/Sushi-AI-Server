@@ -12,11 +12,9 @@ const nodemailer = require('nodemailer');
 const multer = require('multer');
 const { ImageError, createImageService, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('./lib/image-service');
 const workshopLoaderHtml = require('./lib/workshop-loader');
-const {
-  openPostgres,
-  migratePostgres,
-  persistenceFromMode,
-} = require('./lib/db-postgres');
+const { openPostgres, migratePostgres, persistenceFromMode } = require('./lib/db-postgres');
+const { migrateNls } = require('./lib/nls-schema');
+const { registerNls } = require('./lib/nls-api');
 const { normalizeChatPayload, collapseRepeatedText, normalizeChatModel, missingChatApiKeyMessage, configuredChatChannels, chatChannelLabel, buildKeyedChatRequest } = require('./lib/chat-response');
 
 const SMTP_SECRET_FILE =
@@ -195,6 +193,7 @@ async function exec(sql) {
 async function migrate() {
   if (dbMode === 'postgres') {
     await migratePostgres(db);
+    await migrateNls(db);
     return;
   }
   await exec(`
@@ -284,6 +283,7 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS idx_workshop_tickets_exp ON workshop_tickets(exp_ms);
   `);
+  await migrateNls(db);
 }
 
 function clientIp(req) {
@@ -612,6 +612,12 @@ app.post('/api/auth/login', rateLimit('login', 12, 15 * 60_000), async (req, res
 
 app.get('/api/me', authMiddleware, async (req, res) => {
   res.json({ user: publicUser(req.user), remaining: await remainingQuota(req.user) });
+});
+
+registerNls(app, {
+  get db() { return db; },
+  authMiddleware,
+  persistSqlJs,
 });
 
 app.post('/api/me/password', authMiddleware, async (req, res) => {
@@ -1793,6 +1799,8 @@ app.post('/api/workshop/img2img', async (req, res) => {
 app.get('/workshop', sendWorkshopLoader);
 app.get('/workshop/', sendWorkshopLoader);
 app.get('/workshop.html', sendWorkshopLoader);
+
+app.use('/nls', express.static(path.join(PUBLIC_DIR, 'app', 'nls')));
 
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'admin', 'index.html'));
