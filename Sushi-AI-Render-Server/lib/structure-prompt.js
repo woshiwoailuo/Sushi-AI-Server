@@ -183,7 +183,6 @@ function heuristicStructureFromText(text, options = {}) {
   if (!cleaned) return { fields: {}, promptEn: '' };
   const wantAnime = options.anime === true
     || /anime|manga|cartoon|二次元|动漫|卡通|漫画|插画/i.test(cleaned);
-  const eastAsian = /东亚|亚洲人|中国人|韩国人|日本人|华人|east[\s-]?asian|\bchinese\b|\bkorean\b|\bjapanese\b|asian (?:woman|man|features|face)/i.test(cleaned);
   const wantFull = /full[\s-]?body|全身|head to toe|feet in (?:the )?frame|从头到脚/i.test(cleaned);
   const localEdit = options.img2img === true && isLocalEditCore(cleaned);
   const cookAction = /翻炒|颠勺|炒菜|stir[\s-]?fry|wok[\s-]?toss/i.test(cleaned);
@@ -218,12 +217,9 @@ function heuristicStructureFromText(text, options = {}) {
   const lightBits = [];
   if (warmCue) lightBits.push('warm interior lighting');
   else if (/顶灯|窗光|overhead|window light/i.test(cleaned) && cookKitchen) lightBits.push('mixed overhead and window light');
-  else if (!wantAnime) lightBits.push('natural light');
   const fields = {
     subject,
-    appearance: eastAsian
-      ? 'East Asian, East Asian facial features'
-      : (localEdit ? 'same face, same hair, same identity as the reference image' : ''),
+    appearance: localEdit ? 'same face, same hair, same identity as the reference image' : '',
     clothing: localEdit ? 'same clothing as the reference image' : clothingBits.join(', '),
     pose: localEdit
       ? (isPoseGestureEdit(cleaned) ? localEditChangeDirective(cleaned) : cleaned.slice(0, 220))
@@ -233,10 +229,8 @@ function heuristicStructureFromText(text, options = {}) {
       ? 'same camera angle and crop as the reference image'
       : (wantAnime ? '' : (wantFull ? '28mm wide FOV' : '')),
     lighting: wantAnime ? '' : lightBits.join(', '),
-    style: wantAnime
-      ? 'anime illustration'
-      : (docuCue ? 'documentary candid photorealistic' : 'photorealistic'),
-    extras: (localEdit ? ((isPoseGestureEdit(cleaned) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST) + ', ') : '') + 'fictional adult 18+ only, no minors; faithful to core, include all described elements, omit none, do not invent gender, woman, revealing outfits, or clothing absent from core',
+    style: wantAnime ? 'anime illustration' : (docuCue ? 'documentary candid photorealistic' : ''),
+    extras: localEdit ? (isPoseGestureEdit(cleaned) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST) : '',
   };
   const promptEn = applyCoreFidelityLead(assembleStructuredPrompt(fields));
   return { fields, promptEn };
