@@ -214,7 +214,7 @@
         credentials: 'include',
         cache: 'no-store',
         headers: authHeaders(),
-        body: JSON.stringify({ core: core, anime: !!anime, model: model, k: workshopTicketId(), img2img: !!(run.payload && run.payload.sourceImage), localEdit: !!run.localEdit }),
+        body: JSON.stringify({ core: core, anime: !!anime, smart: hasSmartModifier(), model: model, k: workshopTicketId(), img2img: !!(run.payload && run.payload.sourceImage), localEdit: !!run.localEdit }),
         signal: run.controller.signal
       });
       var data = await response.json().catch(function () { return {}; });
