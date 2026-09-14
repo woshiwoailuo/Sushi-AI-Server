@@ -1255,6 +1255,8 @@ test('memory route line and clear-this-memory; 改动 vs 重新生成 defaults',
   assert.ok(clearBtn);
   assert.ok(edit);
   assert.ok(regen);
+  assert.ok(f.w.document.getElementById('生图方式改动行')?.querySelector('.对勾盒'));
+  assert.ok(f.w.document.getElementById('生图方式重新生成行')?.querySelector('.对勾盒'));
   const row = f.w.document.getElementById('记忆模式对勾行');
   const zone = f.w.document.getElementById('记忆线路区');
   assert.ok(zone);
@@ -1295,6 +1297,50 @@ test('memory route line and clear-this-memory; 改动 vs 重新生成 defaults',
   assert.equal(f.w.document.getElementById('记忆开关').checked, true);
   assert.equal(f.w.document.getElementById('角色描述').value, '核心保持原样');
   f.w.confirm = origConfirm;
+});
+
+test('记忆/改动/重新生成 use visible checkmarks; 改动与重新生成互斥', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const memRow = f.w.document.getElementById('记忆模式对勾行');
+  const editRow = f.w.document.getElementById('生图方式改动行');
+  const regenRow = f.w.document.getElementById('生图方式重新生成行');
+  const mem = f.w.document.getElementById('记忆开关');
+  const edit = f.w.document.getElementById('生图方式改动');
+  const regen = f.w.document.getElementById('生图方式重新生成');
+  assert.ok(memRow && editRow && regenRow);
+  assert.ok(memRow.classList.contains('对勾行'));
+  assert.ok(editRow.classList.contains('对勾行'));
+  assert.ok(regenRow.classList.contains('对勾行'));
+  assert.ok(memRow.querySelector('.对勾盒 .对勾符'));
+  assert.ok(editRow.querySelector('.对勾盒 .对勾符'));
+  assert.ok(regenRow.querySelector('.对勾盒 .对勾符'));
+  assert.match(editRow.textContent, /改动/);
+  assert.match(editRow.textContent, /参考图局部改/);
+  assert.match(regenRow.textContent, /重新生成/);
+  assert.match(regenRow.textContent, /全新文生图/);
+  // 记忆独立开关
+  assert.equal(mem.checked, true);
+  f.w.切换记忆(false);
+  assert.equal(mem.checked, false);
+  f.w.切换记忆(true);
+  assert.equal(mem.checked, true);
+  // 互斥：一次只勾一个
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.同步生图方式默认(true);
+  assert.equal(edit.checked, true);
+  assert.equal(regen.checked, false);
+  assert.equal(f.w.读取生图方式(), '改动');
+  f.w.切换生图方式('重新生成');
+  assert.equal(edit.checked, false);
+  assert.equal(regen.checked, true);
+  assert.equal(f.w.读取生图方式(), '重新生成');
+  f.w.切换生图方式('改动');
+  assert.equal(edit.checked, true);
+  assert.equal(regen.checked, false);
+  assert.equal(f.w.读取生图方式(), '改动');
+  // 切换生图方式不影响记忆开关
+  assert.equal(mem.checked, true);
+  assert.equal(f.w.记忆已开(), true);
 });
 
 test('重新生成 ignores reference image on generate; 改动 keeps local-edit path', async t => {

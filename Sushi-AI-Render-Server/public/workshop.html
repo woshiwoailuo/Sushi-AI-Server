@@ -89,13 +89,15 @@
           <p id="记忆生成线路" class="记忆生成线路" role="status">记忆线路：加载中…</p>
           <div class="记忆线路操作" role="group" aria-label="生图方式与清除记忆">
             <div class="生图方式行" role="radiogroup" aria-label="改动或重新生成">
-              <label class="生图方式项">
+              <label class="换背景行 对勾行 生图方式项" id="生图方式改动行">
                 <input type="radio" name="生图方式" id="生图方式改动" value="改动" onchange="切换生图方式('改动')">
-                <span>改动</span>
+                <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
+                <span class="生图方式文案"><b>改动</b><small>参考图局部改</small></span>
               </label>
-              <label class="生图方式项">
+              <label class="换背景行 对勾行 生图方式项" id="生图方式重新生成行">
                 <input type="radio" name="生图方式" id="生图方式重新生成" value="重新生成" onchange="切换生图方式('重新生成')">
-                <span>重新生成</span>
+                <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
+                <span class="生图方式文案"><b>重新生成</b><small>全新文生图</small></span>
               </label>
             </div>
             <button type="button" class="次按钮 清除本记忆钮" id="清除本记忆按钮" onclick="清除本记忆()">清除本记忆</button>
@@ -3706,7 +3708,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.60" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.61" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4196,28 +4198,51 @@
     gap: 8px 12px;
   }
   .生图方式行 {
-    display: inline-flex;
+    display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 8px 10px;
+    width: 100%;
   }
   .生图方式项 {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     margin: 0;
-    font-size: 11px;
+    min-height: 40px;
+    padding: 6px 10px 6px 8px;
+    font-size: 12px;
     cursor: pointer;
     user-select: none;
+    border: 1px solid var(--边框);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    flex: 1 1 140px;
+    box-sizing: border-box;
   }
-  .生图方式项 input {
-    width: 14px;
-    height: 14px;
-    accent-color: var(--绿色);
+  .生图方式项:has(input:checked) {
+    border-color: rgba(225, 29, 72, 0.45);
+    background: rgba(225, 29, 72, 0.08);
+  }
+  .生图方式文案 {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.25;
+    min-width: 0;
+  }
+  .生图方式文案 b {
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .生图方式文案 small {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--淡色);
   }
   .清除本记忆钮 {
-    min-height: 28px;
-    padding: 4px 10px;
-    font-size: 11px;
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 12px;
   }
   .换背景行 {
     display: flex;
@@ -4796,7 +4821,8 @@
     text-decoration: none;
   }
 
-  .对勾行 input[type="checkbox"] {
+  .对勾行 input[type="checkbox"],
+  .对勾行 input[type="radio"] {
     position: absolute;
     left: 0;
     top: 50%;
@@ -4809,6 +4835,11 @@
     cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
+  }
+  .生图方式项.对勾行 input[type="radio"] {
+    left: 8px;
+    width: 28px;
+    height: 28px;
   }
 
   .对勾盒 {
