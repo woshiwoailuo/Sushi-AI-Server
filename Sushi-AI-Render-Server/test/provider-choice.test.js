@@ -16,7 +16,7 @@ test('manual image choice survives both successful and failed generation',async(
  for(const engine of ['perchance','horde-real','horde-anime','sana']) for(const fail of [false,true]){
   const calls=[];const run={engine,payload:{},controller:new AbortController()};
   const dispatch=async(name)=>{calls.push(name);if(fail)throw Error('upstream unavailable');return {engine:name,url:'https://example.com/image.png'}};
-  const ctx={HORDE_BUDGET_MS:30000,engineFamily:e=>e==='horde-anime'||e==='sana'?'anime':'real',forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:(p)=>p,stripInjectedFemaleDefaults:(p)=>p,applyCoreFidelityLead:(p)=>p,withAdultDirective:p=>p,hasSmartModifier:()=>false,minimalOutboundPrompt:p=>p,ensureNoTextOnImage:p=>p,applyLocalEditOutbound:p=>p,value:()=>'',
+  const ctx={HORDE_BUDGET_MS:30000,engineFamily:e=>e==='horde-anime'||e==='sana'?'anime':'real',forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:(p)=>p,stripInjectedFemaleDefaults:(p)=>p,applyMaleGenderLocks:(p)=>p,applyCoreFidelityLead:(p)=>p,withAdultDirective:p=>p,hasSmartModifier:()=>false,minimalOutboundPrompt:p=>p,ensureNoTextOnImage:p=>p,applyLocalEditOutbound:p=>p,value:()=>'',
    runWithProviderBudget:(r,e,task)=>task(r.controller.signal),generatePerchance:()=>dispatch('perchance'),generateHorde:(r,p,i,s,e)=>dispatch(e),generatePollinations:(r,p,i,e)=>dispatch(e)};
   vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
   if(fail)await assert.rejects(ctx.generateOne(run,'a landscape',0),/upstream unavailable/);else await ctx.generateOne(run,'a landscape',0);
@@ -38,7 +38,7 @@ test('blocked official Perch uses in-app photoreal',async()=>{
  assert.deepEqual(calls,['official','horde']);assert.equal(result.engine,'perchance');
 });
 test('unsupported reference image remains on selected provider',async()=>{
- const ctx={hasSmartModifier:()=>false,minimalOutboundPrompt:p=>p,ensureNoTextOnImage:p=>p,forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:p=>p,stripInjectedFemaleDefaults:(p)=>p,applyCoreFidelityLead:(p)=>p,withAdultDirective:p=>p,applyLocalEditOutbound:p=>p,engineFamily:()=>'real',value:()=>''};vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
+ const ctx={hasSmartModifier:()=>false,minimalOutboundPrompt:p=>p,ensureNoTextOnImage:p=>p,forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:p=>p,stripInjectedFemaleDefaults:(p)=>p,applyMaleGenderLocks:(p)=>p,applyCoreFidelityLead:(p)=>p,withAdultDirective:p=>p,applyLocalEditOutbound:p=>p,engineFamily:()=>'real',value:()=>''};vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
  await assert.rejects(ctx.generateOne({engine:'sana',payload:{sourceImage:'image'}},'landscape',0),/未切换平台/);
 });
 test('workshop and home submit selected chat model',async()=>{
