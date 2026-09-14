@@ -245,8 +245,8 @@ function heuristicStructureFromText(text, options = {}) {
 function buildStructureMessages(core, options = {}) {
   const coreText = String(core || '').trim().slice(0, 2000);
   const styleHint = options.anime
-    ? 'User wants anime/manga illustration style.'
-    : 'User wants photoreal photography unless they explicitly asked otherwise.';
+    ? 'Preserve the user-requested anime/manga illustration style.'
+    : 'Do not impose a visual style when the core does not specify one.';
   const localHint = options.img2img && isLocalEditCore(coreText)
     ? ' This is img2img LOCAL EDIT: fill pose with only the requested local change (raise hand, turn head, smile, slight hair/clothing tweak); extras must keep identity/background/composition/clothing unchanged; appearance/clothing/scene/camera = same as reference; do NOT invent a new scene or redraw the whole image.'
     : '';
