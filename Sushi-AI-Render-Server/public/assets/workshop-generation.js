@@ -99,8 +99,9 @@
       return data;
     } catch (error) {
       if (error.name === 'AbortError') {
-        var timeoutError = new Error('服务器启动或连接耗时较长，请稍后重试');
+        var timeoutError = new Error('正在唤醒服务，连接耗时较长，请稍后重试');
         timeoutError.code = 'CLIENT_TIMEOUT';
+        timeoutError.wake = true;
         throw timeoutError;
       }
       throw error;
@@ -120,7 +121,7 @@
         lastError = error;
         if (error.status && error.status < 500 && error.status !== 429) throw error;
         if (i + 1 < attempts) {
-          status('服务器正在启动', '首次连接较慢，正在自动重试，不会重复提交生图任务。', true);
+          status('正在唤醒服务', 'Render 冷启动时首次连接较慢，正在自动重试，不会重复提交生图任务。', true);
           await new Promise(function (resolve) { setTimeout(resolve, 2500); });
         }
       }
@@ -145,6 +146,120 @@
     return Promise.race([promise, new Promise(function (_, reject) {
       timer = setTimeout(function () { reject(new Error('翻译超时')); }, ms);
     })]).finally(function () { clearTimeout(timer); });
+  }
+
+  
+  function categorizeClientFailure(error, statusCode) {
+    var status = Number(statusCode) || Number(error && error.status) || 0;
+    var msg = String((error && error.message) || error || '');
+    var code = String((error && error.code) || '');
+    if ((error && error.name === 'AbortError') || status === 504 || /timeout|超时|CLIENT_TIMEOUT|唤醒/i.test(msg + ' ' + code)) return '超时';
+    if (status === 429 || /限流|冷却|rate.?limit/i.test(msg)) return '限流';
+    if (/censored|审核|审查/i.test(msg)) return '审核拒绝';
+    if (/空图|未返回图片|图片无效|图片过小|no image/i.test(msg)) return '返回空图';
+    if (status === 0 || status === 502 || status === 503 || /Failed to fetch|NetworkError|Load failed|连接失败/i.test(msg + ' ' + code)) return '连接失败';
+    return '其他';
+  }
+
+  function reportImageFailure(platform, error, startedAt) {
+    var statusCode = Number(error && error.status) || 0;
+    var errorType = categorizeClientFailure(error, statusCode);
+    var durationMs = Math.max(0, Date.now() - (startedAt || Date.now()));
+    var message = String((error && error.message) || error || '').slice(0, 240);
+    try {
+      if (window.记录失败原因) {
+        window.记录失败原因(errorType + ' · ' + (platform || 'unknown') + ' · ' + durationMs + 'ms · HTTP ' + statusCode + ' · ' + message);
+      }
+    } catch (e0) {}
+    try {
+      fetch('/api/image-failure-stats', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: authHeaders(),
+        body: JSON.stringify({ platform: platform || 'unknown', durationMs: durationMs, statusCode: statusCode, errorType: errorType, message: message })
+      }).catch(function () {});
+    } catch (e1) {}
+    return errorType;
+  }
+
+  function workshopTicketId() {
+    try {
+      var q = new URLSearchParams(location.search || '');
+      return q.get('k') || '';
+    } catch (e) { return ''; }
+  }
+
+  function assembleLocalStructuredPrompt(core) {
+    var ids = ['角色姓名','身份职业','年龄阶段','性别气质','脸部特征','发型发色','体型特征','服装配饰','表情情绪','动作姿势','场景环境','构图景别','镜头视角','光线氛围','色彩方案','艺术风格','补充细节'];
+    var parts = [];
+    for (var i = 0; i < ids.length; i += 1) {
+      var v = value(ids[i]);
+      if (v) parts.push(v);
+    }
+    if (parts.length) return parts.join(', ');
+    return '';
+  }
+
+  async function structurePromptForGen(run) {
+    var core = String(run.description || '').trim();
+    if (!core) return '';
+    var anime = engineFamily(run.engine) === 'anime' || hasExplicitArtStyle(core);
+    status('正在整理结构化提示词', '先经对话整理字段，再交给生图平台，减少长文误解析与偏动漫。', true);
+    var model = '';
+    try { model = value('AI通道') || 'glm'; } catch (e0) { model = 'glm'; }
+    try {
+      var response = await fetch('/api/workshop/structure-prompt', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: authHeaders(),
+        body: JSON.stringify({ core: core, anime: !!anime, model: model, k: workshopTicketId() }),
+        signal: run.controller.signal
+      });
+      var data = await response.json().catch(function () { return {}; });
+      if (response.ok && data && data.promptEn) {
+        run.structureSource = data.source || 'chat';
+        run.structureFields = data.fields || null;
+        if ($('英文描述') && data.promptEn) $('英文描述').value = data.promptEn;
+        // Keep visible 核心描述 as source of truth — never overwrite 角色描述 here.
+        return String(data.promptEn).trim();
+      }
+    } catch (error) {
+      ensureActive(run);
+      if (run.cancelled || (error && error.name === 'AbortError')) throw error;
+    }
+    var local = assembleLocalStructuredPrompt(core);
+    if (local && !/[\u4e00-\u9fff]/.test(local)) {
+      run.structureSource = 'fields';
+      return local;
+    }
+    return '';
+  }
+
+  function makeThumbnailDataUrl(sourceUrl, maxEdge, quality) {
+    return new Promise(function (resolve) {
+      try {
+        var img = new Image();
+        img.referrerPolicy = 'no-referrer';
+        img.onload = function () {
+          try {
+            var edge = Math.max(64, Number(maxEdge) || 240);
+            var scale = Math.min(1, edge / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+            var w = Math.max(1, Math.round((img.naturalWidth || edge) * scale));
+            var h = Math.max(1, Math.round((img.naturalHeight || edge) * scale));
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality == null ? 0.72 : quality));
+          } catch (e) { resolve(''); }
+        };
+        img.onerror = function () { resolve(''); };
+        img.src = sourceUrl;
+      } catch (e2) { resolve(''); }
+    });
   }
 
   var promptCache = Object.create(null);
@@ -515,32 +630,58 @@
     if (!url) return;
     bindGalleryPreview();
     var card = document.createElement('figure');
-    card.className = '生图卡片';
+    card.className = '生图卡片 加载中';
     card.setAttribute('data-full-url', url);
     card.setAttribute('data-engine', engine || 'horde');
+    var progressNote = document.createElement('figcaption');
+    progressNote.className = '生图进度';
+    progressNote.textContent = '正在加载预览…';
     var img = document.createElement('img');
     img.alt = run.description || '生成的图片';
     img.referrerPolicy = 'no-referrer';
+    img.decoding = 'async';
     img.setAttribute('data-engine', engine || 'horde');
     img.setAttribute('data-full-url', url);
+    card.append(progressNote, img);
+    $('图像输出').appendChild(card);
+    recordImageProvider(engine || 'horde');
+
+    // Show something immediately (progress + start decode); hi-res stays in data-full-url for click.
     img.onload = function () {
       img.onload = null;
       img.onerror = null;
+      card.classList.remove('加载中');
       card.classList.add('已加载');
+      progressNote.textContent = '点击查看原图';
+      progressNote.className = '点击查看';
     };
     img.onerror = function () {
       img.onload = null;
       img.onerror = null;
+      progressNote.remove();
       markCardFailed(card, url, img);
     };
-    card.appendChild(img);
-    $('图像输出').appendChild(card);
     img.src = url;
-    recordImageProvider(engine || 'horde');
-    try { if (typeof window.收入历史 === 'function') window.收入历史(url); } catch (e) {}
+
+    // Cache a thumbnail in the background for history/gallery; do not block first paint.
+    makeThumbnailDataUrl(url, 280, 0.7).then(function (thumb) {
+      if (thumb) {
+        img.setAttribute('data-thumb-url', thumb);
+        // Prefer thumb on the card to save memory; original remains in data-full-url.
+        if (img.complete && img.naturalWidth > 0) {
+          img.src = thumb;
+        }
+      }
+      try {
+        if (typeof window.收入历史 === 'function') window.收入历史(url, thumb || '');
+      } catch (eHist) {}
+    });
   }
 
   window.打开图片预览 = openImagePreview;
+  window.structurePromptForGen = structurePromptForGen;
+  window.makeThumbnailDataUrl = makeThumbnailDataUrl;
+  window.reportImageFailure = reportImageFailure;
 
 
   async function stopJob(run) {
@@ -1275,7 +1416,17 @@
   async function execute(run, restored) {
     try {
       if (!restored) {
-        run.payload.prompt = await promptFor(run);
+        var structured = '';
+        try { structured = await structurePromptForGen(run); } catch (eStruct) {
+          ensureActive(run);
+          if (run.cancelled || (eStruct && eStruct.name === 'AbortError')) throw eStruct;
+        }
+        if (structured) {
+          run.description = structured;
+          run.payload.prompt = structured;
+        } else {
+          run.payload.prompt = await promptFor(run);
+        }
         if (run.backgroundOnly && run.payload.sourceImage) {
           run.payload.prompt = 'Keep the subject and composition of the reference photo, change only the background: ' + run.payload.prompt;
         }
@@ -1314,8 +1465,13 @@
       try { await stopJob(run); } catch (e) { cleanupError = ' 未收到取消确认，任务最迟在 10 分钟上限后结束。'; }
       var title = run.cancelled ? '已停止本轮生成' : (run.completed ? '已生成 ' + run.completed + ' 张，后续未完成' : '本次未完成');
       var detail = run.cancelled ? '已保留已完成的图片。' : String(error && error.message || error || '');
-      if (/Load failed|Failed to fetch|NetworkError/i.test(detail)) {
-        detail = 'Perchance 出图接口不可用，未完成，未更换平台。';
+      if (/Load failed|Failed to fetch|NetworkError|正在唤醒服务|CLIENT_TIMEOUT/i.test(detail) || (error && (error.wake || error.code === 'CLIENT_TIMEOUT'))) {
+        if (/Perchance|perchance/i.test(detail) && !/唤醒|cold|timeout|Failed to fetch/i.test(detail)) {
+          detail = 'Perchance 出图接口不可用，未完成，未更换平台。';
+        } else if (/唤醒|CLIENT_TIMEOUT|Failed to fetch|NetworkError|Load failed/i.test(detail) || (error && (error.wake || error.code === 'CLIENT_TIMEOUT'))) {
+          title = run.completed ? title : '正在唤醒服务';
+          detail = '服务冷启动中，请稍候再试；这不是通用连接失败。';
+        }
       }
       if (!run.cancelled && (error && (error.status === 429 || error.code === 'ENGINE_COOLDOWN' || error.code === 'ALL_COOLDOWN' || /限流|冷却|429/.test(detail)))) {
         title = run.completed ? title : '出图通道限流';
@@ -1324,14 +1480,14 @@
         title = run.completed ? title : '各通道均未成功';
       }
       status(title, detail + cleanupError, false);
-      if (!run.cancelled && window.记录失败原因) window.记录失败原因(error.message);
+      if (!run.cancelled) reportImageFailure(run.engine || 'unknown', error, run.startedAt || Date.now());
     } finally {
       if (active === run) { active = null; controls(false); }
     }
   }
 
   function newRun(description, total) {
-    return { engine: value('参考图地址') ? resolveImg2imgEngine(value('图生图平台')) : resolveEngine(), description: description, total: total, completed: 0, payload: {}, job: null, cancelled: false, controller: new AbortController() };
+    return { engine: value('参考图地址') ? resolveImg2imgEngine(value('图生图平台')) : resolveEngine(), description: description, total: total, completed: 0, payload: {}, job: null, cancelled: false, controller: new AbortController(), startedAt: Date.now() };
   }
 
   window.开始生成 = function () {
@@ -1465,7 +1621,7 @@
     window.__sushiReady = true; window.__sushiLoadError = '';
     bindGalleryPreview();
     controls(true); $('取消生成按钮').hidden = true;
-    status('正在连接生图服务', '如果服务器刚休眠，首次连接会自动等待并重试。', true);
+    status('正在唤醒服务', '如果 Render 服务刚休眠，首次连接会自动等待并重试。', true);
     try {
       var results = await Promise.all([safeGet('/config', 2), safeGet('/current', 2)]);
       applyImageConfig(results[0]);

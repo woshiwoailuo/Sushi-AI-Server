@@ -1,5 +1,6 @@
 'use strict';
 
+const { fetchLimitedRetry } = require('./http-client');
 const { randomUUID } = require('node:crypto');
 
 class ImageError extends Error {
@@ -176,7 +177,12 @@ function generationPayload(input = {}, model = '') {
 }
 
 function createImageService(options = {}) {
-  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const userFetch = options.fetchImpl || ((url, opts) => globalThis.fetch(url, opts));
+  const fetchImpl = (url, opts) => fetchLimitedRetry(url, opts, {
+    retries: (opts && String(opts.method || 'GET').toUpperCase() === 'GET') ? 2 : 1,
+    baseDelayMs: 400,
+    fetchImpl: userFetch,
+  });
   const base = options.baseUrl || 'https://aihorde.net/api/v2';
   const apiKey = options.apiKey || '0000000000';
   const now = options.now || Date.now;
