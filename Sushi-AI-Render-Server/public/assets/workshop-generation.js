@@ -1801,22 +1801,29 @@
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
     if (typeof window.标记核心已用于生成 === 'function') window.标记核心已用于生成();
     resetDisabledEnginesForNewRun();
+    try { if (typeof window.同步生图方式默认 === 'function') window.同步生图方式默认(false); } catch (eSync) {}
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
     run.coreSource = String(value('角色描述') || description || '');
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);
     var genMode = typeof window.读取生图方式 === 'function' ? String(window.读取生图方式() || '') : '';
     var hasRef = !!value('参考图地址');
-    var useRef = typeof window.本轮使用参考图 === 'function' ? !!window.本轮使用参考图() : (hasRef && genMode !== '重新生成');
+    var useRef = hasRef && genMode !== '重新生成';
+    if (typeof window.本轮使用参考图 === 'function') useRef = !!window.本轮使用参考图();
     if (genMode === '重新生成') {
       run.localEdit = false;
-    } else if (genMode === '改动' && useRef) {
+      useRef = false;
+    } else if (useRef && (genMode === '改动' || isLocalEditCore(run.coreSource))) {
       run.localEdit = true;
     } else if (typeof window.应用局部改图 === 'function') {
       run.localEdit = !!window.应用局部改图();
     } else {
       run.localEdit = !!(useRef && isLocalEditCore(run.coreSource));
     }
-    if (run.localEdit) run.backgroundOnly = false;
+    if (run.localEdit) {
+      run.backgroundOnly = false;
+      useRef = true;
+    }
+    run.engine = useRef ? resolveImg2imgEngine(value('图生图平台')) : resolveEngine();
     if ($('纯背景出图') && $('纯背景出图').checked) {
       run.backgroundOnly = false;
       run.localEdit = false;
