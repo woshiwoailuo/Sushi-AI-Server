@@ -606,6 +606,7 @@
       text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
+    text = stripInjectedFemaleDefaults(text, coreHint || text);
     text = applyCoreFidelityLead(text);
     return text.replace(/\s{2,}/g, ' ').trim();
   }
@@ -617,7 +618,7 @@
   }
 
   var CORE_FIDELITY_LEAD =
-    'Faithful to core description: depict only what the core states; do not invent clothing, props, pose, identity, or setting not in the core; lead with core facts';
+    'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; do not invent clothing, props, pose, identity, gender, or setting not in the core; when gender is unspecified stay gender-neutral; lead with core facts';
 
   function applyCoreFidelityLead(prompt) {
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
@@ -653,6 +654,10 @@
     // Outdoor/indoor scene contradiction
     if (/室内|屋内|房间|卧室|书房|图书馆|indoors?|indoor|library|bedroom|studio/i.test(c) && !/室外|户外|outdoors?/i.test(c)) {
       mod = mod.replace(/,?\s*outdoor natural-light photoreal photography[^,]*/gi, ', natural-light photoreal photography');
+    }
+    // Gender: never let smart-mod inject woman/female when core lacks it
+    if (!hasFemaleIntent(c)) {
+      mod = stripInjectedFemaleDefaults(mod, c);
     }
     mod = mod.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
     if (!mod) return '';
@@ -694,6 +699,7 @@
       text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
+    text = stripInjectedFemaleDefaults(text, coreHint || text);
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
     }
@@ -720,13 +726,48 @@
   }
 
   var ADULT_DIR_BASE =
-    'adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including clothing as written or implied; do not invent clothing, props, pose, identity, setting, undressing, or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors';
+    'adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors';
   var ADULT_DIR_NUDE =
     'explicit adult nudity as described is permitted; if nude or undressed do not add clothes, fabric coverage, or modest outfits; keep requested nudity and sexual details visible';
   var NUDE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣|脱光|赤裸/i;
 
   function hasNudeIntent(text) {
     return NUDE_INTENT_RE.test(String(text || ''));
+  }
+
+  // Female / woman cues from core — never invent woman/female defaults when absent.
+  var FEMALE_INTENT_RE = /女人|女性|女的|女主|女孩|少女|美女|女郎|姑娘|女士|小姐|女王|公主|妻子|女友|女战士|女角色|\bwoman\b|\bwomen\b|\bfemale\b|\bgirl\b|\blady\b|\bladies\b|\bshe\b|\bher\b|\bhers\b|\b1girl\b|beautiful (?:young )?(?:woman|girl)/i;
+
+  function hasFemaleIntent(text) {
+    return FEMALE_INTENT_RE.test(String(text || ''));
+  }
+
+  /** Strip injected woman/female/girl tokens when core did not state female gender. */
+  function stripInjectedFemaleDefaults(text, core) {
+    if (hasFemaleIntent(core)) return String(text || '');
+    var t = String(text || '');
+    if (!t || !/\b(woman|women|female|girl|lady|ladies|1girl|she|her|hers)\b|beautiful (?:young )?(?:woman|girl)/i.test(t)) return t;
+    t = t
+      .replace(/\bbeautiful (?:young )?(?:woman|girl|lady)\b/gi, 'adult')
+      .replace(/\bfictional adult woman\b/gi, 'fictional adult')
+      .replace(/\badult woman\b/gi, 'adult')
+      .replace(/\ba woman\b/gi, 'a person')
+      .replace(/\bthe woman\b/gi, 'the person')
+      .replace(/\bwomen\b/gi, 'people')
+      .replace(/\bwoman\b/gi, 'person')
+      .replace(/\bfemale\b/gi, 'person')
+      .replace(/\bgirl\b/gi, 'person')
+      .replace(/\bladies\b/gi, 'people')
+      .replace(/\blady\b/gi, 'person')
+      .replace(/\b1girl\b/gi, '1person')
+      .replace(/\bshe\b/gi, 'they')
+      .replace(/\bher\b/gi, 'their')
+      .replace(/\bhers\b/gi, 'theirs')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[，,]{2,}/g, ',')
+      .replace(/^[\s,]+|[\s,]+$/g, '')
+      .trim();
+    return t;
   }
 
   function adultDirectiveText(options) {
@@ -1921,6 +1962,8 @@
     if (engineFamily(engine) === 'anime') {
       // Honor anime channel wording; still reinject East Asian cues from core when present.
       prompt = applyEastAsianEthnicity(String(prompt || ''), coreHint);
+      prompt = stripInjectedFemaleDefaults(prompt, coreHint);
+      prompt = applyCoreFidelityLead(prompt);
       prompt = ensureNoTextOnImage(prompt);
     } else if (smartOn) {
       prompt = forcePhotorealPrompt(prompt, { core: coreHint, localEdit: localEdit });
@@ -2378,6 +2421,8 @@
   window.withAdultDirective = withAdultDirective;
   window.adultDirectiveText = adultDirectiveText;
   window.hasNudeIntent = hasNudeIntent;
+  window.hasFemaleIntent = hasFemaleIntent;
+  window.stripInjectedFemaleDefaults = stripInjectedFemaleDefaults;
   window.ADULT_DIR_BASE = ADULT_DIR_BASE;
   window.ADULT_DIR_NUDE = ADULT_DIR_NUDE;
   window.hasExplicitArtStyle = hasExplicitArtStyle;

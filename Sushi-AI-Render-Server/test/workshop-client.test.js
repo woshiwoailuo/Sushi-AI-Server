@@ -529,6 +529,7 @@ test('outbound stays faithful to core: fidelity lead, key facts, no core mutatio
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.equal(typeof f.w.applyCoreFidelityLead, 'function');
   assert.match(f.w.CORE_FIDELITY_LEAD, /Faithful to core description|do not invent clothing/i);
+  assert.match(f.w.CORE_FIDELITY_LEAD, /include every explicitly described element|omit none/i);
   const core = 'a fictional adult East Asian woman in a red knit sweater, side view, standing in a quiet library';
   f.w.document.getElementById('角色描述').value = core;
   f.w.document.getElementById('英文描述').value = core;
@@ -922,6 +923,51 @@ test('adult on: outbound prompts keep NSFW tokens and attach 成人功能状态 
   assert.match(prompt, /NSFW allowed/i);
   assert.match(prompt, /do not add clothes/i);
   assert.doesNotMatch(prompt.split(' ### ')[0], /realistic fabric texture/i);
+});
+
+test('balanced gen: no woman/nude tokens when core lacks them; coverage instructions present', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.hasFemaleIntent, 'function');
+  assert.equal(typeof f.w.stripInjectedFemaleDefaults, 'function');
+  assert.match(f.w.CORE_FIDELITY_LEAD, /include every explicitly described element|omit none/i);
+  assert.match(f.w.CORE_FIDELITY_LEAD, /gender-neutral|gender/i);
+  assert.match(f.w.ADULT_DIR_BASE, /omit none of the core facts|every described clothing/i);
+  assert.equal(f.w.hasFemaleIntent('一位虚构成年人穿红毛衣站在雨夜街头'), false);
+  assert.equal(f.w.hasFemaleIntent('一位虚构成年女人穿红毛衣'), true);
+  assert.equal(f.w.hasFemaleIntent('a fictional adult woman in a park'), true);
+  assert.equal(f.w.hasNudeIntent('一位虚构成年人穿红毛衣'), false);
+
+  const coreZh = '一位虚构成年人穿红毛衣站在雨夜街头，手里拿着一把黑伞';
+  const core = 'a fictional adult in a red knit sweater standing on a rainy night street holding a black umbrella';
+  const injected = 'a fictional adult woman in a red knit sweater standing on a rainy night street holding a black umbrella';
+  const stripped = f.w.stripInjectedFemaleDefaults(injected, coreZh);
+  assert.doesNotMatch(stripped, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman/i);
+  assert.match(stripped, /red knit sweater|black umbrella|rainy/i);
+  assert.equal(f.w.hasFemaleIntent(coreZh), false);
+
+  const minimal = f.w.minimalOutboundPrompt(injected, { core: coreZh });
+  assert.match(minimal, /Faithful to core description|include every explicitly described element|omit none/i);
+  assert.doesNotMatch(minimal, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman/i);
+  assert.doesNotMatch(minimal, /\bnude\b|\bnaked\b|unclothed/i);
+  assert.match(minimal, /red knit sweater|black umbrella|rainy/i);
+
+  const kept = f.w.minimalOutboundPrompt(
+    'a fictional adult woman in a blue coat',
+    { core: '一位虚构成年女人穿蓝大衣' }
+  );
+  assert.match(kept, /\bwoman\b/i);
+
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.document.getElementById('英文描述').value = injected;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  assert.match(pos, /Faithful to core description|include every explicitly described|omit none|follow the core description/i);
+  assert.doesNotMatch(pos, /\bwoman\b|\bfemale\b|beautiful woman/i);
+  assert.doesNotMatch(pos, /\bnude\b|\bnaked\b|do not add clothes|keep requested nudity/i);
+  assert.match(pos, /red knit sweater|black umbrella|rainy/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心描述 must not mutate');
 });
 
 test('adult on: clothed core does not force nude tokens in outbound prompt', async t => {

@@ -320,7 +320,7 @@
         id="成人功能状态"
         name="成人功能状态"
         type="hidden"
-        value="adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including clothing as written or implied; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors"
+        value="adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors"
       >
 
       <details id="图生图区" class="分区">
@@ -850,7 +850,7 @@
 
       if (后台状态) {
         后台状态.value =
-          "adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including clothing as written or implied; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors";
+          "adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors";
       }
     } else {
       if (标签) {
@@ -2708,7 +2708,7 @@
     正在预载 = true;
     var 项 = null;
     try {
-      项 = 解析AI两行(await 问免费模型("雨夜街头一名成年女人撑伞。\nA fictional adult woman with an umbrella on a rainy night street, photoreal photo.\n再写一组全新的，只要上面这种两行。", "glm"));
+      项 = 解析AI两行(await 问免费模型("雨夜街头一名虚构成年人撑伞。\nA fictional adult with an umbrella on a rainy night street, photoreal photo.\n再写一组全新的，只要上面这种两行。性别与身份须多样化，不要默认女人或裸体。", "glm"));
     } catch (e) {}
     if (!项) {
       项 = 本地随机一项();
@@ -2795,7 +2795,7 @@
       : "photoreal photography modifiers (full-body front view 35mm, lens, lighting, materials, not anime, not close-up)";
     var 问 = "Output ONLY one English modifier phrase to append after the scene description for the image API. No explanation, no quotes, no line breaks.\n"
       + "Style: " + 风格说明 + ".\n"
-      + "Requirements: product-official wording; fictional adult 18+; ethnicity-neutral unless base already states ethnicity; if base mentions East Asian/Chinese/Korean/Japanese, reinforce East Asian facial features and never add blonde/caucasian/european/blue eyes; style/lighting/materials only; do NOT contradict clothing, pose, identity, or scene in the base; do NOT invent outfits/props/settings absent from base; prefer full-body framing only when base allows, avoid close-up/half-body unless base asks; do not repeat the base text; do not rewrite the base.\n"
+      + "Requirements: product-official wording; fictional adult 18+; ethnicity-neutral unless base already states ethnicity; if base mentions East Asian/Chinese/Korean/Japanese, reinforce East Asian facial features and never add blonde/caucasian/european/blue eyes; style/lighting/materials only; do NOT invent woman/female/girl/beautiful woman unless base already states female gender; follow gender as written or stay gender-neutral; do NOT contradict clothing, pose, identity, or scene in the base; do NOT invent outfits/props/settings absent from base; prefer full-body framing only when base allows, avoid close-up/half-body unless base asks; do not repeat the base text; do not rewrite the base.\n"
       + "Base: " + 文.slice(0, 280);
     var 通道框 = document.getElementById("AI通道");
     var 模型 = 通道框 && 通道框.value ? 通道框.value : "glm";
@@ -4079,7 +4079,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.68" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.69" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
