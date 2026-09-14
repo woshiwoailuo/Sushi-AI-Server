@@ -2484,10 +2484,14 @@
               });
             }
             try {
-              // Soft-adopt as next 改动 base; do not auto-check「改动」(keeps Perchance t2i intact).
+              // Soft-adopt as next 改动 base; mark softAdopted so next 全文生图 clears it.
+              // Do not auto-check「改动」(keeps Perchance t2i intact).
               var addr = $('参考图地址');
               var seedEl = $('参考图种子');
-              if (addr) addr.value = String(gotUrl);
+              if (addr) {
+                addr.value = String(gotUrl);
+                try { addr.dataset.softAdopted = '1'; } catch (eMark) {}
+              }
               if (seedEl) {
                 var sk = run.payload && run.payload.seed;
                 seedEl.value = (sk !== '' && sk != null && String(sk) !== '-1') ? String(sk) : (seedEl.value || '');
@@ -2538,6 +2542,22 @@
     // Preserve the user selection for the entire run.
 
     enableProviderPickers();
+
+    // 每次生图清除上一次工作缓存（软采用参考图 / pending / 过期英文）。
+    // 记忆路线仍可保存；用户显式勾选「改动」或非软采用参考图则保留参考图。
+    // 六张生成历史不在此清除。
+    try {
+      if (typeof window.清除生图工作缓存 === 'function') {
+        var editEl = $('生图方式改动');
+        var addrEl = $('参考图地址');
+        var soft = !!(addrEl && addrEl.dataset && addrEl.dataset.softAdopted === '1');
+        var userEdit = !!(typeof window.生图方式已自选 === 'function' && window.生图方式已自选()
+          && typeof window.记忆已开 === 'function' && window.记忆已开()
+          && editEl && editEl.checked);
+        var intentionalRef = !!(addrEl && String(addrEl.value || '').trim() && !soft);
+        window.清除生图工作缓存({ 保留参考图: userEdit || intentionalRef });
+      }
+    } catch (eClearCache) {}
 
     // 记忆开且核心已改写：以最新核心描述为准，记忆仅补充；勿沿用过期英文
     var enBox = $('英文描述');
@@ -2815,7 +2835,10 @@
   window.采用参考图地址 = function (url, seed) {
     var addr = $('参考图地址');
     var seedEl = $('参考图种子');
-    if (addr && url) addr.value = String(url);
+    if (addr && url) {
+      addr.value = String(url);
+      try { delete addr.dataset.softAdopted; } catch (eIntent) {}
+    }
     if (seedEl) seedEl.value = (seed !== '' && seed != null && String(seed) !== '-1') ? String(seed) : '';
     try { if (typeof window.预览参考图 === 'function') window.预览参考图(); } catch (e) {}
     try { if (typeof window.同步生图方式默认 === 'function') window.同步生图方式默认(false); } catch (e2) {}

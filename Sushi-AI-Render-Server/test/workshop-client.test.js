@@ -1479,6 +1479,11 @@ test('memory route line and clear-memory-path button; 改动 checkbox vs full re
   f.w.对话历史 = [{ role: 'user', text: '你好' }, { role: 'assistant', text: '在的' }];
   f.w.保存对话历史();
   assert.match(f.w.组装记忆与核心系统提示(), /旧设定甲|历史记忆/);
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.document.getElementById('参考图地址').dataset.softAdopted = '1';
+  f.w.document.getElementById('参考图种子').value = '999';
+  f.w.localStorage.setItem('sushi_pending_prompt', 'stale-pending');
+  const histBefore = f.w.读取生成历史();
   const origConfirm = f.w.confirm;
   let confirms = 0;
   f.w.confirm = () => { confirms += 1; return true; };
@@ -1490,6 +1495,10 @@ test('memory route line and clear-memory-path button; 改动 checkbox vs full re
   assert.equal(f.w.记忆已开(), true);
   assert.equal(f.w.document.getElementById('记忆开关').checked, true);
   assert.equal(f.w.document.getElementById('角色描述').value, '核心保持原样');
+  assert.equal(f.w.document.getElementById('参考图地址').value, '', '清记忆线路应清生图工作缓存参考图');
+  assert.equal(f.w.document.getElementById('参考图种子').value, '');
+  assert.equal(f.w.localStorage.getItem('sushi_pending_prompt'), null);
+  assert.deepEqual(f.w.读取生成历史(), histBefore, '六张生成历史不变');
   f.w.confirm = origConfirm;
 });
 
@@ -2097,3 +2106,55 @@ test('female core without lingerie: strip underwear positives, everyday/clothed 
   const neutScene = neutOut.replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '').replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
   assert.doesNotMatch(neutScene, /\blingerie\b|\bcleavage\b/i);
 });
+
+test('soft-adopted ref cleared on next full gen; history max 6 untouched; memory can save', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.清除生图工作缓存, 'function');
+  assert.equal(typeof f.w.生图方式已自选, 'function');
+  f.w.切换记忆(true);
+  for (let i = 0; i < 6; i++) f.w.收入历史('https://example.com/h' + i + '.jpg', 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
+  assert.equal(f.w.读取生成历史().length, 6);
+  f.w.document.getElementById('角色描述').value = '一位东亚女性站在雨夜街头';
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.document.getElementById('参考图地址').dataset.softAdopted = '1';
+  f.w.document.getElementById('参考图种子').value = '4242';
+  f.w.localStorage.setItem('sushi_pending_prompt', 'old-run');
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  assert.equal(f.w.document.getElementById('参考图地址').dataset.softAdopted, '1', '记忆开成功后可软采用供下次改动');
+  assert.ok(f.w.记忆路线.length >= 1, '记忆模式仍保存路线');
+  assert.ok(f.w.记忆路线[0].image, '记忆路线保存图片');
+  assert.equal(f.w.读取生成历史().length, 6, '历史容量仍为六张');
+  f.calls.length = 0;
+  f.w.切换生图方式('重新生成');
+  f.w.document.getElementById('角色描述').value = '一位东亚女性站在雨夜街头，换一件红大衣';
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.equal(!!body.source_image, false, '未显式改动时不应沿用上一次软采用 source_image');
+  assert.equal(f.w.读取生成历史().length, 6);
+});
+
+test('explicit 改动 keeps soft-adopted ref; clear last memory step clears gen cache', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.切换记忆(true);
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.document.getElementById('参考图地址').dataset.softAdopted = '1';
+  f.w.document.getElementById('参考图种子').value = '77';
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.切换生图方式('改动');
+  assert.equal(f.w.生图方式已自选(), true);
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.ok(body.source_image, '显式改动应保留软采用参考图');
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.document.getElementById('参考图种子').value = '11';
+  const ids = f.w.记忆路线.map(item => item.id);
+  ids.forEach(id => f.w.清除一条记忆路线(id));
+  assert.equal(f.w.记忆路线.length, 0);
+  assert.equal(f.w.document.getElementById('参考图地址').value, '', '清尽记忆步后应清参考图缓存');
+  assert.equal(f.w.document.getElementById('参考图种子').value, '');
+});
+

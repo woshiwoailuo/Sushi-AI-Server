@@ -1385,8 +1385,12 @@
     刷新记忆生成线路();
     return 值;
   }
+  function 生图方式已自选() {
+    return !!生图方式用户自选;
+  }
   function 切换生图方式(值) {
     if (!记忆已开()) {
+      生图方式用户自选 = false;
       写入生图方式单选("重新生成");
       同步改动可见性();
       刷新记忆生成线路();
@@ -1616,6 +1620,7 @@
     保存记忆路线();
     if (!记忆路线.length) {
       当前记忆路线Id = "";
+      try { 清除生图工作缓存({ 保留参考图: false }); } catch (eClr1) {}
       刷新记忆路线列表();
       刷新记忆生成线路();
       return;
@@ -1716,11 +1721,13 @@
     保存记忆路线();
     保存对话历史();
     try { 渲染对话(); } catch (e1) {}
+    try { 清除生图工作缓存({ 保留参考图: false }); } catch (eClr2) {}
     刷新记忆生成线路();
   }
   function 清除本记忆() { return 清除记忆线路(); }
   window.读取生图方式 = 读取生图方式;
   window.切换生图方式 = 切换生图方式;
+  window.生图方式已自选 = 生图方式已自选;
   window.同步生图方式默认 = 同步生图方式默认;
   window.同步改动可见性 = 同步改动可见性;
   window.本轮使用参考图 = 本轮使用参考图;
@@ -2550,6 +2557,7 @@
       var 原始 = String(reader.result || "");
       压缩参考图(原始, function (结果) {
         地址.value = 结果;
+        try { delete 地址.dataset.softAdopted; } catch (eIntent) {}
         预览参考图();
         同步生图方式默认(false);
         设图生图状态(成功文案 || "参考图已就绪，可以直接生成。");
@@ -2586,17 +2594,43 @@
     图.src = dataUrl;
   }
 
+  /** 清除生图工作/会话缓存（pending、软采用参考图、过期英文等）。
+   *  不碰六张生成历史，不碰记忆路线本体（除非调用方先已清空路线）。
+   *  选项.保留参考图：保留用户上传或记忆点选的参考图（非 softAdopted）。 */
+  function 清除生图工作缓存(选项) {
+    选项 = 选项 || {};
+    var 保留参考 = !!选项.保留参考图;
+    try { localStorage.removeItem("sushi_pending_prompt"); } catch (e0) {}
+    try {
+      var 英 = document.getElementById("英文描述");
+      if (英 && 英.dataset && 英.dataset.staleFromCore === "1") {
+        英.value = "";
+        try { delete 英.dataset.staleFromCore; } catch (eStale) {}
+      }
+    } catch (e1) {}
+    try {
+      var 安 = document.getElementById("安全英文");
+      if (安) 安.value = "";
+    } catch (e2) {}
+    if (!保留参考) {
+      var 地址 = document.getElementById("参考图地址");
+      var 文件框 = document.getElementById("参考图文件");
+      var 种子 = document.getElementById("参考图种子");
+      if (地址) {
+        地址.value = "";
+        try { delete 地址.dataset.softAdopted; } catch (e3) {}
+      }
+      if (文件框) 文件框.value = "";
+      if (种子) 种子.value = "";
+      try { 预览参考图(); } catch (e4) {}
+      try { 同步生图方式默认(false); } catch (e5) {}
+    }
+  }
   function 清空参考图() {
-    var 地址 = document.getElementById("参考图地址");
-    var 文件框 = document.getElementById("参考图文件");
-    var 种子 = document.getElementById("参考图种子");
-    if (地址) 地址.value = "";
-    if (文件框) 文件框.value = "";
-    if (种子) 种子.value = "";
-    预览参考图();
-    同步生图方式默认(false);
+    清除生图工作缓存({ 保留参考图: false });
     设图生图状态("已清除参考图，将按文生图。");
   }
+  window.清除生图工作缓存 = 清除生图工作缓存;
 
   function 去掉方括号(文) {
     return String(文 || "").replace(/[\[\]\{\}]/g, " ").replace(/\s+/g, " ").trim();
