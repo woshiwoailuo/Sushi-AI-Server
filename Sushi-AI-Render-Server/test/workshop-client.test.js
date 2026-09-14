@@ -646,12 +646,17 @@ test('production feature injection preserves manual choice through two generatio
   assert.equal(f.calls.filter(isImageSubmit).length, 2);
 });
 
-test('adult mode is on by default without a blocking in-app overlay', async t => {
+test('adult mode defaults on with top-bar toggle and no replica confirmation UI', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  const layer = f.w.document.getElementById('成人确认层');
+  assert.equal(f.w.document.getElementById('成人确认层'), null);
+  assert.equal(f.w.document.getElementById('官方警告确认'), null);
+  assert.equal(f.w.document.getElementById('成人统一确认'), null);
+  assert.equal(f.w.document.querySelector('.确认遮罩'), null);
+  assert.equal(typeof f.w.打开成人确认, 'undefined');
+  assert.equal(typeof f.w.关闭成人确认, 'undefined');
+  assert.equal(typeof f.w.检查成人确认按钮, 'undefined');
+  assert.equal(typeof f.w.确认开启成人主题, 'undefined');
   const tick = f.w.document.getElementById('成人模式对勾');
-  assert.ok(layer);
-  assert.equal(layer.hidden, true);
   assert.equal(f.w.document.getElementById('成人图标按钮'), null);
   assert.doesNotMatch(f.w.document.querySelector('.顶栏右侧').textContent, /成人模式/);
   const sw = f.w.document.getElementById('成人开关按钮');
@@ -663,20 +668,27 @@ test('adult mode is on by default without a blocking in-app overlay', async t =>
   assert.equal(tick.checked, true);
   assert.equal(f.w.成人主题已开启, true);
   assert.match(f.w.document.getElementById('成人功能状态').value, /NSFW allowed/);
+  // 藏编辑钮 must not strip official dialogs / our adult toggle
+  const official = f.w.document.createElement('div');
+  official.setAttribute('role', 'dialog');
+  official.id = 'fakeOfficialWarn';
+  official.textContent = 'Okay to show NSFW warning content warning';
+  f.w.document.body.appendChild(official);
   f.w.藏编辑钮();
-  assert.equal(layer.hidden, true);
+  assert.ok(f.w.document.getElementById('fakeOfficialWarn'));
+  assert.equal(f.w.document.getElementById('成人开关按钮')?.textContent.trim(), '✓');
   tick.checked = false;
   f.w.切换成人对勾(false);
   assert.equal(f.w.成人主题已开启, false);
   assert.equal(tick.checked, false);
   assert.equal(sw.textContent.trim(), '');
-  assert.equal(layer.hidden, true);
+  assert.equal(f.w.document.getElementById('成人确认层'), null);
   tick.checked = true;
   f.w.切换成人对勾(true);
-  assert.equal(layer.hidden, true);
   assert.equal(f.w.成人主题已开启, true);
   assert.equal(tick.checked, true);
   assert.equal(sw.textContent.trim(), '✓');
+  assert.equal(f.w.localStorage.getItem('角色生成器_成人主题'), 'enabled');
 });
 
 
