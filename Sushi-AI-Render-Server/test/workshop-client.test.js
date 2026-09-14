@@ -461,7 +461,7 @@ test('photorealPrompt enriches by default but style-keyword bypass keeps anime/�
 
   const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
   assert.match(plain, /a fictional adult standing by a rainy window/i);
-  assert.match(plain, /^photorealistic RAW photo/i);
+  assert.match(plain, /^(?:Faithful to core description:[\s\S]*?lead with core facts,\s*)?photorealistic RAW photo/i);
   assert.match(plain, /photoreal|cinematic|natural light|texture|DSLR|85mm/i);
   assert.match(plain, /not anime|not manga|not cartoon/i);
   assert.ok(plain.length > 'a fictional adult standing by a rainy window'.length);
@@ -523,6 +523,39 @@ test('default generation keeps visible core unchanged; no smart-mod means transl
   assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
   assert.equal(f.w.document.getElementById('说明英文').textContent, beforeCap);
   assert.doesNotMatch(f.w.document.getElementById('角色描述').value, /photorealistic RAW photo|not anime, not manga/i);
+});
+
+test('outbound stays faithful to core: fidelity lead, key facts, no core mutation', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.applyCoreFidelityLead, 'function');
+  assert.match(f.w.CORE_FIDELITY_LEAD, /Faithful to core description|do not invent clothing/i);
+  const core = 'a fictional adult East Asian woman in a red knit sweater, side view, standing in a quiet library';
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.document.getElementById('英文描述').value = core;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  assert.equal(f.w.hasSmartModifier(), false);
+  const minimal = f.w.minimalOutboundPrompt(core, { core: core });
+  assert.match(minimal, /Faithful to core description/i);
+  assert.match(minimal, /red knit sweater/i);
+  assert.match(minimal, /side view|library|East Asian/i);
+  assert.doesNotMatch(minimal, /photorealistic RAW photo|cinematic still|shallow depth of field/i);
+  assert.doesNotMatch(minimal, /\bnude\b|\bnaked\b|unclothed|bikini|beach party/i);
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  assert.match(pos, /Faithful to core description|follow the core description/i);
+  assert.match(pos, /red knit sweater/i);
+  assert.match(pos, /side view|library/i);
+  assert.doesNotMatch(pos, /\bnude\b|\bnaked\b|do not add clothes|keep requested nudity/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心描述 must not mutate');
+  // Smart-mod must not force front-view when core asks side view
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.智能修饰();
+  assert.equal(f.w.document.getElementById('角色描述').value, core);
+  const mod = f.w.读取智能修饰后缀();
+  const gated = f.w.sanitizeModifierAgainstCore(mod, core);
+  assert.doesNotMatch(gated, /front view facing camera|full-body front view eye-level facing camera/i);
+  assert.match(gated, /photoreal|DSLR|not anime|photography/i);
 });
 
 test('清空描述 clears core and linked prompt fields but not gallery', async t => {
@@ -653,7 +686,7 @@ test('platform picker shows full names without Perch abbreviation', async t => {
 test('photorealPrompt helper still available for style-aware enrich logic', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
-  assert.match(plain, /^photorealistic RAW photo/i);
+  assert.match(plain, /^(?:Faithful to core description:[\s\S]*?lead with core facts,\s*)?photorealistic RAW photo/i);
   assert.match(plain, /not anime|not manga|not cartoon/i);
   const anime = f.w.animePrompt('a fictional adult standing by a rainy window');
   assert.match(anime, /anime illustration/i);

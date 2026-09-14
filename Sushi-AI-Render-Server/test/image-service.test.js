@@ -320,3 +320,19 @@ test('generationPayload enrich:false keeps translate-only prompt and expands tex
   assert.match(built.prompt, /###/);
   assert.match(built.prompt, /pinyin|romanization|watermark|text/i);
 });
+
+test('enrich false skips photoreal pack (smart-mod off path)', () => {
+  const plain = sanitizeRealPrompt('a fictional adult in a red coat by a window', { enrich: false });
+  assert.match(plain, /red coat|fictional adult/i);
+  assert.doesNotMatch(plain, /photorealistic RAW photo|natural skin pores|realistic fabric texture/i);
+  assert.match(plain, /no text in image|no pinyin/i);
+  const payload = generationPayload({
+    prompt: 'a fictional adult in a red coat by a window',
+    style: 'real',
+    width: 512,
+    height: 512,
+    enrich: false,
+  });
+  assert.match(payload.prompt, /red coat/i);
+  assert.doesNotMatch(payload.prompt.split(' ### ')[0], /photorealistic RAW photo/i);
+});

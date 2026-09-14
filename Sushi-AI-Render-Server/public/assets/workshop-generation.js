@@ -606,6 +606,7 @@
       text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
+    text = applyCoreFidelityLead(text);
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
@@ -613,6 +614,50 @@
     try {
       return !!(typeof window.读取智能修饰后缀 === 'function' && String(window.读取智能修饰后缀() || '').trim());
     } catch (e) { return false; }
+  }
+
+  var CORE_FIDELITY_LEAD =
+    'Faithful to core description: depict only what the core states; do not invent clothing, props, pose, identity, or setting not in the core; lead with core facts';
+
+  function applyCoreFidelityLead(prompt) {
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!text) return text;
+    if (/faithful to core description/i.test(text)) return text;
+    return (CORE_FIDELITY_LEAD + ', ' + text).replace(/\s{2,}/g, ' ').trim();
+  }
+
+  /** Smart-mod layer must not contradict core clothing/pose/identity/scene. */
+  function sanitizeModifierAgainstCore(suffix, core) {
+    var mod = String(suffix || '');
+    var c = String(core || '');
+    if (!mod) return mod;
+    // Pose / camera contradictions
+    if (/侧脸|侧面|侧身|背面|背影|后视|profile|from behind|back view|side view|rear view|three[\s-]?quarter/i.test(c)) {
+      mod = mod
+        .replace(/,?\s*full-body front view eye-level facing camera/gi, '')
+        .replace(/,?\s*full-body front view(?: eye-level)?/gi, '')
+        .replace(/,?\s*full-body facing camera(?: head to toe)?/gi, '')
+        .replace(/,?\s*front view(?: facing camera)?/gi, '')
+        .replace(/,?\s*facing camera/gi, '')
+        .replace(/,?\s*eye-level facing camera/gi, '');
+    }
+    if (/半身|七分身|胸像|头像|特写|近景|close[\s-]?up|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body/i.test(c)) {
+      mod = mod
+        .replace(/,?\s*full-body(?: framing)?(?: head to toe)?(?: feet in frame)?/gi, '')
+        .replace(/,?\s*full figure visible head to toe/gi, '')
+        .replace(/,?\s*complete figure from crown to shoes/gi, '');
+    }
+    if (/坐着|坐下|坐姿|躺|卧|蹲|kneel|sitting|seated|lying|reclining|squatting/i.test(c)) {
+      mod = mod.replace(/,?\s*standing(?: full figure| art)?/gi, '').replace(/,?\s*full-character standing-art feel/gi, '');
+    }
+    // Outdoor/indoor scene contradiction
+    if (/室内|屋内|房间|卧室|书房|图书馆|indoors?|indoor|library|bedroom|studio/i.test(c) && !/室外|户外|outdoors?/i.test(c)) {
+      mod = mod.replace(/,?\s*outdoor natural-light photoreal photography[^,]*/gi, ', natural-light photoreal photography');
+    }
+    mod = mod.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
+    if (!mod) return '';
+    if (mod.charAt(0) !== ',') mod = ', ' + mod.replace(/^[,\s]+/, '');
+    return mod;
   }
 
   function ensureNoTextOnImage(prompt) {
@@ -630,6 +675,16 @@
     var coreHint = opts.core != null ? String(opts.core) : '';
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (!text) text = String(coreHint || '').replace(/\s+/g, ' ').trim() || 'a fictional adult';
+    // Strip leftover photoreal enrich packs if somehow present when smart-mod is off
+    text = text
+      .replace(/,?\s*photorealistic RAW photo(?:,\s*shot on DSLR,?\s*(?:28|35|50|85)mm)?(?:,\s*natural skin pores)?(?:,\s*realistic fabric texture)?/gi, '')
+      .replace(/,?\s*cinematic still/gi, '')
+      .replace(/,?\s*shallow depth of field/gi, '')
+      .replace(/,?\s*natural skin texture, clear material detail, sharp focus, real human/gi, '')
+      .replace(/,?\s*not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/^[,,\s]+|[,,\s]+$/g, '')
+      .trim() || text;
     if (!opts.localEdit) {
       var framingSource = (coreHint ? coreHint + ', ' : '') + text;
       if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
@@ -642,6 +697,7 @@
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
     }
+    text = applyCoreFidelityLead(text);
     return ensureNoTextOnImage(text);
   }
 
@@ -664,7 +720,7 @@
   }
 
   var ADULT_DIR_BASE =
-    'adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including clothing as written or implied; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors';
+    'adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including clothing as written or implied; do not invent clothing, props, pose, identity, setting, undressing, or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors';
   var ADULT_DIR_NUDE =
     'explicit adult nudity as described is permitted; if nude or undressed do not add clothes, fabric coverage, or modest outfits; keep requested nudity and sexual details visible';
   var NUDE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣|脱光|赤裸/i;
@@ -2080,9 +2136,13 @@
     var description = (typeof window.组装出图描述含记忆 === 'function' && window.组装出图描述含记忆())
       || value('角色描述') || value('英文描述');
     var smartMod = typeof window.读取智能修饰后缀 === 'function' ? String(window.读取智能修饰后缀() || '') : '';
-    // Modifiers live only on the outbound layer — never rewrite visible core.
-    if (smartMod && description.indexOf(smartMod) === -1) {
-      description = description + (smartMod.charAt(0) === ',' ? smartMod : ', ' + smartMod);
+    // Modifiers live only on the outbound layer — never rewrite visible core; must not contradict core.
+    if (smartMod) {
+      var coreForMod = String(value('角色描述') || description || '');
+      smartMod = sanitizeModifierAgainstCore(smartMod, coreForMod);
+      if (smartMod && description.indexOf(smartMod) === -1) {
+        description = description + (smartMod.charAt(0) === ',' ? smartMod : ', ' + smartMod);
+      }
     }
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
     if (typeof window.标记核心已用于生成 === 'function') window.标记核心已用于生成();
@@ -2282,6 +2342,9 @@
   window.forcePhotorealPrompt = forcePhotorealPrompt;
   window.hasSmartModifier = hasSmartModifier;
   window.minimalOutboundPrompt = minimalOutboundPrompt;
+  window.CORE_FIDELITY_LEAD = CORE_FIDELITY_LEAD;
+  window.applyCoreFidelityLead = applyCoreFidelityLead;
+  window.sanitizeModifierAgainstCore = sanitizeModifierAgainstCore;
   window.ensureNoTextOnImage = ensureNoTextOnImage;
   window.hasEastAsianCue = hasEastAsianCue;
   window.applyEastAsianEthnicity = applyEastAsianEthnicity;
