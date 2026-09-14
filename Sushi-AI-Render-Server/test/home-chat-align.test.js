@@ -143,7 +143,7 @@ test('Perch failure must not fall through to Horde; photoreal prefers full-body 
   assert.match(gen, /60000/);
   assert.doesNotMatch(gen, /, 1000\)/);
   // After Perch block, hard guard before Horde path
-  assert.match(gen, /if \(engine === 'perchance'\) \{[\s\S]*throw new Error\('Perch 出图失败，未更换平台'\)/);
+  assert.match(gen, /if \(engine === 'perchance'\) \{[\s\S]*throw new Error\('Perchance 出图失败，未更换平台'\)/);
   const fn = home.slice(home.indexOf('function photorealHomePrompt'), home.indexOf('function homeImageError'));
   assert.match(fn, /full-body framing/);
   assert.match(fn, /facing camera/);

@@ -58,7 +58,7 @@
           <span class="核心标题左">
             <b>01 · 核心描述</b>
             <button type="button" class="文字钮" id="清空描述按钮" onclick="清空描述()" title="清空核心描述与相关出图描述">清空描述</button>
-            <button type="button" class="文字钮" id="智能修饰按钮" onclick="智能修饰()" title="智能追加写实或画风修饰词到核心描述；再点可换一版">智能修饰</button>
+            <button type="button" class="文字钮" id="智能修饰按钮" onclick="智能修饰()" title="智能追加写实或画风修饰词；再点替换上一版，备好词库用尽后可 AI 生成">智能修饰</button>
           </span>
           <span>必填</span>
         </div>
@@ -76,7 +76,7 @@
 
         <label>
           生图平台
-          <select id="出图引擎" onchange="保存默认平台(this.value, true); 设平台提示(this.value)"><option value="perchance">Perch</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
+          <select id="出图引擎" onchange="保存默认平台(this.value, true); 设平台提示(this.value)"><option value="perchance">Perchance</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
         </label>
         <input id="备用引擎" type="hidden" value="perchance">
 
@@ -110,7 +110,7 @@
         <div id="管理面板" class="分区" hidden>
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
-            <select id="管理默认平台" onchange="保存默认平台(this.value, true)"><option value="perchance">Perch</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
+            <select id="管理默认平台" onchange="保存默认平台(this.value, true)"><option value="perchance">Perchance</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
           </label>
           <label class="换背景行 对勾行">
             <input id="调试开关" type="checkbox" onchange="切换调试(this.checked)">
@@ -365,7 +365,7 @@
           </label>
           <label>
             图生图平台
-            <select id="图生图平台" onchange="保存图生图平台(this.value)"><option value="perchance">Perch</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
+            <select id="图生图平台" onchange="保存图生图平台(this.value)"><option value="perchance">Perchance</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
           </label>
           <div class="核心操作">
             <button type="button" class="次按钮" onclick="document.getElementById('参考图文件').click()">插入图片</button>
@@ -380,7 +380,7 @@
         <summary>AI 对话</summary>
           <label>
             回答通道
-          <select id="AI通道" onchange="对话通道已改()"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
+          <select id="AI通道" onchange="对话通道已改()"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">AI Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
           <span id="对话通道状态" class="说明文字" role="status">使用所选对话通道，失败时不会自动更换。</span>
         </label>
         <label>
@@ -440,7 +440,7 @@
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">生图平台：Perch · 按所选通道</p>
+      <p id="平台提示" class="平台提示">生图平台：Perchance · 按所选通道</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -2200,10 +2200,11 @@
     return 项;
   }
 
-  // 「智能修饰」：把写实/画风修饰写入可见核心描述；再点替换上一版后缀，不无限堆叠。
+  // 「智能修饰」：备好官方修饰词池；再点只替换上一版后缀，不无限堆叠；词库用尽后走 AI。
   var _智能修饰基座 = "";
   var _智能修饰后缀 = "";
   var _智能修饰序号 = 0;
+  var _智能修饰忙碌 = false;
 
   function _智能修饰候选(基座) {
     var 文 = String(基座 || "");
@@ -2214,30 +2215,110 @@
         return [
           "，二次元动漫插画风格，精致线稿与赛璐璐上色，鲜明色彩层次，清晰角色设计，虚构成年人，无未成年人",
           "，日系动漫插画，干净线条，柔和光影，高完成度角色立绘，虚构成年人，18+",
-          "，漫画风插画，鲜明配色，动态构图，细腻表情与服饰细节，虚构成年角色，无未成年人"
+          "，漫画风插画，鲜明配色，动态构图，细腻表情与服饰细节，虚构成年角色，无未成年人",
+          "，视觉小说立绘风格，清晰五官与发型，柔和渐变上色，完整角色设计，虚构成年人，无未成年人",
+          "，高完成度动漫角色插画，干净线稿，赛璐璐光影，服饰细节清楚，虚构成年人，18+",
+          "，现代二次元插画，鲜明主色与层次，精致五官，角色全身立绘感，虚构成年人，无未成年人"
         ];
       }
       return [
-        ", anime illustration style, clean lineart, cel shading, vivid colors, detailed character design, fictional adult 18+ only, no minors",
-        ", manga illustration, soft lighting, high-finish character portrait, fictional adult 18+, no minors",
-        ", comic-style illustration, dynamic composition, crisp linework, fictional adult, no minors"
+        ", anime illustration style, clean lineart, cel shading, vivid color hierarchy, detailed character design, fictional adult 18+ only, no minors",
+        ", Japanese anime illustration, clean linework, soft lighting, high-finish character portrait, fictional adult 18+, no minors",
+        ", comic-style illustration, vivid palette, dynamic composition, crisp expression and outfit detail, fictional adult, no minors",
+        ", visual-novel character art, clear facial features and hair, soft gradient shading, polished character design, fictional adult 18+ only, no minors",
+        ", high-finish anime character illustration, clean lineart, cel-shaded lighting, readable costume detail, fictional adult 18+, no minors",
+        ", modern anime illustration, strong key colors, refined facial features, full-character standing-art feel, fictional adult, no minors"
       ];
     }
     if (中文) {
       return [
-        "，写实摄影，单反拍摄，85mm，自然皮肤毛孔与织物材质，自然光，电影剧照，浅景深，真实照片，非动漫非卡通非插画，虚构成年人，无未成年人",
-        "，纪实人像摄影，自然光影，真实皮肤质感，清晰材质细节，浅景深，非二次元非卡通，虚构成年人，18+",
-        "，电影感写实照片，85mm镜头，柔和侧光，真实毛孔与布料纹理，非动漫非插画，虚构成年，无未成年人"
+        "，写实摄影风格，单反相机，85mm 镜头，全身正面平视面向镜头，自然皮肤质感与织物材质，自然光，电影剧照感，浅景深，真实照片观感，非动漫非卡通非插画，虚构成年人，无未成年人",
+        "，纪实人像摄影，自然光影，全身正面构图，真实皮肤质感，清晰材质细节，浅景深，非二次元非卡通，虚构成年人，18+",
+        "，电影感写实照片，85mm 镜头，柔和侧光，全身正面平视，真实毛孔与布料纹理，非动漫非插画，虚构成年，无未成年人",
+        "，商业级写实人像，柔光棚拍观感，全身正面面向镜头，皮肤与服饰材质清晰，自然景深，非卡通非二次元，虚构成年人，18+",
+        "，户外自然光写实摄影，环境光均匀，全身正面入画，真实五官与发丝细节，非插画非动漫，虚构成年人，无未成年人",
+        "，高清写实摄影，眼平视角面向镜头，全身完整入画，材质与光影层次清楚，非动漫非漫画，虚构成年人，18+"
       ];
     }
     return [
-      ", photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture, natural light, cinematic still, shallow depth of field, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
-      ", photoreal cinematic photograph, natural light, real human skin texture, sharp material detail, DSLR, not anime, not cartoon, fictional adult 18+, no minors",
-      ", realistic photography, 85mm lens, soft key light, pore-level skin, fabric weave visible, not 2d art, not cel shading, fictional adult, no minors"
+      ", photorealistic photography style, shot on DSLR, 85mm lens, full-body front view eye-level facing camera, natural skin texture and fabric detail, natural light, cinematic still, shallow depth of field, true photo look, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
+      ", documentary portrait photography, natural lighting, full-body front framing, real skin texture, sharp material detail, shallow depth of field, not anime, not cartoon, fictional adult 18+, no minors",
+      ", cinematic photoreal photograph, 85mm lens, soft side light, full-body front view eye-level, pore-level skin and fabric weave, not anime, not illustration, fictional adult, no minors",
+      ", commercial photoreal portrait, soft studio-light look, full-body facing camera, clear skin and clothing materials, natural depth of field, not cartoon, not 2d art, fictional adult 18+, no minors",
+      ", outdoor natural-light photoreal photography, even ambient light, full figure visible head to toe facing camera, clear facial and hair detail, not illustration, not anime, fictional adult, no minors",
+      ", high-definition photoreal photography, eye-level facing camera, full-body framing head to toe, readable materials and light hierarchy, not anime, not manga, fictional adult 18+ only, no minors"
     ];
   }
 
-  function 智能修饰() {
+  function _清洗修饰后缀(原文, 中文) {
+    var 文 = String(原文 || "").replace(/\r/g, "").trim();
+    if (!文) return "";
+    文 = 文.split(/\n/)[0].trim();
+    文 = 文.replace(/^["'`「『]|["'`」』]$/g, "").trim();
+    文 = 文.replace(/^修饰[词短语]*[：:]\s*/i, "").trim();
+    if (!文) return "";
+    if (中文) {
+      文 = 文.replace(/^[,，]\s*/, "");
+      文 = "，" + 文;
+    } else {
+      文 = 文.replace(/^[,，]\s*/, "");
+      文 = ", " + 文;
+    }
+    if (文.length < 10 || 文.length > 320) return "";
+    return 文;
+  }
+
+  async function _智能修饰AI生成(基座) {
+    var 文 = String(基座 || "").trim();
+    var 画风 = 显式画风(文);
+    var 中文 = /[\u4e00-\u9fff]/.test(文);
+    var 风格说明 = 画风
+      ? (中文 ? "二次元/动漫插画修饰（线稿、赛璐璐、配色、角色设计）" : "anime/manga illustration modifiers (lineart, cel shading, palette, character design)")
+      : (中文 ? "写实摄影修饰（全身正面平视、镜头、光影、材质、非动漫）" : "photoreal photography modifiers (full-body front view, lens, lighting, materials, not anime)");
+    var 问 = 中文
+      ? ("请只输出一条可直接追加在画面描述末尾的修饰短语，不要解释、不要引号、不要换行。\n"
+        + "语言：中文。风格：" + 风格说明 + "。\n"
+        + "要求：官方产品用语；虚构成年人 18+；勿重复基座原文。\n"
+        + "基座：" + 文.slice(0, 280))
+      : ("Output ONLY one modifier phrase to append after the scene description. No explanation, no quotes, no line breaks.\n"
+        + "Language: English. Style: " + 风格说明 + ".\n"
+        + "Requirements: product-official wording; fictional adult 18+; do not repeat the base text.\n"
+        + "Base: " + 文.slice(0, 280));
+    var 通道框 = document.getElementById("AI通道");
+    var 模型 = 通道框 && 通道框.value ? 通道框.value : "glm";
+    var 原文 = "";
+    try {
+      原文 = await 问免费模型(问, 模型);
+    } catch (e1) {
+      try {
+        if (模型 !== "glm") 原文 = await 问免费模型(问, "glm");
+      } catch (e2) {
+        try { 原文 = await 问群体模型(问); } catch (e3) { 原文 = ""; }
+      }
+    }
+    return _清洗修饰后缀(原文, 中文);
+  }
+
+  function _应用智能修饰(框, 基座, 后缀) {
+    _智能修饰基座 = 基座;
+    _智能修饰后缀 = 后缀;
+    框.value = 基座 + 后缀;
+    try { 框.dispatchEvent(new Event("input", { bubbles: true })); } catch (e0) {}
+    try { localStorage.setItem("角色生成器_上次描述", 框.value); } catch (e1) {}
+    var 安 = document.getElementById("安全英文");
+    var 英 = document.getElementById("英文描述");
+    if (安) {
+      var 英文明 = 只留英文(去掉方括号((英 && 英.value) || ""));
+      if (!英文明) 英文明 = 只留英文(去掉方括号(框.value));
+      if (!英文明) 英文明 = 框.value;
+      安.value = 英文明;
+    }
+    if (typeof 刷新画面说明 === "function") 刷新画面说明();
+    框.focus();
+  }
+
+  async function 智能修饰() {
+    if (_智能修饰忙碌) return;
     var 框 = document.getElementById("角色描述");
     if (!框) return;
     var 全文 = String(框.value || "");
@@ -2268,22 +2349,25 @@
       _智能修饰序号 += 1;
     }
     var 列表 = _智能修饰候选(基座.trim());
-    var 后缀 = 列表[_智能修饰序号 % 列表.length];
-    _智能修饰基座 = 基座;
-    _智能修饰后缀 = 后缀;
-    框.value = 基座 + 后缀;
-    try { 框.dispatchEvent(new Event("input", { bubbles: true })); } catch (e0) {}
-    try { localStorage.setItem("角色生成器_上次描述", 框.value); } catch (e1) {}
-    var 安 = document.getElementById("安全英文");
-    var 英 = document.getElementById("英文描述");
-    if (安) {
-      var 英文明 = 只留英文(去掉方括号((英 && 英.value) || ""));
-      if (!英文明) 英文明 = 只留英文(去掉方括号(框.value));
-      if (!英文明) 英文明 = 框.value;
-      安.value = 英文明;
+    var 后缀 = "";
+    if (_智能修饰序号 < 列表.length) {
+      后缀 = 列表[_智能修饰序号];
+      _应用智能修饰(框, 基座, 后缀);
+      return;
     }
-    if (typeof 刷新画面说明 === "function") 刷新画面说明();
-    框.focus();
+    _智能修饰忙碌 = true;
+    var 钮 = document.getElementById("智能修饰按钮");
+    var 旧文 = 钮 ? 钮.textContent : "";
+    if (钮) { 钮.disabled = true; 钮.textContent = "AI 修饰中…"; }
+    try {
+      后缀 = await _智能修饰AI生成(基座.trim());
+    } catch (eAi) {
+      后缀 = "";
+    }
+    if (!后缀) 后缀 = 列表[_智能修饰序号 % 列表.length];
+    _应用智能修饰(框, 基座, 后缀);
+    if (钮) { 钮.disabled = false; 钮.textContent = 旧文 || "智能修饰"; }
+    _智能修饰忙碌 = false;
   }
 
   function 清空描述() {
@@ -2295,6 +2379,7 @@
     _智能修饰基座 = "";
     _智能修饰后缀 = "";
     _智能修饰序号 = 0;
+    _智能修饰忙碌 = false;
     try { localStorage.removeItem("角色生成器_上次描述"); } catch (e) {}
     上次译源 = "";
     if (typeof 刷新画面说明 === "function") 刷新画面说明();
@@ -2859,13 +2944,13 @@
 
   function 引擎名称(值) {
     var 真 = {
-      perchance: "Perch · 官方",
-      "horde-real": "Horde · 写实",
-      horde: "Horde · 写实",
-      "horde-anime": "Horde · 动漫",
+      perchance: "Perchance",
+      "horde-real": "AI Horde · 写实",
+      horde: "AI Horde · 写实",
+      "horde-anime": "AI Horde · 动漫",
       sana: "Sana · 动漫/插画"
     };
-    return 真[值] || 值 || "Perch";
+    return 真[值] || 值 || "Perchance";
   }
 
   function 刷新管理员界面() {
@@ -3259,7 +3344,7 @@
     if (typeof update !== "function") {
       输出区.innerHTML = "";
       状态区.style.display = "flex";
-      状态区.innerHTML = '<div class="加载动画"></div><b>正在用 Perch 出图</b><p>按所选通道出图，失败不更换平台。</p>';
+      状态区.innerHTML = '<div class="加载动画"></div><b>正在用 Perchance 出图</b><p>按所选通道出图，失败不更换平台。</p>';
       记录失败原因("Perchance 页面组件未加载，改走官方出图接口");
       if (typeof window.开始生成 === "function") window.开始生成();
       return;
@@ -3313,7 +3398,7 @@
           /* Turbo / Horde 已在跑，官方迟到不再挡 */
         } else if (!抢出已定) {
           var 行 = document.getElementById("平台提示");
-          if (行) 行.textContent = "生图平台：Perch 出图超时，未更换平台";
+          if (行) 行.textContent = "生图平台：Perchance 出图超时，未更换平台";
           结束本次生成("生成角色图片");
         } else {
           结束本次生成("生成角色图片");
@@ -3325,7 +3410,7 @@
   function 设平台提示(引擎) {
     var 行 = document.getElementById("平台提示");
     if (!行) return;
-    if (!引擎) 行.textContent = "生图平台：Perch · 按所选通道";
+    if (!引擎) 行.textContent = "生图平台：Perchance · 按所选通道";
     else 行.textContent = "生图平台：" + 引擎名称(引擎) + " · 按所选通道";
   }
 

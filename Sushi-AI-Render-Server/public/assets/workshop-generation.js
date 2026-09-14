@@ -1004,8 +1004,8 @@
   function engineLabel(name) {
     var map = {
       auto: '自动抢出 · 写实', 'auto-real': '自动抢出 · 写实', 'auto-anime': '自动抢出 · 动漫',
-      turbo: 'Sana', horde: 'Horde · 写实', 'horde-real': 'Horde · 写实', 'horde-anime': 'Horde · 动漫',
-      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perch · 官方'
+      turbo: 'Sana', horde: 'AI Horde · 写实', 'horde-real': 'AI Horde · 写实', 'horde-anime': 'AI Horde · 动漫',
+      flux: 'Sana', 'flux-realism': 'Sana', sana: 'Sana · 动漫/插画', perchance: 'Perchance'
     };
     return map[name] || name;
   }
@@ -1144,12 +1144,12 @@
 
   async function generatePerchanceOfficial(run, prompt, index, providerSignal) {
     if (run.payload && run.payload.sourceImage) {
-      throw new Error('Perch 官方出图暂不支持参考图，未转接其他平台。');
+      throw new Error('Perchance 出图暂不支持参考图，未转接其他平台。');
     }
     var signal = providerSignal || run.controller.signal;
     status(
-      '正在用 Perch 官方出图 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
-      '按所选 Perch 通道出图，失败不更换平台。',
+      '正在用 Perchance 出图 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
+      '按所选 Perchance 通道出图，失败不更换平台。',
       true
     );
     var key = '';
@@ -1222,7 +1222,7 @@
       if (parentAborted(parent, run)) throw error;
       status(
         '正在出图 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
-        '官网防嵌，应用内直出，有结果立即显示。',
+        '应用内直出，有结果立即显示。',
         true
       );
       var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
@@ -1296,7 +1296,7 @@
       var title = run.cancelled ? '已停止本轮生成' : (run.completed ? '已生成 ' + run.completed + ' 张，后续未完成' : '本次未完成');
       var detail = run.cancelled ? '已保留已完成的图片。' : String(error && error.message || error || '');
       if (/Load failed|Failed to fetch|NetworkError/i.test(detail)) {
-        detail = 'Perch 出图接口不可用，未完成，未更换平台。';
+        detail = 'Perchance 出图接口不可用，未完成，未更换平台。';
       }
       if (!run.cancelled && (error && (error.status === 429 || error.code === 'ENGINE_COOLDOWN' || error.code === 'ALL_COOLDOWN' || /限流|冷却|429/.test(detail)))) {
         title = run.completed ? title : '出图通道限流';
@@ -1430,12 +1430,7 @@
   window.设平台提示 = function (engine) {
     var tip = $('平台提示');
     if (!tip) return;
-    var name = normalizeEngineName(engine);
-    tip.textContent = name === 'perchance'
-      ? 'Perch · 按所选通道 · 失败不更换平台'
-      : engineLabel(engine) + ' · 按所选通道 · 失败不更换平台';
-    var info = $('官网信息');
-    if (info) info.hidden = true;
+    tip.textContent = engineLabel(engine) + ' · 按所选通道 · 失败不更换平台';
   };
 
   async function init() {
