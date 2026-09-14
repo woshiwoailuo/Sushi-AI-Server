@@ -607,6 +607,7 @@
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
     text = stripInjectedFemaleDefaults(text, coreHint || text);
+    text = applyMaleGenderLocks(text, coreHint || text);
     text = stripExposureBiasDefaults(text, coreHint || text);
     text = applyCoreFidelityLead(text);
     return text.replace(/\s{2,}/g, ' ').trim();
@@ -656,9 +657,20 @@
     if (/室内|屋内|房间|卧室|书房|图书馆|indoors?|indoor|library|bedroom|studio/i.test(c) && !/室外|户外|outdoors?/i.test(c)) {
       mod = mod.replace(/,?\s*outdoor natural-light photoreal photography[^,]*/gi, ', natural-light photoreal photography');
     }
-    // Gender: never let smart-mod inject woman/female when core lacks it
+    // Gender: never let smart-mod inject woman/female when core lacks it; male cores also forbid feminine leftovers
     if (!hasFemaleIntent(c)) {
       mod = stripInjectedFemaleDefaults(mod, c);
+    }
+    if (isMaleOnlyCore(c)) {
+      mod = mod
+        .replace(/\bbeautiful (?:young )?(?:woman|girl|lady)\b/gi, ' ')
+        .replace(/\bfeminine(?:\s+face)?\b/gi, ' ')
+        .replace(/\bfemale(?:\s+(?:body|figure|face|features))?\b/gi, ' ')
+        .replace(/\b(breasts?|boobs?|cleavage|hourglass(?:\s+figure)?)\b/gi, ' ')
+        .replace(/\b(woman|women|girl|lady|ladies|1girl|she|her|hers)\b/gi, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/[，,]{2,}/g, ',')
+        .trim();
     }
     // Exposure: never let smart-mod invent revealing/sexy packs when core lacks them
     if (!hasNudeIntent(c) && !hasExposureIntent(c)) {
@@ -715,6 +727,7 @@
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
     text = stripInjectedFemaleDefaults(text, coreHint || text);
+    text = applyMaleGenderLocks(text, coreHint || text);
     text = stripExposureBiasDefaults(text, coreHint || text);
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
@@ -784,6 +797,19 @@
     return FEMALE_INTENT_RE.test(String(text || ''));
   }
 
+  // Male cues from core — when present, lock outbound to adult man and forbid woman drift.
+  var MALE_INTENT_RE = /男人|男性|男的|男主|男子|男角色|男神|帅哥|大叔|小伙|男孩|少年|男士|先生|丈夫|男友|王子|国王|爷们|大爷|\bman\b|\bmen\b|\bmale\b|\bboy\b|\bguy\b|\bguys\b|\bgentleman\b|\bhim\b|\bhis\b|\bhe\b|\b1boy\b|handsome (?:young )?(?:man|guy)|adult man|masculin/i;
+
+  function hasMaleIntent(text) {
+    return MALE_INTENT_RE.test(String(text || ''));
+  }
+
+  /** True when core is male-only (not a mixed/couple scene that also states female). */
+  function isMaleOnlyCore(core) {
+    var c = String(core || '');
+    return hasMaleIntent(c) && !hasFemaleIntent(c);
+  }
+
   /** Strip injected woman/female/girl tokens when core did not state female gender. */
   function stripInjectedFemaleDefaults(text, core) {
     if (hasFemaleIntent(core)) return String(text || '');
@@ -810,6 +836,55 @@
       .replace(/^[\s,]+|[\s,]+$/g, '')
       .trim();
     return t;
+  }
+
+  var MALE_LOCK_LEAD = 'adult man, male, masculine';
+
+  /** When core is male-only: strip leftover female/feminine tokens and inject strong male locks EARLY. Visible 核心描述 is never mutated. */
+  function applyMaleGenderLocks(text, core) {
+    if (!isMaleOnlyCore(core)) return String(text || '');
+    var t = stripInjectedFemaleDefaults(String(text || ''), core);
+    if (!t) t = 'a fictional adult man';
+    // Forbid feminine / woman-default leftovers that model priors often reintroduce
+    t = t
+      .replace(/\bbeautiful (?:young )?(?:woman|girl|lady)\b/gi, 'adult man')
+      .replace(/\bfeminine(?:\s+face)?\b/gi, ' ')
+      .replace(/\bfemale(?:\s+(?:body|figure|face|features))?\b/gi, ' ')
+      .replace(/\b(breasts?|boobs?|cleavage|hourglass(?:\s+figure)?)\b/gi, ' ')
+      .replace(/\bsoft curves\b/gi, ' ')
+      .replace(/\b1girl\b/gi, '1boy')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[，,]{2,}/g, ',')
+      .replace(/^[\s,]+|[\s,]+$/g, '')
+      .trim();
+    // Prefer man wording over gender-neutral person when core is male
+    t = t
+      .replace(/\ba fictional adult(?!\s+man)\b/gi, 'a fictional adult man')
+      .replace(/\bfictional adult(?!\s+man)\b/gi, 'fictional adult man')
+      .replace(/\ba person\b/gi, 'a man')
+      .replace(/\bthe person\b/gi, 'the man')
+      .replace(/\b1person\b/gi, '1boy');
+    // Inject strong male locks at the front (after optional photoreal camera lead)
+    if (!/^\s*adult man,\s*male,\s*masculine\b/i.test(t)) {
+      t = t
+        .replace(/,?\s*adult man\b/gi, '')
+        .replace(/,?\s*\bmasculine\b/gi, '')
+        .replace(/,?\s*\bmale\b(?!\s+body)/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/[，,]{2,}/g, ',')
+        .replace(/^[\s,]+|[\s,]+$/g, '')
+        .trim();
+      var m = t.match(/^(photorealistic (?:RAW photo|photograph)(?:,\s*shot on DSLR,\s*(?:28|35|50|85)mm)?(?:,\s*natural (?:skin pores|light))?(?:,\s*realistic fabric texture)?)/i);
+      if (m) {
+        t = m[1] + ', ' + MALE_LOCK_LEAD + t.slice(m[1].length);
+      } else {
+        t = MALE_LOCK_LEAD + ', ' + t;
+      }
+    }
+    if (!/\badult man\b/i.test(t) || !/\bmale\b/i.test(t) || !/\bmasculine\b/i.test(t)) {
+      t = MALE_LOCK_LEAD + ', ' + t;
+    }
+    return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
   }
 
   function adultDirectiveText(options) {
@@ -2009,6 +2084,7 @@
       // Honor anime channel wording; still reinject East Asian cues from core when present.
       prompt = applyEastAsianEthnicity(String(prompt || ''), coreHint);
       prompt = stripInjectedFemaleDefaults(prompt, coreHint);
+      prompt = applyMaleGenderLocks(prompt, coreHint);
       prompt = applyCoreFidelityLead(prompt);
       prompt = ensureNoTextOnImage(prompt);
     } else if (smartOn) {
@@ -2330,6 +2406,12 @@
         negative += ', nude, naked, lingerie, cleavage, skimpy outfit, seductive pose, revealing clothes, underwear only';
       }
     }
+    // 核心男性时负面压制女人/女性脸漂移
+    if (isMaleOnlyCore(ethSrc) || isMaleOnlyCore(String(run.coreSource || ''))) {
+      if (!/\bwoman\b|\bfemale\b|feminine face/i.test(negative)) {
+        negative += ', woman, girl, female, feminine face';
+      }
+    }
     var sourceForRun = '';
     if (useRef || run.localEdit) {
       sourceForRun = value('参考图地址') || memSrc || '';
@@ -2477,6 +2559,10 @@
   window.stripExposureBiasDefaults = stripExposureBiasDefaults;
   window.hasFemaleIntent = hasFemaleIntent;
   window.stripInjectedFemaleDefaults = stripInjectedFemaleDefaults;
+  window.hasMaleIntent = hasMaleIntent;
+  window.isMaleOnlyCore = isMaleOnlyCore;
+  window.applyMaleGenderLocks = applyMaleGenderLocks;
+  window.MALE_LOCK_LEAD = MALE_LOCK_LEAD;
   window.ADULT_DIR_BASE = ADULT_DIR_BASE;
   window.ADULT_DIR_NUDE = ADULT_DIR_NUDE;
   window.hasExplicitArtStyle = hasExplicitArtStyle;

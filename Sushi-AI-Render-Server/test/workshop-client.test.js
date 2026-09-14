@@ -970,6 +970,71 @@ test('balanced gen: no woman/nude tokens when core lacks them; coverage instruct
   assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心描述 must not mutate');
 });
 
+test('male core: outbound has male locks and no woman tokens; female core kept; neutral stays neutral', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.hasMaleIntent, 'function');
+  assert.equal(typeof f.w.applyMaleGenderLocks, 'function');
+  assert.equal(typeof f.w.isMaleOnlyCore, 'function');
+
+  assert.equal(f.w.hasMaleIntent('一位虚构成年男人穿风衣站在雨夜街头'), true);
+  assert.equal(f.w.hasMaleIntent('a handsome adult man in a coat'), true);
+  assert.equal(f.w.hasMaleIntent('帅哥大叔站在街头'), true);
+  assert.equal(f.w.hasMaleIntent('一位虚构成年人穿红毛衣'), false);
+  assert.equal(f.w.isMaleOnlyCore('一位虚构成年男人穿风衣'), true);
+  assert.equal(f.w.isMaleOnlyCore('一对男女在雨夜街头'), false);
+
+  const maleCoreZh = '一位虚构成年男人穿风衣站在雨夜街头，手里拿着黑伞';
+  const drifted = 'a fictional adult woman in a trench coat standing on a rainy night street holding a black umbrella, feminine face, cleavage';
+  const locked = f.w.applyMaleGenderLocks(drifted, maleCoreZh);
+  assert.match(locked, /adult man/i);
+  assert.match(locked, /\bmale\b/i);
+  assert.match(locked, /masculine/i);
+  assert.doesNotMatch(locked, /\bwoman\b|\bfemale\b|\bgirl\b|feminine face|cleavage/i);
+  assert.match(locked, /trench coat|black umbrella|rainy/i);
+
+  const minimalMale = f.w.minimalOutboundPrompt(drifted, { core: maleCoreZh });
+  assert.match(minimalMale, /adult man/i);
+  assert.match(minimalMale, /\bmale\b/i);
+  assert.match(minimalMale, /masculine/i);
+  assert.doesNotMatch(minimalMale, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman|feminine face/i);
+  assert.match(minimalMale, /trench coat|black umbrella|rainy/i);
+
+  const femaleKept = f.w.minimalOutboundPrompt(
+    'a fictional adult woman in a blue coat',
+    { core: '一位虚构成年女人穿蓝大衣' }
+  );
+  assert.match(femaleKept, /\bwoman\b/i);
+  assert.doesNotMatch(femaleKept, /adult man,\s*male,\s*masculine/i);
+
+  const neutral = f.w.minimalOutboundPrompt(
+    'a fictional adult in a red knit sweater',
+    { core: '一位虚构成年人穿红毛衣' }
+  );
+  assert.doesNotMatch(neutral, /\bwoman\b|\bfemale\b|beautiful woman/i);
+  assert.doesNotMatch(neutral, /adult man,\s*male,\s*masculine/i);
+
+  const mod = f.w.sanitizeModifierAgainstCore(
+    ', beautiful woman, feminine face, cleavage, photoreal photography',
+    maleCoreZh
+  );
+  assert.doesNotMatch(mod, /\bwoman\b|feminine face|cleavage/i);
+
+  f.w.document.getElementById('角色描述').value = maleCoreZh;
+  f.w.document.getElementById('英文描述').value = drifted;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  const neg = String(payload.prompt || '').split(' ### ')[1] || String(payload.negativePrompt || '');
+  assert.match(pos, /adult man/i);
+  assert.match(pos, /\bmale\b/i);
+  assert.match(pos, /masculine/i);
+  assert.doesNotMatch(pos, /\bwoman\b|\bfemale\b|beautiful woman|feminine face/i);
+  assert.match(neg, /\bwoman\b|\bfemale\b|feminine face/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, maleCoreZh, '可见核心描述 must not mutate');
+});
+
+
 test('adult on: clothed core does not force nude tokens in outbound prompt', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.equal(f.w.成人主题已开启, true);

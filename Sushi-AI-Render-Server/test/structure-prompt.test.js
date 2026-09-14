@@ -51,7 +51,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.70/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.71/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
@@ -143,7 +143,9 @@ test('core fidelity lead and heuristic do not invent clothing', () => {
   const msgs = buildStructureMessages('穿红毛衣的东亚女性侧身站在图书馆窗边', { anime: false });
   assert.match(msgs[0].content, /FAITHFUL TO CORE|do NOT invent clothing, props/i);
   assert.match(msgs[0].content, /do NOT invent woman|gender-neutral|omit none/i);
+  assert.match(msgs[0].content, /adult man|male \/ masculine|男人|男性/i);
   assert.match(msgs[1].content, /translate faithfully|include ALL explicitly described|do not invent gender/i);
+  assert.match(msgs[1].content, /adult man|male\/masculine|never woman/i);
   assert.match(msgs[1].content, /红毛衣|图书馆/);
   const h = heuristicStructureFromText('穿红毛衣的东亚女性侧身站在图书馆窗边');
   assert.match(h.promptEn, /Faithful to core description/i);
