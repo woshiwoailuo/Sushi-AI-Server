@@ -609,7 +609,9 @@
     text = stripInjectedFemaleDefaults(text, coreHint || text);
     text = applyMaleGenderLocks(text, coreHint || text);
     text = stripExposureBiasDefaults(text, coreHint || text);
+    text = applyClothingFidelityLocks(text, coreHint || text);
     text = applyCoreFidelityLead(text);
+    text = finalizeOutboundCoreLocks(text, coreHint || text);
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
@@ -620,7 +622,7 @@
   }
 
   var CORE_FIDELITY_LEAD =
-    'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; do not invent clothing, props, pose, identity, gender, or setting not in the core; when gender is unspecified stay gender-neutral; lead with core facts';
+    'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; do not invent clothing, props, pose, identity, gender, revealing outfits, extra people, or setting not in the core; when gender is unspecified stay gender-neutral with no woman default; lead with core facts';
 
   function applyCoreFidelityLead(prompt) {
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
@@ -729,10 +731,13 @@
     text = stripInjectedFemaleDefaults(text, coreHint || text);
     text = applyMaleGenderLocks(text, coreHint || text);
     text = stripExposureBiasDefaults(text, coreHint || text);
+    text = applyClothingFidelityLocks(text, coreHint || text);
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
     }
     text = applyCoreFidelityLead(text);
+    // Re-finalize so gender/clothing lead before photoreal/fidelity filler
+    text = finalizeOutboundCoreLocks(text, coreHint || text);
     return ensureNoTextOnImage(text);
   }
 
@@ -765,8 +770,8 @@
   }
 
   // Revealing / sexy bias — only keep when core explicitly asks; otherwise strip invented exposure.
-  var EXPOSURE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|lingerie|cleavage|skimpy|seductive|sexy|revealing|see[\s-]?through|microbikini|bikini|underwear only|无衣|裸体|裸身|全裸|裸露|暴露|性感|低胸|情趣|脱光|赤裸|比基尼|内衣外穿/i;
-  var EXPOSURE_BIAS_TOKEN_RE = /\b(nude|naked|nudity|unclothed|topless|bottomless|lingerie|cleavage|skimpy|seductive|sexy|revealing(?:\s+(?:outfit|clothes|clothing|dress|top))?|see[\s-]?through|sheer(?:\s+\w+)?|microbikini|micro[\s-]?bikini|underwear only|no pants|no bra|shirtless|pantsless)\b/gi;
+  var EXPOSURE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|lingerie|cleavage|skimpy|seductive|sexy|revealing|see[\s-]?through|microbikini|bikini|underwear only|无衣|裸体|裸身|全裸|裸露|暴露|性感|低胸|情趣|脱光|赤裸|比基尼|内衣外穿|开胸|深V|透视|半裸/i;
+  var EXPOSURE_BIAS_TOKEN_RE = /\b(nude|naked|nudity|unclothed|topless|bottomless|lingerie|cleavage|skimpy|seductive|sexy|revealing(?:\s+(?:outfit|clothes|clothing|dress|top))?|see[\s-]?through|sheer(?:\s+\w+)?|microbikini|micro[\s-]?bikini|underwear only|no pants|no bra|shirtless|pantsless|bare (?:chest|breasts|midriff)|deep cleavage|plunging neckline)\b/gi;
 
   function hasExposureIntent(text) {
     return EXPOSURE_INTENT_RE.test(String(text || ''));
@@ -783,12 +788,18 @@
       .replace(/,\s*explicit adult nudity[^,]*/gi, '')
       .replace(/,\s*keep requested nudity[^,]*/gi, '')
       .replace(/,\s*do not add clothes[^,]*/gi, '')
+      .replace(/\bbeautiful (?:young )?(?:woman|girl|lady)\b/gi, ' ')
+      .replace(/\b(erotic|sensual|alluring|provocative|bedroom eyes)\b/gi, ' ')
       .replace(/\s{2,}/g, ' ')
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
       .trim();
     return t;
   }
+
+  // Positive clothing/exposure anti-lead when core does NOT ask for revealing/nude.
+  var CLOTHING_FIDELITY_LEAD =
+    'fully clothed as described, clothing matching the core exactly, modest attire, fabric coverage intact';
 
   // Female / woman cues from core — never invent woman/female defaults when absent.
   var FEMALE_INTENT_RE = /女人|女性|女的|女主|女孩|少女|美女|女郎|姑娘|女士|小姐|女王|公主|妻子|女友|女战士|女角色|\bwoman\b|\bwomen\b|\bfemale\b|\bgirl\b|\blady\b|\bladies\b|\bshe\b|\bher\b|\bhers\b|\b1girl\b|beautiful (?:young )?(?:woman|girl)/i;
@@ -814,7 +825,7 @@
   function stripInjectedFemaleDefaults(text, core) {
     if (hasFemaleIntent(core)) return String(text || '');
     var t = String(text || '');
-    if (!t || !/\b(woman|women|female|girl|lady|ladies|1girl|she|her|hers)\b|beautiful (?:young )?(?:woman|girl)/i.test(t)) return t;
+    if (!t || !/\b(woman|women|female|girl|lady|ladies|1girl|she|her|hers|breasts?|boobs?|cleavage|feminine|hourglass)\b|beautiful (?:young )?(?:woman|girl)/i.test(t)) return t;
     t = t
       .replace(/\bbeautiful (?:young )?(?:woman|girl|lady)\b/gi, 'adult')
       .replace(/\bfictional adult woman\b/gi, 'fictional adult')
@@ -823,7 +834,7 @@
       .replace(/\bthe woman\b/gi, 'the person')
       .replace(/\bwomen\b/gi, 'people')
       .replace(/\bwoman\b/gi, 'person')
-      .replace(/\bfemale\b/gi, 'person')
+      .replace(/\bfemale(?:\s+(?:body|figure|face|features|form))?\b/gi, 'person')
       .replace(/\bgirl\b/gi, 'person')
       .replace(/\bladies\b/gi, 'people')
       .replace(/\blady\b/gi, 'person')
@@ -831,6 +842,9 @@
       .replace(/\bshe\b/gi, 'they')
       .replace(/\bher\b/gi, 'their')
       .replace(/\bhers\b/gi, 'theirs')
+      .replace(/\bfeminine(?:\s+(?:face|body|figure|features))?\b/gi, ' ')
+      .replace(/\b(breasts?|boobs?|cleavage|hourglass(?:\s+figure)?)\b/gi, ' ')
+      .replace(/\bsoft curves\b/gi, ' ')
       .replace(/\s{2,}/g, ' ')
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
@@ -840,7 +854,7 @@
 
   var MALE_LOCK_LEAD = 'adult man, male, masculine';
 
-  /** When core is male-only: strip leftover female/feminine tokens and inject strong male locks EARLY. Visible 核心描述 is never mutated. */
+  /** When core is male-only: strip leftover female/feminine tokens and inject strong male locks FIRST (before photoreal filler). Visible 核心描述 is never mutated. */
   function applyMaleGenderLocks(text, core) {
     if (!isMaleOnlyCore(core)) return String(text || '');
     var t = stripInjectedFemaleDefaults(String(text || ''), core);
@@ -848,11 +862,14 @@
     // Forbid feminine / woman-default leftovers that model priors often reintroduce
     t = t
       .replace(/\bbeautiful (?:young )?(?:woman|girl|lady)\b/gi, 'adult man')
-      .replace(/\bfeminine(?:\s+face)?\b/gi, ' ')
-      .replace(/\bfemale(?:\s+(?:body|figure|face|features))?\b/gi, ' ')
+      .replace(/\bfeminine(?:\s+(?:face|body|figure|features))?\b/gi, ' ')
+      .replace(/\bfemale(?:\s+(?:body|figure|face|features|form))?\b/gi, ' ')
       .replace(/\b(breasts?|boobs?|cleavage|hourglass(?:\s+figure)?)\b/gi, ' ')
       .replace(/\bsoft curves\b/gi, ' ')
       .replace(/\b1girl\b/gi, '1boy')
+      .replace(/\bshe\b/gi, 'he')
+      .replace(/\bher\b/gi, 'his')
+      .replace(/\bhers\b/gi, 'his')
       .replace(/\s{2,}/g, ' ')
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
@@ -864,27 +881,88 @@
       .replace(/\ba person\b/gi, 'a man')
       .replace(/\bthe person\b/gi, 'the man')
       .replace(/\b1person\b/gi, '1boy');
-    // Inject strong male locks at the front (after optional photoreal camera lead)
-    if (!/^\s*adult man,\s*male,\s*masculine\b/i.test(t)) {
-      t = t
-        .replace(/,?\s*adult man\b/gi, '')
-        .replace(/,?\s*\bmasculine\b/gi, '')
-        .replace(/,?\s*\bmale\b(?!\s+body)/gi, '')
-        .replace(/\s{2,}/g, ' ')
-        .replace(/[，,]{2,}/g, ',')
-        .replace(/^[\s,]+|[\s,]+$/g, '')
-        .trim();
-      var m = t.match(/^(photorealistic (?:RAW photo|photograph)(?:,\s*shot on DSLR,\s*(?:28|35|50|85)mm)?(?:,\s*natural (?:skin pores|light))?(?:,\s*realistic fabric texture)?)/i);
-      if (m) {
-        t = m[1] + ', ' + MALE_LOCK_LEAD + t.slice(m[1].length);
-      } else {
-        t = MALE_LOCK_LEAD + ', ' + t;
-      }
-    }
+    // Gender locks MUST lead the entire prompt (before photoreal / adult filler)
+    t = t
+      .replace(/^\s*adult man,\s*male,\s*masculine,?\s*/i, '')
+      .replace(/,?\s*adult man,\s*male,\s*masculine\b/gi, '')
+      .replace(/,?\s*\badult man\b/gi, '')
+      .replace(/,?\s*\bmasculine\b/gi, '')
+      .replace(/,?\s*\bmale\b(?!\s+body)/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[，,]{2,}/g, ',')
+      .replace(/^[\s,]+|[\s,]+$/g, '')
+      .trim();
+    t = MALE_LOCK_LEAD + ', ' + t;
     if (!/\badult man\b/i.test(t) || !/\bmale\b/i.test(t) || !/\bmasculine\b/i.test(t)) {
       t = MALE_LOCK_LEAD + ', ' + t;
     }
     return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
+  }
+
+  /** Clothing fidelity lock FIRST when core has no revealing/nude intent. */
+  function applyClothingFidelityLocks(text, core) {
+    var src = String(core || '');
+    var t = String(text || '');
+    if (!t) return t;
+    if (hasNudeIntent(src) || hasExposureIntent(src)) return t;
+    t = stripExposureBiasDefaults(t, src);
+    if (!/fully clothed as described|clothing matching the core exactly|modest attire|fabric coverage intact/i.test(t)) {
+      t = t
+        .replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '')
+        .replace(/,?\s*fully clothed as described[^,]*/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/[，,]{2,}/g, ',')
+        .replace(/^[\s,]+|[\s,]+$/g, '')
+        .trim();
+      t = CLOTHING_FIDELITY_LEAD + ', ' + t;
+    }
+    return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
+  }
+
+  /**
+   * Final outbound pass: gender + clothing locks FIRST, then strip leftovers.
+   * Call after photoreal/adult so locks are not diluted by filler order.
+   * Visible 核心描述 is never mutated.
+   */
+  function finalizeOutboundCoreLocks(prompt, core) {
+    var c = String(core || '');
+    var t = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!t) return t;
+    // Preserve adult directive if present, re-attach after identity locks
+    var adultPrefix = '';
+    var adultMatch = t.match(/^(adult mode enabled[\s\S]*?no minors;?)(,\s*)?/i);
+    if (adultMatch) {
+      adultPrefix = adultMatch[1].replace(/[;.\s]+$/, '');
+      t = t.slice(adultMatch[0].length).replace(/^[\s,]+/, '');
+    }
+    t = stripInjectedFemaleDefaults(t, c);
+    t = stripExposureBiasDefaults(t, c);
+    // Strip any existing identity leads anywhere so we can re-prefix absolute-first
+    t = t
+      .replace(/,?\s*adult man,\s*male,\s*masculine\b/gi, '')
+      .replace(/,?\s*fully clothed as described, clothing matching the core exactly, modest attire, fabric coverage intact\b/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[，,]{2,}/g, ',')
+      .replace(/^[\s,]+|[\s,]+$/g, '')
+      .trim();
+    t = applyClothingFidelityLocks(t, c);
+    t = applyMaleGenderLocks(t, c);
+    // Absolute lead order: gender → clothing → adult → rest (Faithful/photoreal follow)
+    var leads = [];
+    if (isMaleOnlyCore(c) && /^\s*adult man,\s*male,\s*masculine\b/i.test(t)) {
+      leads.push(MALE_LOCK_LEAD);
+      t = t.replace(/^\s*adult man,\s*male,\s*masculine,?\s*/i, '');
+    }
+    if (!hasNudeIntent(c) && !hasExposureIntent(c) && /^\s*fully clothed as described\b/i.test(t)) {
+      leads.push(CLOTHING_FIDELITY_LEAD);
+      t = t.replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '');
+    }
+    var head = leads.length ? leads.join(', ') + ', ' : '';
+    if (adultPrefix) head += adultPrefix + ', ';
+    t = head + t;
+    t = stripInjectedFemaleDefaults(t, c);
+    t = stripExposureBiasDefaults(t, c);
+    return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').replace(/^[\s,]+|[\s,]+$/g, '').trim();
   }
 
   function adultDirectiveText(options) {
@@ -1595,6 +1673,11 @@
     if (run.localEdit && isPoseGestureEdit(run.coreSource || (run.payload && run.payload.prompt) || '')) {
       if (!(Number(params.cfg_scale) > 7)) params.cfg_scale = 8;
     }
+    // Gender/clothing locks need slightly stronger CFG so model priors cannot override leading tokens
+    var lockCore = String(run.coreSource || '');
+    if (isMaleOnlyCore(lockCore) || (!hasNudeIntent(lockCore) && !hasExposureIntent(lockCore))) {
+      if (!(Number(params.cfg_scale) >= 8)) params.cfg_scale = Math.max(Number(params.cfg_scale) || 7, 8);
+    }
     var seed = run.payload && run.payload.seed;
     if (seed !== '' && seed != null) {
       if (run.localEdit) params.seed = String(Number(seed));
@@ -2085,6 +2168,8 @@
       prompt = applyEastAsianEthnicity(String(prompt || ''), coreHint);
       prompt = stripInjectedFemaleDefaults(prompt, coreHint);
       prompt = applyMaleGenderLocks(prompt, coreHint);
+      prompt = stripExposureBiasDefaults(prompt, coreHint);
+      prompt = applyClothingFidelityLocks(prompt, coreHint);
       prompt = applyCoreFidelityLead(prompt);
       prompt = ensureNoTextOnImage(prompt);
     } else if (smartOn) {
@@ -2097,6 +2182,8 @@
     // Adult/NSFW instructions from core + hidden 成人功能状态 must survive photoreal enrich.
     prompt = withAdultDirective(prompt, { core: coreHint });
     if (localEdit) prompt = applyLocalEditOutbound(prompt, coreHint, { img2img: true, force: true });
+    // Gender + clothing locks FIRST (re-assert after adult/photoreal so model priors cannot dilute)
+    prompt = finalizeOutboundCoreLocks(prompt, coreHint);
     run.payload.prompt = prompt;
     return runWithProviderBudget(run, engine, function (signal) {
       if (engine === 'perchance') return generatePerchance(run, prompt, index, signal);
@@ -2400,16 +2487,22 @@
     if (!/pinyin|romanization|letters on image/i.test(negative)) {
       negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
     }
-    // 核心未写裸露/性感时，负面压制模型默认暴露偏置
+    // 核心未写裸露/性感时，负面强压模型默认暴露偏置
     if (!hasNudeIntent(ethSrc) && !hasExposureIntent(ethSrc) && !hasNudeIntent(description) && !hasExposureIntent(description)) {
-      if (!/lingerie|cleavage|skimpy|seductive nudity/i.test(negative)) {
-        negative += ', nude, naked, lingerie, cleavage, skimpy outfit, seductive pose, revealing clothes, underwear only';
+      if (!/lingerie|cleavage|skimpy|seductive nudity|revealing clothes/i.test(negative)) {
+        negative += ', nude, naked, nudity, lingerie, cleavage, skimpy outfit, seductive pose, revealing clothes, underwear only, bikini, sheer clothing, topless, bottomless';
       }
     }
-    // 核心男性时负面压制女人/女性脸漂移
+    // 核心男性时负面强压女人/女性身体漂移
     if (isMaleOnlyCore(ethSrc) || isMaleOnlyCore(String(run.coreSource || ''))) {
-      if (!/\bwoman\b|\bfemale\b|feminine face/i.test(negative)) {
-        negative += ', woman, girl, female, feminine face';
+      if (!/\bwoman\b|\bfemale\b|feminine face|female body/i.test(negative)) {
+        negative += ', woman, girl, female, feminine face, female body, feminine body, breasts, cleavage, hourglass figure, she, her';
+      }
+    }
+    // 核心未写女性且非男性独占时，仍禁默认女人注入
+    if (!hasFemaleIntent(ethSrc) && !hasFemaleIntent(String(run.coreSource || '')) && !isMaleOnlyCore(ethSrc)) {
+      if (!/\bwoman\b|beautiful woman|female default/i.test(negative)) {
+        negative += ', beautiful woman, girl default, female default';
       }
     }
     var sourceForRun = '';
@@ -2562,7 +2655,10 @@
   window.hasMaleIntent = hasMaleIntent;
   window.isMaleOnlyCore = isMaleOnlyCore;
   window.applyMaleGenderLocks = applyMaleGenderLocks;
+  window.applyClothingFidelityLocks = applyClothingFidelityLocks;
+  window.finalizeOutboundCoreLocks = finalizeOutboundCoreLocks;
   window.MALE_LOCK_LEAD = MALE_LOCK_LEAD;
+  window.CLOTHING_FIDELITY_LEAD = CLOTHING_FIDELITY_LEAD;
   window.ADULT_DIR_BASE = ADULT_DIR_BASE;
   window.ADULT_DIR_NUDE = ADULT_DIR_NUDE;
   window.hasExplicitArtStyle = hasExplicitArtStyle;

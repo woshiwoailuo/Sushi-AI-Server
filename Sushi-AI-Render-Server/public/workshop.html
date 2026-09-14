@@ -1262,18 +1262,19 @@
   function 标记核心已用于生成() {
     上次用于生成的核心 = 读取当前核心描述();
   }
-  /** 记忆开且有核心描述时：最新核心描述为准，历史记忆仅补充延续 */
+  /** 记忆开且有核心描述时：最新核心描述为准，历史记忆仅补充延续；记忆关则不带历史记忆 */
   function 组装记忆与核心系统提示() {
     var 核心 = 读取当前核心描述();
-    var 限摘 = 记忆模式值() === "long" ? 6000 : 800;
     var 文 = "用简体中文回复。";
     if (核心) {
       文 += "【当前核心描述·以此为准，冲突时覆盖旧记忆】" + 核心.slice(0, 2000);
     }
-    if (记忆摘要) {
+    if (记忆已开() && 记忆摘要) {
+      var 限摘 = 记忆模式值() === "long" ? 6000 : 800;
       文 += "【历史记忆·仅作补充延续】" + String(记忆摘要).slice(-限摘);
+    } else if (!核心) {
+      文 += "不要突然改成英文。";
     }
-    if (!核心 && !记忆摘要) 文 += "不要突然改成英文。";
     return 文;
   }
   /** 出图：最新核心描述为主；重新生成且记忆开时把短摘要作补充（不覆盖可见核心） */
@@ -1345,10 +1346,24 @@
     var 行 = document.getElementById("生图方式改动行");
     var 区 = document.getElementById("生图方式行");
     var 线路区 = document.getElementById("记忆线路区");
+    var 列表 = document.getElementById("记忆路线列表");
+    var 摘要行 = document.getElementById("记忆生成线路");
+    var 清钮 = document.getElementById("清除记忆线路按钮");
+    var 操作 = document.querySelector(".记忆线路操作");
     var 开 = 记忆已开();
     if (行) 行.hidden = !开;
     if (区) 区.hidden = !开;
     if (线路区) 线路区.hidden = !开;
+    if (列表) { 列表.hidden = !开; if (!开) 列表.replaceChildren(); }
+    if (摘要行) {
+      摘要行.hidden = !开;
+      if (!开) 摘要行.textContent = "";
+    }
+    if (清钮) {
+      清钮.hidden = !开;
+      清钮.disabled = !开;
+    }
+    if (操作) 操作.hidden = !开;
     if (!开) 写入生图方式单选("重新生成");
   }
   function 同步生图方式默认(强制) {
@@ -1485,6 +1500,7 @@
     return 项;
   }
   function 更新记忆路线图片(id, 图信息) {
+    if (!记忆已开()) return null;
     var 目标 = String(id || "");
     if (!目标 || !图信息) return null;
     var 项 = null;
@@ -1543,6 +1559,7 @@
     } catch (eG) {}
   }
   function 激活记忆路线项(id, 选项) {
+    if (!记忆已开()) return null;
     var 目标 = String(id || "");
     var 项 = null;
     if (目标) {
@@ -1675,12 +1692,18 @@
     var 行 = document.getElementById("记忆生成线路");
     if (!行) return;
     同步改动可见性();
+    if (!记忆已开()) {
+      行.textContent = "";
+      行.hidden = true;
+      刷新记忆路线列表();
+      return;
+    }
+    行.hidden = false;
     var 方式 = 读取生图方式();
-    if (记忆已开() && !生图方式用户自选) 写入生图方式单选(方式);
-    var 记忆段 = 记忆已开() ? "记忆续生" : "记忆关闭·直出";
+    if (!生图方式用户自选) 写入生图方式单选(方式);
     var 平台 = 当前平台线路名();
     var 参考 = 有参考图() ? (本轮使用参考图() ? "带参考图" : "有参考图·本轮忽略") : "无参考图";
-    行.textContent = "记忆线路：" + 记忆段 + " · " + 平台 + " · " + 参考 + " · " + 方式 + (记忆已开() && 记忆路线.length ? (" · " + 记忆路线.length + " 步") : "");
+    行.textContent = "记忆线路：记忆续生 · " + 平台 + " · " + 参考 + " · " + 方式 + (记忆路线.length ? (" · " + 记忆路线.length + " 步") : "");
     刷新记忆路线列表();
   }
   function 清除记忆线路() {
@@ -4647,7 +4670,11 @@
   .记忆线路区[hidden],
   .生图方式行[hidden],
   #生图方式改动行[hidden],
-  .生图方式项[hidden] {
+  .生图方式项[hidden],
+  #记忆生成线路[hidden],
+  #记忆路线列表[hidden],
+  #清除记忆线路按钮[hidden],
+  .记忆线路操作[hidden] {
     display: none !important;
   }
   .记忆路线缩略 {

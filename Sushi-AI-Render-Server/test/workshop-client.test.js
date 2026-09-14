@@ -461,7 +461,9 @@ test('photorealPrompt enriches by default but style-keyword bypass keeps anime/�
 
   const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
   assert.match(plain, /a fictional adult standing by a rainy window/i);
-  assert.match(plain, /^(?:Faithful to core description:[\s\S]*?lead with core facts,\s*)?photorealistic RAW photo/i);
+  assert.match(plain, /photorealistic RAW photo/i);
+  assert.ok(/fully clothed as described|Faithful to core description|photorealistic RAW photo/i.test(plain));
+  assert.ok(plain.toLowerCase().indexOf('photorealistic raw photo') >= 0);
   assert.match(plain, /photoreal|cinematic|natural light|texture|DSLR|85mm/i);
   assert.match(plain, /not anime|not manga|not cartoon/i);
   assert.ok(plain.length > 'a fictional adult standing by a rainy window'.length);
@@ -687,7 +689,9 @@ test('platform picker shows full names without Perch abbreviation', async t => {
 test('photorealPrompt helper still available for style-aware enrich logic', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
-  assert.match(plain, /^(?:Faithful to core description:[\s\S]*?lead with core facts,\s*)?photorealistic RAW photo/i);
+  assert.match(plain, /photorealistic RAW photo/i);
+  assert.ok(/fully clothed as described|Faithful to core description|photorealistic RAW photo/i.test(plain));
+  assert.ok(plain.toLowerCase().indexOf('photorealistic raw photo') >= 0);
   assert.match(plain, /not anime|not manga|not cartoon/i);
   const anime = f.w.animePrompt('a fictional adult standing by a rainy window');
   assert.match(anime, /anime illustration/i);
@@ -1029,8 +1033,10 @@ test('male core: outbound has male locks and no woman tokens; female core kept; 
   assert.match(pos, /adult man/i);
   assert.match(pos, /\bmale\b/i);
   assert.match(pos, /masculine/i);
-  assert.doesNotMatch(pos, /\bwoman\b|\bfemale\b|beautiful woman|feminine face/i);
-  assert.match(neg, /\bwoman\b|\bfemale\b|feminine face/i);
+  assert.match(pos, /^\s*(?:adult man,\s*male,\s*masculine)/i, 'gender locks must lead outbound prompt');
+  assert.doesNotMatch(pos, /\bwoman\b|\bfemale\b|beautiful woman|feminine face|\bbreasts?\b|hourglass/i);
+  assert.doesNotMatch(pos.split(/adult mode enabled/i)[0] || pos, /\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy/i);
+  assert.match(neg, /\bwoman\b|\bfemale\b|feminine face|female body|\bbreasts?\b/i);
   assert.equal(f.w.document.getElementById('角色描述').value, maleCoreZh, '可见核心描述 must not mutate');
 });
 
@@ -1608,23 +1614,42 @@ test('改动 UI only when memory ON; memory off forces full regen', async t => {
   assert.equal(editRow.hidden, true);
   assert.equal(editBlock.hidden, true, '记忆关应整块隐藏改动板块');
   assert.equal(routeZone.hidden, true, '记忆关应隐藏记忆线路区');
+  const pathLine = f.w.document.getElementById('记忆生成线路');
+  const clearBtn = f.w.document.getElementById('清除记忆线路按钮');
+  const routeList = f.w.document.getElementById('记忆路线列表');
+  assert.equal(pathLine.hidden, true, '记忆关应隐藏记忆路径摘要');
+  assert.equal(String(pathLine.textContent || '').trim(), '', '记忆关路径摘要应清空');
+  assert.equal(clearBtn.hidden, true, '记忆关应隐藏清除按钮');
+  assert.equal(!!clearBtn.disabled, true, '记忆关应禁用清除按钮');
+  assert.equal(routeList.hidden, true, '记忆关应隐藏路线列表');
   assert.equal(f.w.读取生图方式(), '重新生成');
   assert.equal(f.w.应用局部改图(), false);
   assert.equal(f.w.本轮使用参考图(), false);
   assert.equal(edit.checked, false);
+  f.w.写记忆摘要('用户：旧记忆甲。助手：旧回复乙。');
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  const blendedOff = f.w.组装出图描述含记忆();
+  assert.equal(blendedOff, '图中人物抬起左手');
+  assert.doesNotMatch(blendedOff, /旧记忆甲|旧回复乙/);
+  const sysOff = f.w.组装记忆与核心系统提示();
+  assert.doesNotMatch(sysOff, /旧记忆甲|历史记忆|旧回复乙/);
   f.w.document.getElementById('出图引擎').value = 'horde-real';
   f.w.document.getElementById('图生图平台').value = 'horde-real';
   f.w.用户选定图生图平台 = 'horde-real';
-  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   assert.equal(!!body.source_image, false, '记忆关时即使有参考图也走全文生图');
+  const promptOff = String(body.prompt || '');
+  assert.doesNotMatch(promptOff, /旧记忆甲|旧回复乙|历史记忆/);
 });
 
 test('记忆关隐藏记忆线路区 CSS [hidden] override', () => {
   const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/workshop.html'), 'utf8');
   assert.match(html, /\.记忆线路区\[hidden\]/);
+  assert.match(html, /#记忆生成线路\[hidden\]/);
+  assert.match(html, /#清除记忆线路按钮\[hidden\]/);
   assert.match(html, /function 同步改动可见性\(\)[\s\S]*?记忆线路区[\s\S]*?hidden = !开/);
+  assert.match(html, /function 同步改动可见性\(\)[\s\S]*?清除记忆线路按钮[\s\S]*?hidden = !开/);
 });
 
 test('memory route list shows each generation description; per-step clear', async t => {
@@ -1805,11 +1830,12 @@ test('no exposure tokens without core; realism default lock; smart-mod off skips
   const neg = String(payload.prompt || '').split(' ### ')[1] || '';
   assert.match(pos, /photorealistic photograph|natural light/i);
   assert.match(pos, /do not invent undressing|revealing outfits/i);
+  assert.match(pos, /fully clothed as described|clothing matching the core exactly|modest attire/i);
   assert.doesNotMatch(pos, /\bkeep requested nudity\b|\bNSFW fully allowed\b|\bpreferred when described\b/i);
   const sceneOnly = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
-  assert.doesNotMatch(sceneOnly, /\bnude\b|\bnaked\b|\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy|revealing/i);
+  assert.doesNotMatch(sceneOnly, /\bnude\b|\bnaked\b|\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy/i);
   assert.doesNotMatch(pos, /photorealistic photography style, shot on DSLR, 35mm lens, natural skin texture and fabric detail/i);
-  assert.match(neg, /lingerie|cleavage|skimpy|nude|naked/i);
+  assert.match(neg, /lingerie|cleavage|skimpy|nude|naked|revealing clothes|bikini|sheer/i);
   assert.equal(f.w.document.getElementById('角色描述').value, core);
 });
 
@@ -1825,6 +1851,78 @@ test('智能修饰 on derives modifiers from core clothing/setting; no random ex
   assert.doesNotMatch(mod, /\bnude\b|\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy|revealing/i);
   const gated = f.w.sanitizeModifierAgainstCore(', sexy lingerie, cleavage, seductive pose, photoreal', core);
   assert.doesNotMatch(gated, /\bsexy\b|\blingerie\b|\bcleavage\b|\bseductive\b/i);
+});
+
+test('harder gender+clothing locks: male core leads; clothed core gets exposure negatives', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.finalizeOutboundCoreLocks, 'function');
+  assert.equal(typeof f.w.applyClothingFidelityLocks, 'function');
+  assert.match(f.w.CLOTHING_FIDELITY_LEAD, /fully clothed as described|modest attire/i);
+
+  const maleCore = '一位虚构成年男人穿风衣站在雨夜街头';
+  const drifted = 'beautiful woman, feminine face, breasts, cleavage, lingerie, seductive pose, a person in a trench coat';
+  const finalized = f.w.finalizeOutboundCoreLocks(drifted, maleCore);
+  assert.match(finalized, /^\s*adult man,\s*male,\s*masculine/i);
+  assert.match(finalized, /fully clothed as described|modest attire/i);
+  assert.doesNotMatch(finalized, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman|feminine face|\bbreasts?\b|\blingerie\b|\bcleavage\b|\bseductive\b/i);
+  assert.match(finalized, /trench coat/i);
+
+  const clothedCore = '一位虚构成年人穿红毛衣站在窗边';
+  const clothedOut = f.w.minimalOutboundPrompt(
+    'a fictional adult in a red knit sweater, sexy revealing lingerie, cleavage',
+    { core: clothedCore }
+  );
+  assert.match(clothedOut, /fully clothed as described|modest attire|fabric coverage intact/i);
+  assert.doesNotMatch(clothedOut, /\blingerie\b|\bcleavage\b|\bsexy\b|\brevealing\b/i);
+  assert.doesNotMatch(clothedOut, /\bwoman\b|\bfemale\b|beautiful woman/i);
+
+  f.w.document.getElementById('角色描述').value = maleCore;
+  f.w.document.getElementById('英文描述').value = drifted;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  const neg = String(payload.prompt || '').split(' ### ')[1] || '';
+  assert.match(pos, /^\s*adult man,\s*male,\s*masculine/i);
+  assert.doesNotMatch(pos, /\bwoman\b|\bfemale\b|beautiful woman|\bbreasts?\b|\blingerie\b/i);
+  assert.match(neg, /woman|female|lingerie|cleavage|nude|revealing clothes/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, maleCore);
+});
+
+test('memory off: hide all memory UI and omit memory from gen payload', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.切换记忆(true);
+  f.w.写记忆摘要('用户：雨夜剑士旧记忆。助手：拔剑续写。');
+  f.w.追加记忆路线('旧路线一步', { image: PNG, seed: '11' });
+  f.w.document.getElementById('角色描述').value = '穿蓝大衣的虚构成年人站在公园';
+  f.w.刷新记忆生成线路();
+  assert.equal(f.w.document.getElementById('记忆线路区').hidden, false);
+  assert.match(f.w.组装记忆与核心系统提示(), /雨夜剑士旧记忆|历史记忆/);
+  assert.match(f.w.组装出图描述含记忆(), /雨夜剑士旧记忆|穿蓝大衣/);
+
+  f.w.切换记忆(false);
+  f.w.同步改动可见性();
+  f.w.刷新记忆生成线路();
+  assert.equal(f.w.记忆已开(), false);
+  assert.equal(f.w.document.getElementById('记忆线路区').hidden, true);
+  assert.equal(f.w.document.getElementById('记忆生成线路').hidden, true);
+  assert.equal(f.w.document.getElementById('记忆路线列表').hidden, true);
+  assert.equal(f.w.document.getElementById('清除记忆线路按钮').hidden, true);
+  assert.equal(f.w.document.getElementById('生图方式改动行').hidden, true);
+  const core = '穿蓝大衣的虚构成年人站在公园';
+  f.w.document.getElementById('角色描述').value = core;
+  assert.equal(f.w.组装出图描述含记忆(), core);
+  assert.doesNotMatch(f.w.组装出图描述含记忆(), /雨夜剑士|拔剑续写|旧路线/);
+  assert.doesNotMatch(f.w.组装记忆与核心系统提示(), /雨夜剑士|历史记忆|拔剑续写/);
+  assert.equal(f.w.追加记忆路线('不应写入', { image: PNG }), null);
+  assert.equal(f.w.更新记忆路线图片('x', { image: PNG }), null);
+  assert.equal(f.w.激活记忆路线项('x'), null);
+
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.doesNotMatch(String(body.prompt || ''), /雨夜剑士|拔剑续写|旧路线|历史记忆/);
+  assert.equal(f.w.document.getElementById('角色描述').value, core);
 });
 
 test('contact email is 163 not qq', () => {
