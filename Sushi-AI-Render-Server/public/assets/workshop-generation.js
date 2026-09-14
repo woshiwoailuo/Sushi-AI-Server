@@ -663,22 +663,52 @@
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
-  function adultDirectiveText() {
+  var ADULT_DIR_BASE =
+    'adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including clothing as written or implied; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors';
+  var ADULT_DIR_NUDE =
+    'explicit adult nudity as described is permitted; if nude or undressed do not add clothes, fabric coverage, or modest outfits; keep requested nudity and sexual details visible';
+  var NUDE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣|脱光|赤裸/i;
+
+  function hasNudeIntent(text) {
+    return NUDE_INTENT_RE.test(String(text || ''));
+  }
+
+  function adultDirectiveText(options) {
     if (typeof window.成人主题已开启 !== 'undefined' && !window.成人主题已开启) return '';
+    var opts = options && typeof options === 'object' ? options : {};
     var el = $('成人功能状态');
     var text = el && el.value ? String(el.value).trim() : '';
-    if (!text) {
-      text = 'adult mode enabled; NSFW fully allowed; explicit nudity and adult sexual content are permitted and preferred when described; follow the core description literally and completely; if nude or undressed do not add clothes, fabric coverage, or modest outfits; keep requested nudity and sexual details visible; fictional consenting adults 18+ only; no minors';
+    // Legacy #73 wording preferred/forced nudity — normalize to clothing-faithful base.
+    if (!text || /preferred when described|NSFW fully allowed/i.test(text)) {
+      text = ADULT_DIR_BASE;
+      if (el) el.value = ADULT_DIR_BASE;
+    }
+    var src = String(opts.core || '') + ' ' + String(opts.prompt || '');
+    if (hasNudeIntent(src)) {
+      if (!/do not add clothes/i.test(text)) text = text.replace(/[;.\s]+$/, '') + '; ' + ADULT_DIR_NUDE;
+    } else {
+      text = text
+        .replace(/;?\s*explicit nudity and adult sexual content are permitted and preferred when described/gi, '')
+        .replace(/;?\s*explicit adult nudity as described is permitted/gi, '')
+        .replace(/;?\s*if nude or undressed do not add clothes, fabric coverage, or modest outfits/gi, '')
+        .replace(/;?\s*keep requested nudity and sexual details visible/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/[;,]{2,}/g, ';')
+        .replace(/^[;\s]+|[;\s]+$/g, '')
+        .trim();
+      if (!text) text = ADULT_DIR_BASE;
     }
     return text;
   }
 
-  function withAdultDirective(prompt) {
+  function withAdultDirective(prompt, options) {
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
-    var dir = adultDirectiveText();
+    var opts = options && typeof options === 'object' ? options : {};
+    var dir = adultDirectiveText({ core: opts.core, prompt: text });
     if (!dir) return text;
     if (text && text.toLowerCase().indexOf('adult mode enabled') >= 0) return text;
-    if (/nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露/i.test(text)) {
+    var nudeOn = hasNudeIntent(text) || hasNudeIntent(opts.core);
+    if (nudeOn) {
       text = text
         .replace(/,?\s*realistic fabric texture/gi, '')
         .replace(/,?\s*clear clothing and skin texture/gi, ', natural skin texture')
@@ -1844,7 +1874,7 @@
       prompt = minimalOutboundPrompt(prompt, { core: coreHint, localEdit: localEdit });
     }
     // Adult/NSFW instructions from core + hidden 成人功能状态 must survive photoreal enrich.
-    prompt = withAdultDirective(prompt);
+    prompt = withAdultDirective(prompt, { core: coreHint });
     if (localEdit) prompt = applyLocalEditOutbound(prompt, coreHint, { img2img: true, force: true });
     run.payload.prompt = prompt;
     return runWithProviderBudget(run, engine, function (signal) {
@@ -2284,6 +2314,9 @@
   window.hasCjkNegative = hasCjk;
   window.withAdultDirective = withAdultDirective;
   window.adultDirectiveText = adultDirectiveText;
+  window.hasNudeIntent = hasNudeIntent;
+  window.ADULT_DIR_BASE = ADULT_DIR_BASE;
+  window.ADULT_DIR_NUDE = ADULT_DIR_NUDE;
   window.hasExplicitArtStyle = hasExplicitArtStyle;
   window.engineFamily = engineFamily;
   window.设平台提示 = function (engine) {

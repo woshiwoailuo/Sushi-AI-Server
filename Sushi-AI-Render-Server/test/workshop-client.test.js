@@ -766,7 +766,8 @@ test('adult mode defaults on with no top-bar toggle and no replica confirmation 
   assert.ok(tick);
   assert.equal(tick.checked, true);
   assert.equal(f.w.成人主题已开启, true);
-  assert.match(f.w.document.getElementById('成人功能状态').value, /NSFW fully allowed|NSFW allowed/);
+  assert.match(f.w.document.getElementById('成人功能状态').value, /NSFW allowed/);
+  assert.doesNotMatch(f.w.document.getElementById('成人功能状态').value, /preferred when described|do not add clothes/i);
   const official = f.w.document.createElement('div');
   official.setAttribute('role', 'dialog');
   official.id = 'fakeOfficialWarn';
@@ -862,19 +863,19 @@ test('adult on: outbound prompts keep NSFW tokens and attach 成人功能状态 
   assert.equal(f.w.成人主题已开启, true);
   assert.equal(typeof f.w.withAdultDirective, 'function');
   const adultField = f.w.document.getElementById('成人功能状态').value;
-  assert.match(adultField, /do not add clothes/i);
-  assert.match(adultField, /NSFW fully allowed/i);
+  assert.match(adultField, /NSFW allowed/i);
+  assert.doesNotMatch(adultField, /do not add clothes|preferred when described/i);
   const nude = 'nude fictional adult woman standing by a rainy window, explicit adult scene';
   const enriched = f.w.forcePhotorealPrompt(nude);
   assert.match(enriched, /nude fictional adult woman/i);
   assert.doesNotMatch(enriched, /realistic fabric texture/i);
-  const outbound = f.w.withAdultDirective(enriched);
+  const outbound = f.w.withAdultDirective(enriched, { core: nude });
   assert.match(outbound, /nude fictional adult woman/i);
   assert.match(outbound, /adult mode enabled/i);
   assert.match(outbound, /do not add clothes/i);
-  assert.match(outbound, /NSFW fully allowed/i);
+  assert.match(outbound, /NSFW allowed/i);
   f.w.切换成人对勾(false);
-  assert.equal(f.w.withAdultDirective(enriched), enriched);
+  assert.equal(f.w.withAdultDirective(enriched, { core: nude }), enriched);
   f.w.切换成人对勾(true);
   f.w.document.getElementById('角色描述').value = nude;
   f.w.document.getElementById('英文描述').value = nude;
@@ -885,8 +886,33 @@ test('adult on: outbound prompts keep NSFW tokens and attach 成人功能状态 
   const prompt = String(JSON.parse(posts[0].body).prompt || '');
   assert.match(prompt, /nude fictional adult woman/i);
   assert.match(prompt, /adult mode enabled/i);
-  assert.match(prompt, /NSFW fully allowed|NSFW allowed/i);
+  assert.match(prompt, /NSFW allowed/i);
+  assert.match(prompt, /do not add clothes/i);
   assert.doesNotMatch(prompt.split(' ### ')[0], /realistic fabric texture/i);
+});
+
+test('adult on: clothed core does not force nude tokens in outbound prompt', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(f.w.成人主题已开启, true);
+  const clothed = 'a fictional adult woman in a red knit sweater standing by a rainy window';
+  const outbound = f.w.withAdultDirective(f.w.forcePhotorealPrompt(clothed), { core: clothed });
+  assert.match(outbound, /adult mode enabled/i);
+  assert.match(outbound, /clothing as written|follow the core description/i);
+  assert.doesNotMatch(outbound, /do not add clothes|preferred when described|keep requested nudity/i);
+  assert.doesNotMatch(outbound, /\bnude\b|\bnaked\b|全裸|裸体|unclothed/i);
+  assert.equal(f.w.hasNudeIntent(clothed), false);
+  assert.equal(f.w.hasNudeIntent('全身裸体的虚构成年女人'), true);
+  f.w.document.getElementById('角色描述').value = clothed;
+  f.w.document.getElementById('英文描述').value = clothed;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const posts = f.calls.filter(isImageSubmit);
+  assert.ok(posts.length >= 1);
+  const prompt = String(JSON.parse(posts[0].body).prompt || '').split(' ### ')[0];
+  assert.match(prompt, /red knit sweater|fictional adult woman/i);
+  assert.doesNotMatch(prompt, /do not add clothes|preferred when described|keep requested nudity/i);
+  assert.doesNotMatch(prompt, /\bnude\b|\bnaked\b|全裸|裸体|unclothed/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, clothed);
 });
 
 test('adult on: censored Horde generations retry then succeed with NSFW-preferred models', async t => {
@@ -1047,14 +1073,15 @@ test('generate converts CJK negative phrases; Horde ### has no CJK', async t => 
   assert.doesNotMatch(f.w.document.getElementById('负面提示').value, /[\u4e00-\u9fff]/);
 });
 
-test('workshop negative default is English; adult directive is stronger NSFW scale', async t => {
+test('workshop negative default is English; adult directive follows clothing unless nude asked', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const neg = f.w.document.getElementById('负面提示').value;
   assert.match(neg, /lowres|bad anatomy|malformed hands/i);
   assert.doesNotMatch(neg, /低清晰度|错误解剖|畸形手部|未成年人/);
   const adult = f.w.document.getElementById('成人功能状态').value;
-  assert.match(adult, /NSFW fully allowed/i);
-  assert.match(adult, /keep requested nudity and sexual details visible/i);
+  assert.match(adult, /NSFW allowed/i);
+  assert.match(adult, /clothing as written|do not invent undressing/i);
+  assert.doesNotMatch(adult, /do not add clothes|preferred when described|keep requested nudity/i);
   assert.match(adult, /no minors/i);
   f.w.document.getElementById('负面提示').value = '';
   f.w.document.getElementById('角色描述').value = 'a fictional adult woman in a park';
@@ -1069,7 +1096,10 @@ test('workshop negative default is English; adult directive is stronger NSFW sca
   const negPart = prompt.split(' ### ')[1] || '';
   assert.match(negPart, /anime|manga|cartoon/i);
   assert.doesNotMatch(negPart, /[\u4e00-\u9fff]/);
-  assert.match(prompt.split(' ### ')[0], /adult mode enabled|NSFW fully allowed/i);
+  const pos = prompt.split(' ### ')[0];
+  assert.match(pos, /adult mode enabled|NSFW allowed/i);
+  assert.doesNotMatch(pos, /do not add clothes|preferred when described|keep requested nudity/i);
+  assert.doesNotMatch(pos, /\bnude\b|\bnaked\b|全裸|裸体|unclothed/i);
 });
 
 test('memory tip copy and perch official-site tips are removed; platform tip stays selection-only', async t => {
