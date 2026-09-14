@@ -2424,13 +2424,37 @@
     return false;
   }
 
+  function 局部改姿势手势(文) {
+    var t = String(文 || "").replace(/\s+/g, " ").trim();
+    if (!t) return false;
+    return /抬起|举起|放下|伸手|举手|挥手|叉腰|转头|回头|侧头|低头|抬头|扭头|侧过脸|抬手|站姿|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|lower(?:s|ed|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|turn(?:s|ed|ing)?\s+(?:(?:the)\s+)?head|look(?:s|ing)?\s+(?:left|right|away)|wave(?:s|d|ing)?\b|hands?\s+on\s+(?:hips|waist)|arms?\s+(?:crossed|raised|up|out)/i.test(t);
+  }
+  function 局部改变化英文(核心) {
+    if (typeof localEditChangeDirective === "function") return localEditChangeDirective(核心);
+    var t = String(核心 || "").replace(/\s+/g, " ").trim();
+    if (/抬起左手|左手抬起|左手举起/i.test(t)) return "CRITICAL EDIT (must be clearly visible): left hand raised high, left arm lifted upward, raised left hand clearly visible";
+    if (/抬起右手|右手抬起|右手举起/i.test(t)) return "CRITICAL EDIT (must be clearly visible): right hand raised high, right arm lifted upward, raised right hand clearly visible";
+    if (/举手|抬起|举起|抬手|伸手|挥手/i.test(t)) return "CRITICAL EDIT (must be clearly visible): hand/arm raised as requested, pose change obvious and limbs clearly different from the reference";
+    if (/转头|回头|侧头|扭头|侧过脸|低头|抬头/i.test(t)) return "CRITICAL EDIT (must be clearly visible): head turned/oriented as requested, new head direction clearly visible";
+    if (局部改姿势手势(t)) return "CRITICAL EDIT (must be clearly visible): apply the requested pose/gesture change strongly so limbs/posture clearly differ from the reference";
+    return "CRITICAL EDIT (must be clearly visible): apply the stated local change so it is obvious";
+  }
   function 补局部改图英文(英文, 核心) {
+    if (typeof applyLocalEditOutbound === "function") {
+      try {
+        var 强制外 = false;
+        try { 强制外 = 读取生图方式() === "改动" && 本轮使用参考图(); } catch (eF) { 强制外 = false; }
+        return applyLocalEditOutbound(英文, 核心, { img2img: true, force: 强制外 || 是局部改图核心(核心 || 英文) });
+      } catch (eOut) {}
+    }
     var 文本 = String(英文 || "").trim();
     var 强制 = false;
     try { 强制 = 读取生图方式() === "改动" && 本轮使用参考图(); } catch (eForce) { 强制 = false; }
     if (!强制 && !是局部改图核心(核心 || 文本)) return 文本;
-    if (/keep the (?:EXACT )?same person identity|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(文本)) return 文本;
-    return "Keep the EXACT same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, framing, and composition as the reference image, do NOT redraw, recompose, restyle, or invent a new scene, apply ONLY the stated local change, leave every other region unchanged, high fidelity lock to the reference photo" + (文本 ? ", " + 文本 : "");
+    if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(文本)) return 文本;
+    var 变化 = 局部改变化英文(核心 || 文本);
+    var 锁定 = "Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, and framing as the reference image; do NOT redraw the whole scene, restyle, or invent a new background; the stated local change must stay clearly visible while preserving likeness";
+    return 变化 + (文本 ? ", " + 文本 : "") + ", " + 锁定;
   }
 
   function 补换背景英文(英文) {
@@ -3851,7 +3875,7 @@
         body: JSON.stringify({
           k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
           width: 尺寸.宽, height: 尺寸.高,
-          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.15 : 0.22; return base > cap ? cap : base; })(), seed: (function () { var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
+          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; if (typeof preferLocalEditStrength === "function") return preferLocalEditStrength(base, 核文); if (局部改姿势手势(核文)) { var poseCap = 0.45, poseFloor = 0.35; if (base > poseCap) return poseCap; if (base < poseFloor) return poseFloor; return base; } var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.22 : 0.28; var floor = 0.2; if (base > cap) return cap; if (base < floor) return floor; return base; })(), seed: (function () { var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
           style: "real"
         })
       }, 95_000);
@@ -4052,7 +4076,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.64" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.65" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

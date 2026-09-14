@@ -12,6 +12,8 @@ const {
   isLocalEditCore,
   applyLocalEditOutbound,
   preferLocalEditStrength,
+  isPoseGestureEdit,
+  localEditChangeDirective,
 } = require('../lib/structure-prompt');
 
 test('parseStructureJson accepts fenced JSON and assembles compact English', () => {
@@ -46,7 +48,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.64/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.65/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
@@ -77,16 +79,16 @@ test('img2img local-edit detection and keep-rest outbound', () => {
   assert.equal(none, 'raise left hand');
 
   const out = applyLocalEditOutbound('raise the left hand', '图中人物抬起左手', { img2img: true });
-  assert.match(out, /keep the EXACT same person identity/i);
-  assert.match(out, /apply ONLY the stated local change/i);
-  assert.match(out, /do NOT redraw, recompose/i);
-  assert.match(out, /same clothing|same background|composition/i);
+  assert.match(out, /CRITICAL EDIT \(must be clearly visible\).*left hand raised/i);
+  assert.match(out, /keep the same person identity|same clothing|background/i);
+  assert.match(out, /stated local change must stay clearly visible|do NOT redraw the whole scene/i);
+  assert.match(out, /raise the left hand/i);
   const again = applyLocalEditOutbound(out, '图中人物抬起左手', { img2img: true });
   assert.equal(again, out);
 
   const h = heuristicStructureFromText('图中人物抬起左手', { img2img: true });
-  assert.match(h.promptEn, /keep the same person identity|same clothing as the reference|ONLY the stated local change/i);
-  assert.match(h.fields.pose, /抬起左手|图中人物/);
+  assert.match(h.promptEn, /left hand raised|CRITICAL EDIT|same clothing as the reference|stated local change must stay clearly visible/i);
+  assert.match(h.fields.pose, /left hand raised|抬起左手|CRITICAL EDIT/i);
   const eastFull = heuristicStructureFromText('一位东亚中国女性全身站立在雨夜街头');
   assert.match(eastFull.fields.appearance, /East Asian/i);
   assert.match(eastFull.fields.pose, /full body|feet in frame/i);
@@ -95,10 +97,20 @@ test('img2img local-edit detection and keep-rest outbound', () => {
   assert.match(msgs[0].content, /LOCAL EDIT|keep identity|same as reference/i);
   assert.match(msgs[1].content, /图中人物抬起左手/);
 
-  assert.equal(preferLocalEditStrength(0.52, '图中人物抬起左手'), 0.22);
-  assert.equal(preferLocalEditStrength(0.68, '图中人物抬起左手'), 0.22);
-  assert.equal(preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景'), 0.26);
-  assert.equal(preferLocalEditStrength(0.18, '抬手'), 0.18);
+  assert.equal(isPoseGestureEdit('图中人物抬起左手'), true);
+  assert.equal(isPoseGestureEdit('微笑'), false);
+  assert.match(localEditChangeDirective('抬起左手'), /left hand raised high|raised left hand clearly visible/i);
+  const poseStr = preferLocalEditStrength(0.52, '图中人物抬起左手');
+  assert.ok(poseStr >= 0.35 && poseStr <= 0.45, 'pose strength mid-band, got ' + poseStr);
+  assert.equal(preferLocalEditStrength(0.68, '图中人物抬起左手'), 0.45);
+  assert.equal(preferLocalEditStrength(0.2, '抬起左手'), 0.35);
+  const longPose = preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景');
+  assert.ok(longPose >= 0.35 && longPose <= 0.45, 'pose cue in long edit uses mid-band, got ' + longPose);
+  assert.equal(preferLocalEditStrength(0.18, '抬手'), 0.35);
+  const mild = preferLocalEditStrength(0.52, '微笑');
+  assert.ok(mild >= 0.2 && mild <= 0.28, 'mild expression stays low, got ' + mild);
+  const hair = preferLocalEditStrength(0.52, 'change hair color slightly');
+  assert.ok(hair >= 0.2 && hair <= 0.28, 'hair color stays low, got ' + hair);
 });
 
 test('force local-edit outbound even when core is not heuristic local-edit', () => {
@@ -107,6 +119,8 @@ test('force local-edit outbound even when core is not heuristic local-edit', () 
   assert.match(prompt, /red dress|rainy street/i);
   const skipped = applyLocalEditOutbound('a woman in a red dress', '一位穿红裙的女性', { img2img: true });
   assert.doesNotMatch(skipped, /Keep the (?:EXACT )?same person identity/i);
-  assert.equal(preferLocalEditStrength(0.45, '一位穿红裙的女性站在雨夜街头，保持参考图人物身份与构图，只微调表情与手势，不要整张重绘场景或换背景'), 0.26);
-  assert.equal(preferLocalEditStrength(0.45, '微笑'), 0.22);
+  const mildLong = preferLocalEditStrength(0.45, '一位穿红裙的女性站在雨夜街头，保持参考图人物身份与构图，只微调表情，不要整张重绘场景或换背景');
+  assert.ok(mildLong >= 0.2 && mildLong <= 0.28, 'mild long local-edit strength, got ' + mildLong);
+  const smile = preferLocalEditStrength(0.45, '微笑');
+  assert.ok(smile >= 0.2 && smile <= 0.28, 'smile strength, got ' + smile);
 });
