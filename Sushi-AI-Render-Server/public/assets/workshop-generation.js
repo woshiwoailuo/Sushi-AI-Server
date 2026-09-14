@@ -607,6 +607,7 @@
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
     text = stripInjectedFemaleDefaults(text, coreHint || text);
+    text = stripExposureBiasDefaults(text, coreHint || text);
     text = applyCoreFidelityLead(text);
     return text.replace(/\s{2,}/g, ' ').trim();
   }
@@ -659,6 +660,10 @@
     if (!hasFemaleIntent(c)) {
       mod = stripInjectedFemaleDefaults(mod, c);
     }
+    // Exposure: never let smart-mod invent revealing/sexy packs when core lacks them
+    if (!hasNudeIntent(c) && !hasExposureIntent(c)) {
+      mod = stripExposureBiasDefaults(mod, c);
+    }
     mod = mod.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
     if (!mod) return '';
     if (mod.charAt(0) !== ',') mod = ', ' + mod.replace(/^[,\s]+/, '');
@@ -674,7 +679,7 @@
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
-  /** 未点智能修饰：出图英文=核心翻译为主，仅保留产品必需的成人/东亚/全身锁，不堆写实修饰词库 */
+  /** 未点智能修饰：出图英文=核心翻译为主，仅保留产品必需锁（写实风格/防文字/东亚若核心有/全身）；不堆写实修饰词库与暴露偏置 */
   function minimalOutboundPrompt(prompt, options) {
     var opts = options && typeof options === 'object' ? options : {};
     var coreHint = opts.core != null ? String(opts.core) : '';
@@ -690,6 +695,16 @@
       .replace(/\s{2,}/g, ' ')
       .replace(/^[,,\s]+|[,,\s]+$/g, '')
       .trim() || text;
+    // 产品最小写实锁（非完整词库）：核心未写动漫/插画时默认写实照片
+    var styleSrc = (coreHint ? coreHint + ' ' : '') + text;
+    if (!hasExplicitArtStyle(styleSrc)) {
+      if (!/photoreal|realistic photo|写实摄影|写实照片|DSLR|RAW photo/i.test(text)) {
+        text = 'photorealistic photograph, natural light, ' + text;
+      }
+      if (!/not anime|no anime|非动漫|not cartoon|not 2d/i.test(text)) {
+        text += ', not anime, not cartoon, not 2d';
+      }
+    }
     if (!opts.localEdit) {
       var framingSource = (coreHint ? coreHint + ', ' : '') + text;
       if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
@@ -700,6 +715,7 @@
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
     text = stripInjectedFemaleDefaults(text, coreHint || text);
+    text = stripExposureBiasDefaults(text, coreHint || text);
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
     }
@@ -726,13 +742,39 @@
   }
 
   var ADULT_DIR_BASE =
-    'adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors';
+    'adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing, revealing outfits, lingerie, cleavage, skimpy clothes, seductive posing, or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors';
   var ADULT_DIR_NUDE =
     'explicit adult nudity as described is permitted; if nude or undressed do not add clothes, fabric coverage, or modest outfits; keep requested nudity and sexual details visible';
   var NUDE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣|脱光|赤裸/i;
 
   function hasNudeIntent(text) {
     return NUDE_INTENT_RE.test(String(text || ''));
+  }
+
+  // Revealing / sexy bias — only keep when core explicitly asks; otherwise strip invented exposure.
+  var EXPOSURE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|lingerie|cleavage|skimpy|seductive|sexy|revealing|see[\s-]?through|microbikini|bikini|underwear only|无衣|裸体|裸身|全裸|裸露|暴露|性感|低胸|情趣|脱光|赤裸|比基尼|内衣外穿/i;
+  var EXPOSURE_BIAS_TOKEN_RE = /\b(nude|naked|nudity|unclothed|topless|bottomless|lingerie|cleavage|skimpy|seductive|sexy|revealing(?:\s+(?:outfit|clothes|clothing|dress|top))?|see[\s-]?through|sheer(?:\s+\w+)?|microbikini|micro[\s-]?bikini|underwear only|no pants|no bra|shirtless|pantsless)\b/gi;
+
+  function hasExposureIntent(text) {
+    return EXPOSURE_INTENT_RE.test(String(text || ''));
+  }
+
+  /** Strip invented revealing/sexy tokens when core did not ask for exposure. */
+  function stripExposureBiasDefaults(text, core) {
+    var src = String(core || '');
+    if (hasNudeIntent(src) || hasExposureIntent(src)) return String(text || '');
+    var t = String(text || '');
+    if (!t) return t;
+    t = t
+      .replace(EXPOSURE_BIAS_TOKEN_RE, ' ')
+      .replace(/,\s*explicit adult nudity[^,]*/gi, '')
+      .replace(/,\s*keep requested nudity[^,]*/gi, '')
+      .replace(/,\s*do not add clothes[^,]*/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[，,]{2,}/g, ',')
+      .replace(/^[\s,]+|[\s,]+$/g, '')
+      .trim();
+    return t;
   }
 
   // Female / woman cues from core — never invent woman/female defaults when absent.
@@ -789,11 +831,15 @@
         .replace(/;?\s*explicit adult nudity as described is permitted/gi, '')
         .replace(/;?\s*if nude or undressed do not add clothes, fabric coverage, or modest outfits/gi, '')
         .replace(/;?\s*keep requested nudity and sexual details visible/gi, '')
+        .replace(/;?\s*NSFW fully allowed/gi, '; NSFW allowed when requested in the core description')
         .replace(/\s{2,}/g, ' ')
         .replace(/[;,]{2,}/g, ';')
         .replace(/^[;\s]+|[;\s]+$/g, '')
         .trim();
       if (!text) text = ADULT_DIR_BASE;
+      if (!/do not invent undressing|revealing outfits|lingerie|cleavage/i.test(text)) {
+        text = text.replace(/[;.\s]+$/, '') + '; do not invent revealing outfits, lingerie, cleavage, skimpy clothes, or seductive posing unless the core explicitly asks';
+      }
     }
     return text;
   }
@@ -2278,6 +2324,12 @@
     if (!/pinyin|romanization|letters on image/i.test(negative)) {
       negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
     }
+    // 核心未写裸露/性感时，负面压制模型默认暴露偏置
+    if (!hasNudeIntent(ethSrc) && !hasExposureIntent(ethSrc) && !hasNudeIntent(description) && !hasExposureIntent(description)) {
+      if (!/lingerie|cleavage|skimpy|seductive nudity/i.test(negative)) {
+        negative += ', nude, naked, lingerie, cleavage, skimpy outfit, seductive pose, revealing clothes, underwear only';
+      }
+    }
     var sourceForRun = '';
     if (useRef || run.localEdit) {
       sourceForRun = value('参考图地址') || memSrc || '';
@@ -2421,6 +2473,8 @@
   window.withAdultDirective = withAdultDirective;
   window.adultDirectiveText = adultDirectiveText;
   window.hasNudeIntent = hasNudeIntent;
+  window.hasExposureIntent = hasExposureIntent;
+  window.stripExposureBiasDefaults = stripExposureBiasDefaults;
   window.hasFemaleIntent = hasFemaleIntent;
   window.stripInjectedFemaleDefaults = stripInjectedFemaleDefaults;
   window.ADULT_DIR_BASE = ADULT_DIR_BASE;

@@ -18,7 +18,7 @@ const STRUCTURE_SYSTEM = [
   'Reply with ONLY one JSON object (no markdown fences) using these English keys:',
   '{"subject":"","appearance":"","clothing":"","pose":"","scene":"","camera":"","lighting":"","style":"","extras":""}',
   'Rules: FAITHFUL TO CORE — translate and slot ONLY facts present in the core; lead with core facts; include every explicitly described clothing, prop, pose, scene, action, and count — omit none; prefer completeness of core facts over filler style words; do NOT invent clothing, props, pose, identity, gender, background, or setting absent from the core; empty string if unknown;',
-  'fictional consenting adults 18+ only; no minors; keep adult/NSFW details if the user asked; do NOT invent nudity, undressing, or remove clothing unless the core explicitly describes nude/naked/unclothed/全裸/裸体;',
+  'fictional consenting adults 18+ only; no minors; keep adult/NSFW details if the user asked; do NOT invent nudity, undressing, revealing outfits, lingerie, cleavage, skimpy clothes, seductive posing, or remove clothing unless the core explicitly describes nude/naked/unclothed/全裸/裸体/暴露/性感;',
   'do NOT invent woman, female, girl, beautiful woman, or gendered identity unless the core explicitly states female gender (女人/女性/woman/female/girl); if gender is unspecified use gender-neutral subject (person/adult/figure); follow male/other identity when the core states it;',
   'prefer photoreal photography wording unless the user explicitly asked for anime/manga/illustration;',
   'PRESERVE ethnicity/race/nationality from the core literally in appearance (e.g. East Asian, Chinese, Korean, Japanese, East Asian facial features);',

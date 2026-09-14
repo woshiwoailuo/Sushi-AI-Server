@@ -57,3 +57,10 @@ test('success hides bulky 已生成 status so gallery sits under 角色画廊', 
   assert.match(workshop, /function 含生图指令/);
   assert.match(workshop, /按对话生成图片\(文本\)/);
 });
+
+test('result gallery has breathing room and smaller idle status box', () => {
+  assert.match(workshop, /\.结果区[\s\S]*?gap:\s*1[4-9]px|gap:\s*1[4-9]px/);
+  assert.match(workshop, /\.画廊[\s\S]*?gap:\s*2[0-9]px/);
+  assert.doesNotMatch(workshop, /\.状态提示\s*\{[\s\S]*?min-height:\s*320px/);
+  assert.match(workshop, /sjdwukai2@163\.com/);
+});

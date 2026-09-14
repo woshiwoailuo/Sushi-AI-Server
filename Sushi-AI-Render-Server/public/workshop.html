@@ -320,7 +320,7 @@
         id="成人功能状态"
         name="成人功能状态"
         type="hidden"
-        value="adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors"
+        value="adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing, revealing outfits, lingerie, cleavage, skimpy clothes, seductive posing, or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors"
       >
 
       <details id="图生图区" class="分区">
@@ -470,7 +470,7 @@
 
   <footer class="页脚">
     联系邮箱
-    <a href="mailto:sjdwukai2@qq.com">sjdwukai2@qq.com</a>
+    <a href="mailto:sjdwukai2@163.com">sjdwukai2@163.com</a>
   </footer>
 
   <div class="手机底栏" role="group" aria-label="图片操作">
@@ -850,7 +850,7 @@
 
       if (后台状态) {
         后台状态.value =
-          "adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors";
+          "adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing, revealing outfits, lingerie, cleavage, skimpy clothes, seductive posing, or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors";
       }
     } else {
       if (标签) {
@@ -2741,7 +2741,7 @@
     return 项;
   }
 
-  // 「智能修饰」：备好官方修饰词池；只写入出图层，绝不改写可见核心描述；再点替换上一版后缀；词库用尽后走 AI。
+  // 「智能修饰」：按核心衣着/场景/情绪生成偏向性修饰；只写入出图层，绝不改写可见核心；再点替换上一版；词库用尽后走 AI。
   var _智能修饰基座 = "";
   var _智能修饰后缀 = "";
   var _智能修饰序号 = 0;
@@ -2750,24 +2750,55 @@
   function _智能修饰候选(基座) {
     var 文 = String(基座 || "");
     var 画风 = 显式画风(文);
+    // 偏向性修饰：只从核心已有衣着/场景/情绪提炼强化，不灌全局暴露/性感模板
+    var 衣 = [];
+    if (/毛衣|针织|sweater|knit/i.test(文)) 衣.push("clear knit sweater texture as described");
+    if (/大衣|风衣|coat|jacket/i.test(文)) 衣.push("coat fabric readable as described");
+    if (/裙|dress/i.test(文)) 衣.push("dress silhouette matching the core");
+    if (/衬衫|shirt|blouse/i.test(文)) 衣.push("shirt fabric detail as described");
+    if (/裤|trousers|pants|jeans/i.test(文)) 衣.push("trousers/pants as described");
+    if (/伞|umbrella/i.test(文)) 衣.push("umbrella prop kept");
+    if (/帽|hat|cap/i.test(文)) 衣.push("hat as described");
+    if (!衣.length && /穿|衣|服|outfit|clothing|wear(?:ing)?|dressed|sweater|coat|dress|shirt|jacket|裙|裤/i.test(文)) {
+      衣.push("clothing exactly as described", "fabric detail matching the core outfit");
+    }
+    var 景 = [];
+    if (/雨|rain/i.test(文)) 景.push("rainy atmosphere from the core");
+    if (/窗|window/i.test(文)) 景.push("window-side setting as described");
+    if (/街|street|路/i.test(文)) 景.push("street environment as described");
+    if (/图书馆|library/i.test(文)) 景.push("library interior as described");
+    if (/海|seaside|beach|栈道|boardwalk/i.test(文)) 景.push("seaside setting as described");
+    if (/厨房|kitchen/i.test(文)) 景.push("kitchen environment as described");
+    if (/室内|indoor|房间|bedroom|studio/i.test(文)) 景.push("indoor scene as described");
+    if (/室外|outdoor|户外/i.test(文)) 景.push("outdoor scene as described");
+    if (/夜|night/i.test(文)) 景.push("nighttime mood from the core");
+    if (/黄昏|dusk|golden hour|暖橙|暖光/i.test(文)) 景.push("warm dusk mood from the core");
+    if (/霓虹|neon/i.test(文)) 景.push("neon light mood as described");
+    var 情 = [];
+    if (/安静|calm|quiet/i.test(文)) 情.push("calm mood");
+    if (/轻松|relax/i.test(文)) 情.push("relaxed expression");
+    if (/专注|focused/i.test(文)) 情.push("focused expression");
+    if (/对视|facing each other/i.test(文)) 情.push("natural mutual gaze as described");
+    var 偏 = 衣.concat(景, 情).filter(Boolean);
+    var 偏串 = 偏.length ? 偏.slice(0, 6).join(", ") + ", " : "";
     // 修饰词一律英文：仅叠加入站出图 prompt，不回写核心描述原文语言。
     if (画风) {
       return [
-        ", anime illustration style, clean lineart, cel shading, vivid color hierarchy, detailed character design, full-character standing art, fictional adult 18+ only, no minors",
-        ", Japanese anime illustration, clean linework, soft lighting, high-finish character art, fictional adult 18+, no minors",
-        ", comic-style illustration, vivid palette, dynamic composition, crisp expression and outfit detail, fictional adult, no minors",
-        ", visual-novel character art, clear facial features and hair, soft gradient shading, polished character design, fictional adult 18+ only, no minors",
-        ", high-finish anime character illustration, clean lineart, cel-shaded lighting, readable costume detail, fictional adult 18+, no minors",
-        ", modern anime illustration, strong key colors, refined facial features, full-character standing-art feel, fictional adult, no minors"
+        ", " + 偏串 + "anime illustration style, clean lineart, cel shading, vivid color hierarchy, detailed character design reinforcing core outfit and scene, full-character standing art when core allows, fictional adult 18+ only, no minors",
+        ", " + 偏串 + "Japanese anime illustration, clean linework, soft lighting matching the core setting, high-finish character art, fictional adult 18+, no minors",
+        ", " + 偏串 + "comic-style illustration, vivid palette, dynamic composition, crisp expression and outfit detail from the core, fictional adult, no minors",
+        ", " + 偏串 + "visual-novel character art, clear facial features and hair, soft gradient shading, polished costume detail as written, fictional adult 18+ only, no minors",
+        ", " + 偏串 + "high-finish anime character illustration, clean lineart, cel-shaded lighting, readable costume detail from the core, fictional adult 18+, no minors",
+        ", " + 偏串 + "modern anime illustration, strong key colors, refined facial features, full-character standing-art feel when core allows, fictional adult, no minors"
       ];
     }
     return [
-      ", photorealistic photography style, shot on DSLR, 35mm lens, natural skin texture and fabric detail, natural light, cinematic still, shallow depth of field, true photo look, ethnicity-neutral lighting, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
-      ", documentary photoreal photography, natural lighting, full-body framing head to toe when core allows, real skin texture, sharp material detail, shallow depth of field, not anime, not cartoon, fictional adult 18+, no minors",
-      ", cinematic photoreal photograph, 35mm lens, soft side light, pore-level skin and fabric weave, not anime, not illustration, fictional adult, no minors",
-      ", commercial photoreal photography, soft studio-light look, clear skin and clothing materials, natural depth of field, not cartoon, not 2d art, fictional adult 18+, no minors",
-      ", natural-light photoreal photography, even ambient light, clear facial and hair detail, full-body framing when core allows, not illustration, not anime, fictional adult, no minors",
-      ", high-definition photoreal photography, full-body framing head to toe feet in frame when core allows, readable materials and light hierarchy, not anime, not manga, fictional adult 18+ only, no minors"
+      ", " + 偏串 + "photorealistic photography style, shot on DSLR, 35mm lens, natural light, cinematic still, reinforce core clothing setting and mood only, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
+      ", " + 偏串 + "documentary photoreal photography, natural lighting, materials matching core description, full-body framing head to toe when core allows, not anime, not cartoon, fictional adult 18+, no minors",
+      ", " + 偏串 + "cinematic photoreal photograph, 35mm lens, soft side light, pore-level skin and fabric weave matching the core outfit, not anime, not illustration, fictional adult, no minors",
+      ", " + 偏串 + "commercial photoreal photography, soft studio-light look when indoor, clear skin and clothing materials as written, natural depth of field, not cartoon, not 2d art, fictional adult 18+, no minors",
+      ", " + 偏串 + "natural-light photoreal photography, even ambient light, clear facial and hair detail, scene continuity with the core, not illustration, not anime, fictional adult, no minors",
+      ", " + 偏串 + "high-definition photoreal photography, readable materials and light hierarchy from the core setting, not anime, not manga, fictional adult 18+ only, no minors"
     ];
   }
 
@@ -2795,7 +2826,7 @@
       : "photoreal photography modifiers (full-body front view 35mm, lens, lighting, materials, not anime, not close-up)";
     var 问 = "Output ONLY one English modifier phrase to append after the scene description for the image API. No explanation, no quotes, no line breaks.\n"
       + "Style: " + 风格说明 + ".\n"
-      + "Requirements: product-official wording; fictional adult 18+; ethnicity-neutral unless base already states ethnicity; if base mentions East Asian/Chinese/Korean/Japanese, reinforce East Asian facial features and never add blonde/caucasian/european/blue eyes; style/lighting/materials only; do NOT invent woman/female/girl/beautiful woman unless base already states female gender; follow gender as written or stay gender-neutral; do NOT contradict clothing, pose, identity, or scene in the base; do NOT invent outfits/props/settings absent from base; prefer full-body framing only when base allows, avoid close-up/half-body unless base asks; do not repeat the base text; do not rewrite the base.\n"
+      + "Requirements: product-official wording; fictional adult 18+; ethnicity-neutral unless base already states ethnicity; if base mentions East Asian/Chinese/Korean/Japanese, reinforce East Asian facial features and never add blonde/caucasian/european/blue eyes; BIAS FROM BASE ONLY — reinforce clothing, setting, mood already present in the base; style/lighting/materials that support those core facts; do NOT invent woman/female/girl/beautiful woman unless base already states female gender; follow gender as written or stay gender-neutral; do NOT invent nude/naked/lingerie/cleavage/skimpy/seductive/revealing/sexy modifiers unless the base explicitly asks; do NOT contradict clothing, pose, identity, or scene in the base; do NOT invent outfits/props/settings absent from base; prefer full-body framing only when base allows, avoid close-up/half-body unless base asks; do not repeat the base text; do not rewrite the base.\n"
       + "Base: " + 文.slice(0, 280);
     var 通道框 = document.getElementById("AI通道");
     var 模型 = 通道框 && 通道框.value ? 通道框.value : "glm";
@@ -4079,7 +4110,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.69" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.70" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4805,7 +4836,8 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 18px 22px 20px;
+    gap: 14px;
+    padding: 20px clamp(16px, 3vw, 28px) 28px;
     overflow: auto;
   }
 
@@ -4943,13 +4975,13 @@
 
   .状态提示 {
     display: flex;
-    flex: 1;
-    min-height: 320px;
+    flex: 0 0 auto;
+    min-height: min(28vh, 180px);
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 30px;
+    padding: 18px 16px;
     color: var(--淡色);
     text-align: center;
     border: 1px dashed var(--边框);
@@ -5004,20 +5036,23 @@
     overflow: visible;
     display: grid;
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 22px;
     flex: 0 1 auto;
     align-content: start;
     min-height: 0;
     width: 100%;
+    margin-top: 4px;
+    padding: 4px 0 8px;
   }
 
   .画廊 img,
   .画廊 iframe {
     display: block;
-    width: 100% !important;
+    width: min(100%, 920px) !important;
     max-width: 100%;
     height: auto !important;
     max-height: none;
+    margin-inline: auto;
     object-fit: contain;
     object-position: center top;
     border: 0;
@@ -5422,7 +5457,8 @@
     }
 
     .结果区 {
-      padding: 16px 12px 24px;
+      gap: 12px;
+      padding: 14px 14px 28px;
     }
 
     .结果标题 {
@@ -5440,17 +5476,19 @@
     }
 
     .状态提示 {
-      min-height: 180px;
-      padding: 20px 14px;
+      min-height: min(22vh, 140px);
+      padding: 14px 12px;
     }
 
     .画廊 {
       max-height: none;
       overflow: visible;
       grid-template-columns: 1fr;
+      gap: 18px;
       min-height: 0;
       flex: 0 1 auto;
       width: 100%;
+      padding: 2px 0 10px;
     }
 
     .画廊 img,
@@ -5523,7 +5561,8 @@
     }
 
     .结果区 {
-      padding: 18px 24px 24px;
+      gap: 16px;
+      padding: 22px clamp(20px, 3vw, 32px) 32px;
     }
 
     .状态提示 {
@@ -5532,17 +5571,18 @@
     }
 
     .状态提示[aria-busy="true"] {
-      min-height: 28vh;
+      min-height: min(22vh, 160px);
     }
 
     .画廊 {
       min-height: 0;
-      gap: 18px;
+      gap: 24px;
       grid-template-columns: 1fr;
       flex: 0 1 auto;
       max-height: none;
       overflow: visible;
       width: 100%;
+      padding: 6px 0 12px;
     }
 
     .画廊 img,
