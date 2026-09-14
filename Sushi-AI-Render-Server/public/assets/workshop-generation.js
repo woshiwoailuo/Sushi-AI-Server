@@ -205,7 +205,7 @@
     var core = String(run.description || '').trim();
     if (!core) return '';
     var anime = engineFamily(run.engine) === 'anime' || hasExplicitArtStyle(core);
-    status('正在整理结构化提示词', '先经对话整理字段，再交给生图平台，减少长文误解析与偏动漫。', true);
+    status('正在整理结构化提示词', '正在整理字段后交给生图平台。', true);
     var model = '';
     try { model = value('AI通道') || 'glm'; } catch (e0) { model = 'glm'; }
     try {
@@ -268,7 +268,7 @@
     if (randomPair && randomPair.chinese === source) return randomPair.english;
     if (!/[\u4e00-\u9fff]/.test(source)) return source;
     if (promptCache[source]) return promptCache[source];
-    status('正在翻译为英文', '出图指令先译成英文再提交。', true);
+    status('正在翻译为英文', '正在译成英文再提交。', true);
     var tries = 0;
     for (; tries < 2; tries += 1) {
       if (typeof window.调用开源翻译 !== 'function') break;
@@ -892,6 +892,126 @@
     'Rev Animated',
     'WAI-NSFW-illustrious-SDXL'
   ];
+
+  // English default for #负面提示 (must match workshop.html textarea default).
+  var DEFAULT_EN_NEGATIVE = 'lowres, blurry, out of focus, bad anatomy, multiple heads, fused bodies, extra arms, extra legs, missing arms, missing legs, wrong number of limbs, extra fingers, missing fingers, malformed hands, duplicated limbs, distorted face, blurry face, deformed face, misplaced facial features, plastic skin, wax figure, cartoon, anime, illustration, digital painting, manga, child, minor, underage, real celebrity, UI, text, watermark, anime, manga, cartoon, illustration, cel shading';
+
+  // Markers from the pre-PR#73 Chinese default — localStorage/autofill may restore these.
+  var OLD_CN_NEG_MARKERS = [
+    '低清晰度', '错误解剖', '畸形手部', '身体融合', '五官错位', '蜡像感',
+    '真实名人', '电脑界面', '手脚数量不对', '多余手臂', '缺失手指', '未成年人'
+  ];
+
+  // Longest-first phrase map for generate-time conversion.
+  var CN_NEG_PHRASE_MAP = [
+    ['手脚数量不对', 'wrong number of limbs'],
+    ['多余手指', 'extra fingers'],
+    ['缺失手指', 'missing fingers'],
+    ['多余手臂', 'extra arms'],
+    ['多余腿', 'extra legs'],
+    ['缺失手臂', 'missing arms'],
+    ['缺失腿', 'missing legs'],
+    ['身体融合', 'fused bodies'],
+    ['畸形手部', 'malformed hands'],
+    ['重复肢体', 'duplicated limbs'],
+    ['扭曲五官', 'distorted face'],
+    ['五官错位', 'misplaced facial features'],
+    ['塑料皮肤', 'plastic skin'],
+    ['数字绘画', 'digital painting'],
+    ['电脑界面', 'UI'],
+    ['真实名人', 'real celebrity'],
+    ['未成年人', 'underage'],
+    ['低清晰度', 'lowres'],
+    ['错误解剖', 'bad anatomy'],
+    ['模糊脸', 'blurry face'],
+    ['变形脸', 'deformed face'],
+    ['蜡像感', 'wax figure'],
+    ['二次元', 'anime'],
+    ['三只手', 'extra arms'],
+    ['三只腿', 'extra legs'],
+    ['多头', 'multiple heads'],
+    ['双头', 'multiple heads'],
+    ['三头', 'multiple heads'],
+    ['失焦', 'out of focus'],
+    ['模糊', 'blurry'],
+    ['卡通', 'cartoon'],
+    ['动漫', 'anime'],
+    ['插画', 'illustration'],
+    ['漫画', 'manga'],
+    ['儿童', 'child'],
+    ['文字', 'text'],
+    ['水印', 'watermark'],
+    ['赛璐璐', 'cel shading'],
+    ['手绘', 'drawing']
+  ];
+
+  function hasCjk(text) {
+    return /[\u4e00-\u9fff]/.test(String(text || ''));
+  }
+
+  function looksLikeOldCnNegative(text) {
+    var s = String(text || '');
+    if (!s) return false;
+    for (var i = 0; i < OLD_CN_NEG_MARKERS.length; i += 1) {
+      if (s.indexOf(OLD_CN_NEG_MARKERS[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function migrateNegativePromptBox() {
+    var el = $('负面提示');
+    if (!el) return false;
+    var cur = String(el.value || '');
+    if (!cur.trim()) return false;
+    if (!hasCjk(cur) && !looksLikeOldCnNegative(cur)) return false;
+    el.value = DEFAULT_EN_NEGATIVE;
+    return true;
+  }
+
+  function englishizeNegativePrompt(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return '';
+    if (!hasCjk(raw)) return raw;
+    var out = raw;
+    var i = 0;
+    for (; i < CN_NEG_PHRASE_MAP.length; i += 1) {
+      var cn = CN_NEG_PHRASE_MAP[i][0];
+      var en = CN_NEG_PHRASE_MAP[i][1];
+      if (out.indexOf(cn) !== -1) out = out.split(cn).join(en);
+    }
+    out = out
+      .replace(/[\u4e00-\u9fff]+/g, ' ')
+      .replace(/[，；、]/g, ',')
+      .replace(/[，,]\s*[，,]/g, ',')
+      .replace(/^[，,\s]+|[，,\s]+$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    var parts = out.split(/[,]+/).map(function (p) { return p.trim(); }).filter(Boolean);
+    var kept = [];
+    var seen = Object.create(null);
+    for (i = 0; i < parts.length; i += 1) {
+      var tok = parts[i];
+      if (hasCjk(tok)) continue;
+      if (!/[A-Za-z0-9]/.test(tok)) continue;
+      var key = tok.toLowerCase();
+      if (seen[key]) continue;
+      seen[key] = true;
+      kept.push(tok);
+    }
+    if (!kept.length) return DEFAULT_EN_NEGATIVE;
+    // Old Chinese default (or mostly-CN): prefer full English default, then append unique extras.
+    if (looksLikeOldCnNegative(raw) || kept.length < 4) {
+      var base = DEFAULT_EN_NEGATIVE.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+      var baseSeen = Object.create(null);
+      base.forEach(function (p) { baseSeen[p.toLowerCase()] = true; });
+      for (i = 0; i < kept.length; i += 1) {
+        if (!baseSeen[kept[i].toLowerCase()]) base.push(kept[i]);
+      }
+      return base.join(', ');
+    }
+    return kept.join(', ');
+  }
+
   var HORDE_REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render, lowres, blurry, bad anatomy, extra limbs, child, minor, underage, watermark, text';
 
   function hordeHeaders() {
@@ -1504,6 +1624,11 @@
     }
     var description = (typeof window.组装出图描述含记忆 === 'function' && window.组装出图描述含记忆())
       || value('角色描述') || value('英文描述');
+    var smartMod = typeof window.读取智能修饰后缀 === 'function' ? String(window.读取智能修饰后缀() || '') : '';
+    // Modifiers live only on the outbound layer — never rewrite visible core.
+    if (smartMod && description.indexOf(smartMod) === -1) {
+      description = description + (smartMod.charAt(0) === ',' ? smartMod : ', ' + smartMod);
+    }
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
     if (typeof window.标记核心已用于生成 === 'function') window.标记核心已用于生成();
     resetDisabledEnginesForNewRun();
@@ -1517,7 +1642,12 @@
       }
     }
     var dimensions = value('图像比例').split('x');
-    var negative = value('负面提示');
+    var negative = englishizeNegativePrompt(value('负面提示'));
+    if (hasCjk(value('负面提示'))) {
+      // Keep the textarea English after convert so cached CN does not stick.
+      var negBox = $('负面提示');
+      if (negBox) negBox.value = negative || DEFAULT_EN_NEGATIVE;
+    }
     var family = engineFamily(run.engine);
     var styleAware = family === 'anime';
     if (!negative) {
@@ -1598,6 +1728,10 @@
   window.applyRealisticFrontFullBody = applyRealisticFrontFullBody;
   window.hasExplicitCropFraming = hasExplicitCropFraming;
   window.animePrompt = animePrompt;
+  window.DEFAULT_EN_NEGATIVE = DEFAULT_EN_NEGATIVE;
+  window.migrateNegativePromptBox = migrateNegativePromptBox;
+  window.englishizeNegativePrompt = englishizeNegativePrompt;
+  window.hasCjkNegative = hasCjk;
   window.withAdultDirective = withAdultDirective;
   window.adultDirectiveText = adultDirectiveText;
   window.hasExplicitArtStyle = hasExplicitArtStyle;
@@ -1609,6 +1743,9 @@
   };
 
   async function init() {
+    migrateNegativePromptBox();
+    // Autofill / form restore may land after first paint — remigrate once more.
+    try { setTimeout(migrateNegativePromptBox, 0); setTimeout(migrateNegativePromptBox, 250); } catch (e) {}
     ['角色描述', '英文描述', '中文译文'].forEach(function (id) {
       $(id).addEventListener('input', function () {
         lastEdited = id;
