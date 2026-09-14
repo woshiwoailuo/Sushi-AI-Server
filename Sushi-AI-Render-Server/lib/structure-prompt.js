@@ -28,7 +28,11 @@ const STRUCTURE_SYSTEM = [
 
 /** Outbound-only lock for img2img local edits. Visible 核心描述 is never rewritten. */
 const LOCAL_EDIT_KEEP_REST =
-  'Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, and framing as the reference image; do NOT redraw the whole scene, restyle, or invent a new background; the stated local change must stay clearly visible while preserving likeness';
+  'Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, and lighting as the reference image; do NOT invent a new person or background; the stated local change must stay clearly visible while preserving likeness';
+
+/** Shorter lock for pose/gesture: avoid camera/crop/framing freezes that fight limb changes. */
+const LOCAL_EDIT_KEEP_REST_POSE =
+  'Keep the same person identity, face, hairstyle, clothing, and background as the reference; allow pose/gesture/limbs to change as stated; do not invent a new person or background';
 
 const POSE_GESTURE_RE =
   /抬起|举起|放下|伸手|举手|挥手|叉腰|转头|回头|侧头|低头|抬头|扭头|侧过脸|抬手|站姿|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|lower(?:s|ed|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|turn(?:s|ed|ing)?\s+(?:(?:the)\s+)?head|look(?:s|ing)?\s+(?:left|right|away)|wave(?:s|d|ing)?\b|hands?\s+on\s+(?:hips|waist)|arms?\s+(?:crossed|raised|up|out)/i;
@@ -85,7 +89,8 @@ function applyLocalEditOutbound(promptEn, core, options) {
     return text;
   }
   const change = localEditChangeDirective(core || text);
-  return (change + (text ? ', ' + text : '') + ', ' + LOCAL_EDIT_KEEP_REST).replace(/\s{2,}/g, ' ').trim();
+  const keep = isPoseGestureEdit(core || text) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST;
+  return (change + (text ? ', ' + text : '') + ', ' + keep).replace(/\s{2,}/g, ' ').trim();
 }
 
 function preferLocalEditStrength(current, core) {
@@ -93,9 +98,9 @@ function preferLocalEditStrength(current, core) {
   const base = Number.isFinite(n) && n > 0 ? n : 0.45;
   const coreText = String(core || '').replace(/\s+/g, ' ').trim();
   if (isPoseGestureEdit(coreText)) {
-    // Mid band so limbs/pose actually move (0.15 was too weak).
-    const floor = 0.35;
-    const cap = 0.45;
+    // Harder band: 0.35–0.45 still often froze limbs under keep-rest + seed lock.
+    const floor = 0.45;
+    const cap = 0.55;
     if (base > cap) return cap;
     if (base < floor) return floor;
     return base;

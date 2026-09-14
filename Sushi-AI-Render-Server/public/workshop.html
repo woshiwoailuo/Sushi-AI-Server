@@ -2453,7 +2453,10 @@
     if (!强制 && !是局部改图核心(核心 || 文本)) return 文本;
     if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(文本)) return 文本;
     var 变化 = 局部改变化英文(核心 || 文本);
-    var 锁定 = "Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, and framing as the reference image; do NOT redraw the whole scene, restyle, or invent a new background; the stated local change must stay clearly visible while preserving likeness";
+    var 姿势 = 局部改姿势手势(核心 || 文本);
+    var 锁定 = 姿势
+      ? "Keep the same person identity, face, hairstyle, clothing, and background as the reference; allow pose/gesture/limbs to change as stated; do not invent a new person or background"
+      : "Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, and lighting as the reference image; do NOT invent a new person or background; the stated local change must stay clearly visible while preserving likeness";
     return 变化 + (文本 ? ", " + 文本 : "") + ", " + 锁定;
   }
 
@@ -3875,7 +3878,7 @@
         body: JSON.stringify({
           k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
           width: 尺寸.宽, height: 尺寸.高,
-          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; if (typeof preferLocalEditStrength === "function") return preferLocalEditStrength(base, 核文); if (局部改姿势手势(核文)) { var poseCap = 0.45, poseFloor = 0.35; if (base > poseCap) return poseCap; if (base < poseFloor) return poseFloor; return base; } var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.22 : 0.28; var floor = 0.2; if (base > cap) return cap; if (base < floor) return floor; return base; })(), seed: (function () { var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
+          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; if (typeof preferLocalEditStrength === "function") return preferLocalEditStrength(base, 核文); if (局部改姿势手势(核文)) { var poseCap = 0.55, poseFloor = 0.45; if (base > poseCap) return poseCap; if (base < poseFloor) return poseFloor; return base; } var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.22 : 0.28; var floor = 0.2; if (base > cap) return cap; if (base < floor) return floor; return base; })(), seed: (function () { if (局部改姿势手势(核文)) return undefined; var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
           style: "real"
         })
       }, 95_000);
