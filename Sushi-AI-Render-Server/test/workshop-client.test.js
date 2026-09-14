@@ -1709,6 +1709,65 @@ test('改动 ON ⇒ payload has source_image + denoising in pose band; 核心描
   assert.equal(f.w.document.getElementById('角色描述').value, core, '核心描述不变');
 });
 
+test('no exposure tokens without core; realism default lock; smart-mod off skips modifier pack', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.hasExposureIntent, 'function');
+  assert.equal(typeof f.w.stripExposureBiasDefaults, 'function');
+  assert.equal(f.w.hasExposureIntent('一位虚构成年人穿红毛衣站在雨夜街头'), false);
+  assert.equal(f.w.hasExposureIntent('性感暴露的虚构成年女人'), true);
+  assert.equal(f.w.hasNudeIntent('一位虚构成年人穿红毛衣'), false);
+
+  const core = 'a fictional adult in a red knit sweater standing on a rainy night street holding a black umbrella';
+  const injected = 'a fictional adult, sexy revealing lingerie, cleavage, seductive pose, nude, ' + core;
+  const stripped = f.w.stripExposureBiasDefaults(injected, core);
+  assert.doesNotMatch(stripped, /\bnude\b|\blingerie\b|\bcleavage\b|\bseductive\b|\brevealing\b|\bsexy\b/i);
+  assert.match(stripped, /red knit sweater|black umbrella|rainy/i);
+
+  assert.equal(f.w.hasSmartModifier(), false);
+  const minimal = f.w.minimalOutboundPrompt(core, { core });
+  assert.match(minimal, /photorealistic photograph|natural light/i);
+  assert.match(minimal, /not anime|not cartoon|not 2d/i);
+  assert.doesNotMatch(minimal, /photorealistic RAW photo|natural skin pores|cinematic still/i);
+  assert.doesNotMatch(minimal, /\bnude\b|\bnaked\b|\blingerie\b|\bcleavage\b|\bseductive\b|skimpy/i);
+  assert.doesNotMatch(minimal, /photorealistic photography style, shot on DSLR, 35mm lens, natural skin texture and fabric detail/i);
+
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.document.getElementById('英文描述').value = core;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  const neg = String(payload.prompt || '').split(' ### ')[1] || '';
+  assert.match(pos, /photorealistic photograph|natural light/i);
+  assert.match(pos, /do not invent undressing|revealing outfits/i);
+  assert.doesNotMatch(pos, /\bkeep requested nudity\b|\bNSFW fully allowed\b|\bpreferred when described\b/i);
+  const sceneOnly = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
+  assert.doesNotMatch(sceneOnly, /\bnude\b|\bnaked\b|\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy|revealing/i);
+  assert.doesNotMatch(pos, /photorealistic photography style, shot on DSLR, 35mm lens, natural skin texture and fabric detail/i);
+  assert.match(neg, /lingerie|cleavage|skimpy|nude|naked/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, core);
+});
+
+test('智能修饰 on derives modifiers from core clothing/setting; no random exposure pack', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const core = '雨夜街头穿红毛衣撑黑伞的虚构成年人';
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.智能修饰();
+  assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心不改写');
+  assert.equal(f.w.hasSmartModifier(), true);
+  const mod = f.w.读取智能修饰后缀();
+  assert.match(mod, /knit sweater|umbrella|rainy|street|photoreal|photography|not anime/i);
+  assert.doesNotMatch(mod, /\bnude\b|\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy|revealing/i);
+  const gated = f.w.sanitizeModifierAgainstCore(', sexy lingerie, cleavage, seductive pose, photoreal', core);
+  assert.doesNotMatch(gated, /\bsexy\b|\blingerie\b|\bcleavage\b|\bseductive\b/i);
+});
+
+test('contact email is 163 not qq', () => {
+  assert.match(html, /sjdwukai2@163\.com/);
+  assert.doesNotMatch(html, /sjdwukai2@qq\.com/);
+  assert.match(html, /mailto:sjdwukai2@163\.com/);
+});
+
 test('gallery CSS stacks full images without fixed-height crop', () => {
   assert.match(html, /\.画廊\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
   assert.match(html, /\.画廊 img[\s\S]*?max-height:\s*none/);
