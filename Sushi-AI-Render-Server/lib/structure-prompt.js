@@ -245,11 +245,14 @@ function buildStructureMessages(core, options = {}) {
   const styleHint = options.anime
     ? 'Preserve the user-requested anime/manga illustration style.'
     : 'Do not impose a visual style when the core does not specify one.';
+  const smartHint = options.smart
+    ? ' Smart enhancement is enabled: analyze the core for its subject, action, environment, materials, lighting, mood, and stated style; add concise, compatible detail that improves visual coherence and realism, but never change or override a core fact.'
+    : '';
   const localHint = options.img2img && isLocalEditCore(coreText)
     ? ' This is img2img LOCAL EDIT: fill pose with only the requested local change (raise hand, turn head, smile, slight hair/clothing tweak); extras must keep identity/background/composition/clothing unchanged; appearance/clothing/scene/camera = same as reference; do NOT invent a new scene or redraw the whole image.'
     : '';
   return [
-    { role: 'system', content: STRUCTURE_SYSTEM + ' ' + styleHint + localHint },
+    { role: 'system', content: STRUCTURE_SYSTEM + ' ' + styleHint + smartHint + localHint },
     { role: 'user', content: 'Core description (source of truth. Translate it faithfully, retain every explicit fact, and add only compatible visual detail for a clearer image. Do not replace or contradict any core fact):\n' + coreText },
   ];
 }
