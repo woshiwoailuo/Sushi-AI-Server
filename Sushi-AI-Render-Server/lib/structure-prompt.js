@@ -17,7 +17,8 @@ const STRUCTURE_SYSTEM = [
   'You convert a user scene description into a compact STRUCTURED image prompt.',
   'Reply with ONLY one JSON object (no markdown fences) using these English keys:',
   '{"subject":"","appearance":"","clothing":"","pose":"","scene":"","camera":"","lighting":"","style":"","extras":""}',
-  'Rules: fictional consenting adults 18+ only; no minors; keep adult/NSFW details if the user asked; do NOT invent nudity, undressing, or remove clothing unless the core explicitly describes nude/naked/unclothed/全裸/裸体;',
+  'Rules: FAITHFUL TO CORE — translate and slot ONLY facts present in the core; lead with core facts; do NOT invent clothing, props, pose, identity, background, or setting absent from the core; empty string if unknown;',
+  'fictional consenting adults 18+ only; no minors; keep adult/NSFW details if the user asked; do NOT invent nudity, undressing, or remove clothing unless the core explicitly describes nude/naked/unclothed/全裸/裸体;',
   'prefer photoreal photography wording unless the user explicitly asked for anime/manga/illustration;',
   'PRESERVE ethnicity/race/nationality from the core literally in appearance (e.g. East Asian, Chinese, Korean, Japanese, East Asian facial features);',
   'NEVER invent blonde, caucasian, european, blue eyes, or Western/European beauty defaults unless the user asked;',
@@ -25,6 +26,17 @@ const STRUCTURE_SYSTEM = [
   'keep each value short (under 40 words); empty string if unknown; do not invent a celebrity.',
   'if img2img LOCAL EDIT (short pose/hand/expression/clothing tweak on a reference image), fill pose with only that change; extras must keep identity/background/composition/clothing unchanged; do not invent a new scene.',
 ].join(' ');
+
+/** Outbound lead: models must prioritize core facts over style/filler packs. Visible 核心描述 is never rewritten. */
+const CORE_FIDELITY_LEAD =
+  'Faithful to core description: depict only what the core states; do not invent clothing, props, pose, identity, or setting not in the core; lead with core facts';
+
+function applyCoreFidelityLead(prompt) {
+  let text = String(prompt || '').replace(/\s+/g, ' ').trim();
+  if (!text) return text;
+  if (/faithful to core description/i.test(text)) return text;
+  return (CORE_FIDELITY_LEAD + ', ' + text).replace(/\s{2,}/g, ' ').trim();
+}
 
 /** Outbound-only lock for img2img local edits. Visible 核心描述 is never rewritten. */
 const LOCAL_EDIT_KEEP_REST =
@@ -197,9 +209,10 @@ function heuristicStructureFromText(text, options = {}) {
     style: wantAnime
       ? 'anime illustration'
       : 'photorealistic RAW photo, DSLR',
-    extras: (localEdit ? ((isPoseGestureEdit(cleaned) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST) + ', ') : '') + 'fictional adult 18+ only, no minors',
+    extras: (localEdit ? ((isPoseGestureEdit(cleaned) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST) + ', ') : '') + 'fictional adult 18+ only, no minors; faithful to core, do not invent',
   };
-  return { fields, promptEn: assembleStructuredPrompt(fields) };
+  const promptEn = applyCoreFidelityLead(assembleStructuredPrompt(fields));
+  return { fields, promptEn };
 }
 
 function buildStructureMessages(core, options = {}) {
@@ -212,13 +225,14 @@ function buildStructureMessages(core, options = {}) {
     : '';
   return [
     { role: 'system', content: STRUCTURE_SYSTEM + ' ' + styleHint + localHint },
-    { role: 'user', content: 'Core description (source of truth, do not contradict):\n' + coreText },
+    { role: 'user', content: 'Core description (source of truth; translate faithfully; do not invent or contradict):\n' + coreText },
   ];
 }
 
 module.exports = {
   STRUCTURE_FIELDS,
   STRUCTURE_SYSTEM,
+  CORE_FIDELITY_LEAD,
   LOCAL_EDIT_KEEP_REST,
   LOCAL_EDIT_KEEP_REST_POSE,
   parseStructureJson,
@@ -230,4 +244,5 @@ module.exports = {
   localEditChangeDirective,
   applyLocalEditOutbound,
   preferLocalEditStrength,
+  applyCoreFidelityLead,
 };

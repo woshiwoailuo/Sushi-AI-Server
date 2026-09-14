@@ -10,6 +10,8 @@ const {
   heuristicStructureFromText,
   buildStructureMessages,
   STRUCTURE_SYSTEM,
+  CORE_FIDELITY_LEAD,
+  applyCoreFidelityLead,
   isLocalEditCore,
   applyLocalEditOutbound,
   preferLocalEditStrength,
@@ -49,7 +51,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.67/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.68/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
@@ -64,6 +66,7 @@ test('heuristic preserves East Asian and 全身 framing', () => {
   const msgs = buildStructureMessages('韩国女性全身', { anime: false });
   assert.match(msgs[0].content, /PRESERVE ethnicity|East Asian|NEVER invent blonde/i);
   assert.match(STRUCTURE_SYSTEM, /do NOT invent nudity|unless the core explicitly describes/i);
+  assert.match(STRUCTURE_SYSTEM, /FAITHFUL TO CORE|do NOT invent clothing, props/i);
 });
 
 test('img2img local-edit detection and keep-rest outbound', () => {
@@ -126,4 +129,22 @@ test('force local-edit outbound even when core is not heuristic local-edit', () 
   assert.ok(mildLong >= 0.2 && mildLong <= 0.28, 'mild long local-edit strength, got ' + mildLong);
   const smile = preferLocalEditStrength(0.45, '微笑');
   assert.ok(smile >= 0.2 && smile <= 0.28, 'smile strength, got ' + smile);
+});
+
+
+test('core fidelity lead and heuristic do not invent clothing', () => {
+  assert.match(CORE_FIDELITY_LEAD, /Faithful to core description|do not invent clothing/i);
+  const led = applyCoreFidelityLead('a woman in a red dress on a rainy street');
+  assert.match(led, /Faithful to core description/i);
+  assert.match(led, /red dress|rainy street/i);
+  assert.equal(applyCoreFidelityLead(led), led);
+  const msgs = buildStructureMessages('穿红毛衣的东亚女性侧身站在图书馆窗边', { anime: false });
+  assert.match(msgs[0].content, /FAITHFUL TO CORE|do NOT invent clothing, props/i);
+  assert.match(msgs[1].content, /translate faithfully|do not invent or contradict/i);
+  assert.match(msgs[1].content, /红毛衣|图书馆/);
+  const h = heuristicStructureFromText('穿红毛衣的东亚女性侧身站在图书馆窗边');
+  assert.match(h.promptEn, /Faithful to core description/i);
+  assert.match(h.promptEn, /红毛衣|图书馆|East Asian/i);
+  assert.equal(h.fields.clothing, '');
+  assert.doesNotMatch(h.fields.clothing + h.fields.scene, /bikini|beach|nude/i);
 });

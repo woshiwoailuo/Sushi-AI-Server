@@ -2762,12 +2762,12 @@
       ];
     }
     return [
-      ", photorealistic photography style, shot on DSLR, 35mm lens, full-body front view eye-level facing camera, natural skin texture and fabric detail, natural light, cinematic still, shallow depth of field, true photo look, ethnicity-neutral lighting, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
-      ", documentary photoreal photography, natural lighting, full-body front framing head to toe feet in frame, real skin texture, sharp material detail, shallow depth of field, not anime, not cartoon, fictional adult 18+, no minors",
-      ", cinematic photoreal photograph, 35mm lens, soft side light, full-body front view eye-level, pore-level skin and fabric weave, not anime, not illustration, fictional adult, no minors",
-      ", commercial photoreal photography, soft studio-light look, full-body facing camera head to toe, clear skin and clothing materials, natural depth of field, not cartoon, not 2d art, fictional adult 18+, no minors",
-      ", outdoor natural-light photoreal photography, even ambient light, full figure visible head to toe facing camera, clear facial and hair detail, not illustration, not anime, fictional adult, no minors",
-      ", high-definition photoreal photography, eye-level facing camera, full-body framing head to toe feet in frame, readable materials and light hierarchy, not anime, not manga, fictional adult 18+ only, no minors"
+      ", photorealistic photography style, shot on DSLR, 35mm lens, natural skin texture and fabric detail, natural light, cinematic still, shallow depth of field, true photo look, ethnicity-neutral lighting, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
+      ", documentary photoreal photography, natural lighting, full-body framing head to toe when core allows, real skin texture, sharp material detail, shallow depth of field, not anime, not cartoon, fictional adult 18+, no minors",
+      ", cinematic photoreal photograph, 35mm lens, soft side light, pore-level skin and fabric weave, not anime, not illustration, fictional adult, no minors",
+      ", commercial photoreal photography, soft studio-light look, clear skin and clothing materials, natural depth of field, not cartoon, not 2d art, fictional adult 18+, no minors",
+      ", natural-light photoreal photography, even ambient light, clear facial and hair detail, full-body framing when core allows, not illustration, not anime, fictional adult, no minors",
+      ", high-definition photoreal photography, full-body framing head to toe feet in frame when core allows, readable materials and light hierarchy, not anime, not manga, fictional adult 18+ only, no minors"
     ];
   }
 
@@ -2795,7 +2795,7 @@
       : "photoreal photography modifiers (full-body front view 35mm, lens, lighting, materials, not anime, not close-up)";
     var 问 = "Output ONLY one English modifier phrase to append after the scene description for the image API. No explanation, no quotes, no line breaks.\n"
       + "Style: " + 风格说明 + ".\n"
-      + "Requirements: product-official wording; fictional adult 18+; ethnicity-neutral unless base already states ethnicity; if base mentions East Asian/Chinese/Korean/Japanese, reinforce East Asian facial features and never add blonde/caucasian/european/blue eyes; prefer full-body framing, avoid close-up/half-body unless base asks; do not repeat the base text; do not rewrite the base.\n"
+      + "Requirements: product-official wording; fictional adult 18+; ethnicity-neutral unless base already states ethnicity; if base mentions East Asian/Chinese/Korean/Japanese, reinforce East Asian facial features and never add blonde/caucasian/european/blue eyes; style/lighting/materials only; do NOT contradict clothing, pose, identity, or scene in the base; do NOT invent outfits/props/settings absent from base; prefer full-body framing only when base allows, avoid close-up/half-body unless base asks; do not repeat the base text; do not rewrite the base.\n"
       + "Base: " + 文.slice(0, 280);
     var 通道框 = document.getElementById("AI通道");
     var 模型 = 通道框 && 通道框.value ? 通道框.value : "glm";
@@ -4079,7 +4079,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.67" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.68" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

@@ -18,7 +18,7 @@ const { registerNls } = require('./lib/nls-api');
 const { normalizeChatPayload, collapseRepeatedText, normalizeChatModel, missingChatApiKeyMessage, configuredChatChannels, chatChannelLabel, buildKeyedChatRequest } = require('./lib/chat-response');
 const { categorizeImageFailure, recordImageFailure, snapshotImageFailures } = require('./lib/image-failure-stats');
 const { fetchReuse, fetchLimitedRetry, imageUpstreamQueue } = require('./lib/http-client');
-const { parseStructureJson, assembleStructuredPrompt, heuristicStructureFromText, buildStructureMessages, applyLocalEditOutbound } = require('./lib/structure-prompt');
+const { parseStructureJson, assembleStructuredPrompt, heuristicStructureFromText, buildStructureMessages, applyLocalEditOutbound, applyCoreFidelityLead } = require('./lib/structure-prompt');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -1490,6 +1490,7 @@ app.post('/api/workshop/structure-prompt', async (req, res) => {
         const fields = parseStructureJson(content);
         let promptEn = assembleStructuredPrompt(fields);
         promptEn = applyLocalEditOutbound(promptEn, core, { img2img, force: forceLocalEdit });
+        promptEn = applyCoreFidelityLead(promptEn);
         if (!promptEn) throw new Error('结构化提示词为空');
         return res.status(200).json({
           ok: true,
@@ -1509,6 +1510,7 @@ app.post('/api/workshop/structure-prompt', async (req, res) => {
   }
   const fallback = heuristicStructureFromText(core, { anime, img2img });
   fallback.promptEn = applyLocalEditOutbound(fallback.promptEn, core, { img2img, force: forceLocalEdit });
+  fallback.promptEn = applyCoreFidelityLead(fallback.promptEn);
   if (!fallback.promptEn) {
     return workshopImageError(res, 502, (lastError && lastError.message) || '结构化提示词失败', {
       record: true,
