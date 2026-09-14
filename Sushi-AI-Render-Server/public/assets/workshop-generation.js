@@ -2400,28 +2400,11 @@
     var localEdit = !!(run.localEdit && run.payload && run.payload.sourceImage);
     var smartOn = hasSmartModifier();
     run.enrichPrompt = smartOn;
-    if (engineFamily(engine) === 'anime') {
-      // Honor anime channel wording; still reinject East Asian cues from core when present.
-      prompt = applyEastAsianEthnicity(String(prompt || ''), coreHint);
-      prompt = stripInjectedFemaleDefaults(prompt, coreHint);
-      prompt = applyMaleGenderLocks(prompt, coreHint);
-      prompt = stripExposureBiasDefaults(prompt, coreHint);
-      prompt = applyClothingFidelityLocks(prompt, coreHint);
-      prompt = applyCoreActionCoverage(prompt, coreHint);
-      prompt = applyCoreFidelityLead(prompt);
-      prompt = ensureNoTextOnImage(prompt);
-    } else if (smartOn) {
-      prompt = forcePhotorealPrompt(prompt, { core: coreHint, localEdit: localEdit });
-      prompt = ensureNoTextOnImage(prompt);
-    } else {
-      // 未智能修饰：以核心描述翻译为主，不堆写实修饰词库
-      prompt = minimalOutboundPrompt(prompt, { core: coreHint, localEdit: localEdit });
-    }
-    // Adult/NSFW instructions from core + hidden 成人功能状态 must survive photoreal enrich.
-    prompt = withAdultDirective(prompt, { core: coreHint });
+    // The structured prompt is the detailed interpretation of the core. Do not
+    // rewrite it with automatic ethnicity, gender, clothing, exposure, framing,
+    // action, or style locks before sending it to the image provider.
+    prompt = String(prompt || coreHint).replace(/\s+/g, ' ').trim();
     if (localEdit) prompt = applyLocalEditOutbound(prompt, coreHint, { img2img: true, force: true });
-    // Gender + clothing locks FIRST (re-assert after adult/photoreal so model priors cannot dilute)
-    prompt = finalizeOutboundCoreLocks(prompt, coreHint);
     run.payload.prompt = prompt;
     return runWithProviderBudget(run, engine, function (signal) {
       if (engine === 'perchance') return generatePerchance(run, prompt, index, signal);
