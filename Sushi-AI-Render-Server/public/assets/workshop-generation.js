@@ -326,7 +326,37 @@
   }
 
   var LOCAL_EDIT_KEEP_REST =
-    'IMG2IMG local edit of the REFERENCE IMAGE only: Keep the EXACT same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, framing, and composition as the reference image, do NOT redraw, recompose, restyle, or invent a new scene, apply ONLY the stated local change, leave every other region unchanged, high fidelity identity lock to the reference photo, preserve likeness';
+    'IMG2IMG local edit of the REFERENCE IMAGE only: Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, and framing as the reference image; do NOT redraw the whole scene, restyle, or invent a new background; the stated local change must stay clearly visible while preserving likeness';
+
+  var POSE_GESTURE_RE =
+    /抬起|举起|放下|伸手|举手|挥手|叉腰|转头|回头|侧头|低头|抬头|扭头|侧过脸|抬手|站姿|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|lower(?:s|ed|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|turn(?:s|ed|ing)?\s+(?:(?:the)\s+)?head|look(?:s|ing)?\s+(?:left|right|away)|wave(?:s|d|ing)?\b|hands?\s+on\s+(?:hips|waist)|arms?\s+(?:crossed|raised|up|out)/i;
+
+  function isPoseGestureEdit(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return false;
+    return POSE_GESTURE_RE.test(t);
+  }
+
+  function localEditChangeDirective(core) {
+    var t = String(core || '').replace(/\s+/g, ' ').trim();
+    if (!t) return 'CRITICAL EDIT (must be clearly visible): apply the stated local change so it is obvious';
+    if (/抬起左手|左手抬起|左手举起|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?left\s+(?:hand|arm)/i.test(t)) {
+      return 'CRITICAL EDIT (must be clearly visible): left hand raised high, left arm lifted upward, raised left hand clearly visible';
+    }
+    if (/抬起右手|右手抬起|右手举起|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?right\s+(?:hand|arm)/i.test(t)) {
+      return 'CRITICAL EDIT (must be clearly visible): right hand raised high, right arm lifted upward, raised right hand clearly visible';
+    }
+    if (/举手|抬起|举起|抬手|伸手|挥手|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|arms?\s+(?:raised|up)/i.test(t)) {
+      return 'CRITICAL EDIT (must be clearly visible): hand/arm raised as requested, pose change obvious and limbs clearly different from the reference';
+    }
+    if (/转头|回头|侧头|扭头|侧过脸|低头|抬头|turn(?:s|ed|ing)?\s+(?:(?:the)\s+)?head|look(?:s|ing)?\s+(?:left|right|away)/i.test(t)) {
+      return 'CRITICAL EDIT (must be clearly visible): head turned/oriented as requested, new head direction clearly visible';
+    }
+    if (isPoseGestureEdit(t)) {
+      return 'CRITICAL EDIT (must be clearly visible): apply the requested pose/gesture change strongly so limbs/posture clearly differ from the reference';
+    }
+    return 'CRITICAL EDIT (must be clearly visible): apply the stated local change so it is obvious';
+  }
 
   function isLocalEditCore(text) {
     var t = String(text || '').replace(/\s+/g, ' ').trim();
@@ -349,18 +379,27 @@
     if (!hasRef) return String(promptEn || '');
     if (!opts.force && !isLocalEditCore(core || promptEn)) return String(promptEn || '');
     var t = String(promptEn || '').replace(/\s+/g, ' ').trim();
-    if (/keep the (?:EXACT )?same person identity|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(t)) return t;
-    return (LOCAL_EDIT_KEEP_REST + (t ? ', ' + t : '')).replace(/\s{2,}/g, ' ').trim();
+    if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(t)) return t;
+    var change = localEditChangeDirective(core || t);
+    return (change + (t ? ', ' + t : '') + ', ' + LOCAL_EDIT_KEEP_REST).replace(/\s{2,}/g, ' ').trim();
   }
 
   function preferLocalEditStrength(current, core) {
     var n = Number(current);
     var base = isFinite(n) && n > 0 ? n : 0.45;
     var coreText = String(core || '').replace(/\s+/g, ' ').trim();
+    if (isPoseGestureEdit(coreText)) {
+      // Mid band so limbs/pose actually move (0.15 was too weak for 抬起左手).
+      var poseFloor = 0.35;
+      var poseCap = 0.45;
+      if (base > poseCap) return poseCap;
+      if (base < poseFloor) return poseFloor;
+      return base;
+    }
+    // Tiny color / expression tweaks stay lower.
     var shortEdit = coreText.length > 0 && coreText.length <= 48;
-    // Horde ignores very weak denoise poorly; keep in 0.15–0.25 for local edits.
-    var cap = shortEdit ? 0.15 : 0.22;
-    var floor = 0.15;
+    var cap = shortEdit ? 0.22 : 0.28;
+    var floor = 0.2;
     if (base > cap) return cap;
     if (base < floor) return floor;
     return base;
@@ -2148,6 +2187,8 @@
   window.applyEastAsianEthnicity = applyEastAsianEthnicity;
   window.wantsFullBodyFraming = wantsFullBodyFraming;
   window.isLocalEditCore = isLocalEditCore;
+  window.isPoseGestureEdit = isPoseGestureEdit;
+  window.localEditChangeDirective = localEditChangeDirective;
   window.applyLocalEditOutbound = applyLocalEditOutbound;
   window.preferLocalEditStrength = preferLocalEditStrength;
   window.resolveLocalEditSeed = resolveLocalEditSeed;

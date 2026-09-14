@@ -1203,7 +1203,9 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   assert.equal(f.w.isLocalEditCore('raise left hand'), true);
   assert.equal(f.w.isLocalEditCore('一位东亚中国女性全身站立在雨夜街头'), false);
   assert.equal(f.w.isLocalEditCore('背景换成宁静雪山与晨雾，人物保持原样'), false);
-  assert.equal(f.w.preferLocalEditStrength(0.52, '图中人物抬起左手'), 0.15);
+  assert.ok(f.w.isPoseGestureEdit('图中人物抬起左手'));
+  const poseBand = f.w.preferLocalEditStrength(0.52, '图中人物抬起左手');
+  assert.ok(poseBand >= 0.35 && poseBand <= 0.45, 'pose strength mid-band, got ' + poseBand);
 
   const core = '图中人物抬起左手';
   f.w.document.getElementById('角色描述').value = core;
@@ -1218,13 +1220,13 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   const prompt = String(payload.prompt || '');
   const pos = prompt.split(' ### ')[0];
   const neg = prompt.includes(' ### ') ? prompt.split(' ### ')[1] : String(payload.negativePrompt || '');
-  assert.match(pos, /keep the (?:EXACT )?same person identity/i);
-  assert.match(pos, /apply ONLY the stated local change/i);
-  assert.match(pos, /do NOT redraw|do not redraw|recompose/i);
+  assert.match(pos, /CRITICAL EDIT \(must be clearly visible\).*left hand raised|raised left hand clearly visible/i);
+  assert.match(pos, /keep the (?:EXACT )?same person identity|stated local change must stay clearly visible/i);
+  assert.match(pos, /do NOT redraw|do not redraw|whole scene|invent a new background/i);
   assert.doesNotMatch(pos, /change only the background/i);
   assert.ok(payload.source_image);
   const strength = (payload.params && payload.params.denoising_strength);
-  assert.ok(Number(strength) <= 0.26, 'local edit uses lower denoising strength, got ' + strength);
+  assert.ok(Number(strength) >= 0.35 && Number(strength) <= 0.45, 'pose local edit mid-band strength, got ' + strength);
   assert.match(neg, /different person|identity change|full scene redraw/i);
 });
 
@@ -1237,7 +1239,7 @@ test('img2img local smile/hair still keep rest; t2i 全身+东亚 unchanged', as
   f.w.document.getElementById('出图引擎').value = 'horde-real';
   await f.w.开始生成();
   const smile = String(imagePayload(f.calls).prompt || '').split(' ### ')[0];
-  assert.match(smile, /keep the same person identity|ONLY the stated local change/i);
+  assert.match(smile, /CRITICAL EDIT|keep the same person identity|stated local change must stay clearly visible/i);
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物微笑');
 
   f.w.document.getElementById('参考图地址').value = '';
@@ -1250,7 +1252,7 @@ test('img2img local smile/hair still keep rest; t2i 全身+东亚 unchanged', as
   const pos = String(body.prompt || '').split(' ### ')[0];
   assert.match(pos, /East Asian/i);
   assert.match(pos, /full body|feet in frame/i);
-  assert.doesNotMatch(pos, /apply ONLY the stated local change/i);
+  assert.doesNotMatch(pos, /CRITICAL EDIT \(must be clearly visible\)|apply ONLY the stated local change/i);
 });
 
 test('memory route line and clear-memory-path button; 改动 checkbox vs full regen', async t => {
@@ -1477,10 +1479,15 @@ test('memory route list shows each generation description; per-step clear', asyn
   assert.match(f.w.document.getElementById('记忆生成线路').textContent, /\d+ 步/);
 });
 
-test('local edit strength lower for short core; seed lock from 参考图种子', async t => {
+test('pose local-edit mid strength; mild color lower; seed lock; raised-hand prompt', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  assert.equal(f.w.preferLocalEditStrength(0.52, '抬起左手'), 0.15);
-  assert.equal(f.w.preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景'), 0.22);
+  const pose = f.w.preferLocalEditStrength(0.52, '抬起左手');
+  assert.ok(pose >= 0.35 && pose <= 0.45, 'pose mid-band, got ' + pose);
+  assert.match(f.w.localEditChangeDirective('抬起左手'), /left hand raised high|raised left hand clearly visible/i);
+  const mild = f.w.preferLocalEditStrength(0.52, 'change hair color slightly');
+  assert.ok(mild >= 0.2 && mild <= 0.28, 'mild color low band, got ' + mild);
+  const longPose = f.w.preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景');
+  assert.ok(longPose >= 0.35 && longPose <= 0.45, 'long text with 站姿 uses pose band, got ' + longPose);
   f.w.切换记忆(true);
   f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
   f.w.document.getElementById('参考图地址').value = PNG;
@@ -1494,9 +1501,12 @@ test('local edit strength lower for short core; seed lock from 参考图种子',
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   const strength = body.params && body.params.denoising_strength;
-  assert.ok(Number(strength) <= 0.15, 'short local edit strength, got ' + strength);
+  assert.ok(Number(strength) >= 0.35 && Number(strength) <= 0.45, 'pose local edit strength, got ' + strength);
+  assert.ok(body.source_image, '改动必须带 source_image');
+  assert.equal(body.source_processing, 'img2img');
   assert.equal(String(body.params.seed), '424242');
-  assert.match(String(body.prompt || ''), /EXACT same person identity|ONLY the stated local change|recompose/i);
+  assert.match(String(body.prompt || ''), /CRITICAL EDIT.*left hand raised|raised left hand clearly visible/i);
+  assert.match(String(body.prompt || ''), /same person identity|stated local change must stay clearly visible/i);
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手');
 });
 
@@ -1540,8 +1550,8 @@ test('改动 payload includes source_image from memory step image', async t => {
   const body = imagePayload(f.calls);
   assert.ok(body.source_image, '改动必须带 source_image');
   assert.equal(body.source_processing, 'img2img');
-  assert.ok(Number(body.params.denoising_strength) <= 0.25);
-  assert.ok(Number(body.params.denoising_strength) >= 0.15);
+  assert.ok(Number(body.params.denoising_strength) >= 0.35 && Number(body.params.denoising_strength) <= 0.45, 'pose band, got ' + body.params.denoising_strength);
+  assert.match(String(body.prompt || ''), /left hand raised|raised left hand clearly visible/i);
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手');
 });
 
