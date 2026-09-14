@@ -64,7 +64,7 @@ function preferNsfwModels(models, isAnime, aggressive) {
   if (aggressive && head.length) return head.concat(rest.slice(0, 2));
   return head.concat(rest);
 }
-const REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render';
+const REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render, lowres, blurry, bad anatomy, extra limbs, child, minor, underage, watermark, text';
 
 function stripArtStyleWords(text) {
   return String(text || '')

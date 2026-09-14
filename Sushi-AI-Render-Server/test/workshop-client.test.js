@@ -472,7 +472,8 @@ test('default generation keeps visible core unchanged while enriching the privat
   await f.w.开始生成();
   const payload = imagePayload(f.calls);
   assert.match(payload.prompt, /A fictional adult reading by a library window/i);
-  assert.match(payload.prompt, /^photorealistic RAW photo/i);
+  assert.match(payload.prompt, /photorealistic RAW photo/i);
+  assert.match(payload.prompt, /adult mode enabled/i);
   assert.match(payload.prompt, /not anime, not manga, not cartoon/i);
   assert.equal(f.w.document.getElementById('角色描述').value, beforeCore, '核心描述 must stay user text');
   assert.equal(f.w.document.getElementById('中文译文').value, beforeZh);
@@ -720,7 +721,7 @@ test('adult mode defaults on with no top-bar toggle and no replica confirmation 
   assert.ok(tick);
   assert.equal(tick.checked, true);
   assert.equal(f.w.成人主题已开启, true);
-  assert.match(f.w.document.getElementById('成人功能状态').value, /NSFW allowed/);
+  assert.match(f.w.document.getElementById('成人功能状态').value, /NSFW fully allowed|NSFW allowed/);
   const official = f.w.document.createElement('div');
   official.setAttribute('role', 'dialog');
   official.id = 'fakeOfficialWarn';
@@ -802,12 +803,13 @@ test('memory mode checkmark defaults on; rewritten core description overrides ol
 });
 
 
-test('adult on: outbound prompts keep NSFW tokens and append 成人功能状态 after photoreal enrich', async t => {
+test('adult on: outbound prompts keep NSFW tokens and attach 成人功能状态 with photoreal enrich', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.equal(f.w.成人主题已开启, true);
   assert.equal(typeof f.w.withAdultDirective, 'function');
   const adultField = f.w.document.getElementById('成人功能状态').value;
-  assert.match(adultField, /do not add clothes if described as nude/i);
+  assert.match(adultField, /do not add clothes/i);
+  assert.match(adultField, /NSFW fully allowed/i);
   const nude = 'nude fictional adult woman standing by a rainy window, explicit adult scene';
   const enriched = f.w.forcePhotorealPrompt(nude);
   assert.match(enriched, /nude fictional adult woman/i);
@@ -815,7 +817,8 @@ test('adult on: outbound prompts keep NSFW tokens and append 成人功能状态 
   const outbound = f.w.withAdultDirective(enriched);
   assert.match(outbound, /nude fictional adult woman/i);
   assert.match(outbound, /adult mode enabled/i);
-  assert.match(outbound, /do not add clothes if described as nude/i);
+  assert.match(outbound, /do not add clothes/i);
+  assert.match(outbound, /NSFW fully allowed/i);
   f.w.切换成人对勾(false);
   assert.equal(f.w.withAdultDirective(enriched), enriched);
   f.w.切换成人对勾(true);
@@ -828,7 +831,7 @@ test('adult on: outbound prompts keep NSFW tokens and append 成人功能状态 
   const prompt = String(JSON.parse(posts[0].body).prompt || '');
   assert.match(prompt, /nude fictional adult woman/i);
   assert.match(prompt, /adult mode enabled/i);
-  assert.match(prompt, /NSFW allowed/i);
+  assert.match(prompt, /NSFW fully allowed|NSFW allowed/i);
   assert.doesNotMatch(prompt.split(' ### ')[0], /realistic fabric texture/i);
 });
 
@@ -938,13 +941,43 @@ test('adult off keeps censor_nsfw true and does not use adult censor retry copy'
 test('photoreal default prefers full-body front view unless user asks half-body', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const plain = f.w.forcePhotorealPrompt('fictional adult woman in a park');
-  assert.match(plain, /full-body framing|full figure visible head to toe/i);
+  assert.match(plain, /full body head-to-toe visible|feet in frame|standing full figure/i);
+  assert.match(plain, /not cropped at waist or chest/i);
   assert.match(plain, /front view|facing camera|eye-level/i);
+  // Framing tokens should appear early (near photoreal lead), not only as a weak trailing tag.
+  const leadIdx = plain.toLowerCase().indexOf('photorealistic');
+  const feetIdx = plain.toLowerCase().indexOf('feet in frame');
+  assert.ok(leadIdx >= 0 && feetIdx > leadIdx && feetIdx - leadIdx < 220, 'full-body tokens should be early: ' + plain.slice(0, 260));
   const half = f.w.forcePhotorealPrompt('半身肖像 fictional adult woman close-up portrait');
-  assert.doesNotMatch(half, /full-body framing/i);
+  assert.doesNotMatch(half, /full body head-to-toe visible|feet in frame/i);
   const side = f.w.forcePhotorealPrompt('fictional adult man side view profile');
   assert.match(side, /side view|profile/i);
-  assert.doesNotMatch(side, /facing camera, looking at camera/i);
+  assert.doesNotMatch(side, /front view facing camera/i);
+});
+
+test('workshop negative default is English; adult directive is stronger NSFW scale', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const neg = f.w.document.getElementById('负面提示').value;
+  assert.match(neg, /lowres|bad anatomy|malformed hands/i);
+  assert.doesNotMatch(neg, /低清晰度|错误解剖|畸形手部|未成年人/);
+  const adult = f.w.document.getElementById('成人功能状态').value;
+  assert.match(adult, /NSFW fully allowed/i);
+  assert.match(adult, /keep requested nudity and sexual details visible/i);
+  assert.match(adult, /no minors/i);
+  f.w.document.getElementById('负面提示').value = '';
+  f.w.document.getElementById('角色描述').value = 'a fictional adult woman in a park';
+  f.w.document.getElementById('英文描述').value = 'a fictional adult woman in a park';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const posts = f.calls.filter(isImageSubmit);
+  assert.ok(posts.length >= 1);
+  const body = JSON.parse(posts[0].body);
+  const prompt = String(body.prompt || '');
+  assert.match(prompt, /###/);
+  const negPart = prompt.split(' ### ')[1] || '';
+  assert.match(negPart, /anime|manga|cartoon/i);
+  assert.doesNotMatch(negPart, /[\u4e00-\u9fff]/);
+  assert.match(prompt.split(' ### ')[0], /adult mode enabled|NSFW fully allowed/i);
 });
 
 test('memory tip copy and perch official-site tips are removed; platform tip stays selection-only', async t => {
