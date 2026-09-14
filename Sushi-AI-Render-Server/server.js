@@ -18,7 +18,7 @@ const { registerNls } = require('./lib/nls-api');
 const { normalizeChatPayload, collapseRepeatedText, normalizeChatModel, missingChatApiKeyMessage, configuredChatChannels, chatChannelLabel, buildKeyedChatRequest } = require('./lib/chat-response');
 const { categorizeImageFailure, recordImageFailure, snapshotImageFailures } = require('./lib/image-failure-stats');
 const { fetchReuse, fetchLimitedRetry, imageUpstreamQueue } = require('./lib/http-client');
-const { parseStructureJson, assembleStructuredPrompt, heuristicStructureFromText, buildStructureMessages } = require('./lib/structure-prompt');
+const { parseStructureJson, assembleStructuredPrompt, heuristicStructureFromText, buildStructureMessages, applyLocalEditOutbound } = require('./lib/structure-prompt');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -1430,8 +1430,10 @@ app.post('/api/workshop/structure-prompt', async (req, res) => {
   const core = String((req.body && (req.body.core || req.body.prompt || req.body.text)) || '').trim().slice(0, 2000);
   if (!core) return workshopImageError(res, 400, '核心描述不能为空');
   const anime = !!(req.body && req.body.anime);
+  const img2img = !!(req.body && (req.body.img2img || req.body.hasSourceImage || req.body.sourceImage));
+  const forceLocalEdit = !!(req.body && (req.body.localEdit || req.body.forceLocalEdit));
   const started = Date.now();
-  const messages = buildStructureMessages(core, { anime });
+  const messages = buildStructureMessages(core, { anime, img2img: img2img || forceLocalEdit });
   const preferred = normalizeChatModel((req.body && req.body.model) || 'glm');
   const tryModels = [preferred, 'glm', 'groq', 'gemini', 'openrouter', 'deepseek', 'grok'].filter((v, i, a) => v && a.indexOf(v) === i);
   const keyedCfg = {
@@ -1486,7 +1488,8 @@ app.post('/api/workshop/structure-prompt', async (req, res) => {
           ? normalized.choices[0].message.content
           : '';
         const fields = parseStructureJson(content);
-        const promptEn = assembleStructuredPrompt(fields);
+        let promptEn = assembleStructuredPrompt(fields);
+        promptEn = applyLocalEditOutbound(promptEn, core, { img2img, force: forceLocalEdit });
         if (!promptEn) throw new Error('结构化提示词为空');
         return res.status(200).json({
           ok: true,
@@ -1504,7 +1507,8 @@ app.post('/api/workshop/structure-prompt', async (req, res) => {
       if (error && error.name === 'AbortError') break;
     }
   }
-  const fallback = heuristicStructureFromText(core, { anime });
+  const fallback = heuristicStructureFromText(core, { anime, img2img });
+  fallback.promptEn = applyLocalEditOutbound(fallback.promptEn, core, { img2img, force: forceLocalEdit });
   if (!fallback.promptEn) {
     return workshopImageError(res, 502, (lastError && lastError.message) || '结构化提示词失败', {
       record: true,

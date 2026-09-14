@@ -214,7 +214,7 @@
         credentials: 'include',
         cache: 'no-store',
         headers: authHeaders(),
-        body: JSON.stringify({ core: core, anime: !!anime, model: model, k: workshopTicketId() }),
+        body: JSON.stringify({ core: core, anime: !!anime, model: model, k: workshopTicketId(), img2img: !!(run.payload && run.payload.sourceImage), localEdit: !!run.localEdit }),
         signal: run.controller.signal
       });
       var data = await response.json().catch(function () { return {}; });
@@ -323,6 +323,41 @@
   // Explicit 全身 / full body always wins over model/default half-body bias.
   function wantsFullBodyFraming(text) {
     return /full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in (?:the )?frame|entire body in frame|standing full figure/i.test(String(text || ''));
+  }
+
+  var LOCAL_EDIT_KEEP_REST =
+    'Keep the same person identity, face, hairstyle, body, clothing, background, lighting, camera angle, crop, and composition as the reference image, do not redraw the whole scene, apply ONLY the stated local change, everything else must stay the same, high fidelity to the reference photo';
+
+  function isLocalEditCore(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return false;
+    if (/换背景|改背景|更换背景|只换背景|纯背景|change (?:the )?background|replace (?:the )?background|new scene|全新场景|重画整|整张重绘|redraw (?:the )?(?:whole |entire )?scene|from scratch/i.test(t)) {
+      return false;
+    }
+    var keepCue = /图中|图里|图上|参考图|原图中|保持|只|仅仅|仅将|仅把|不要改|别改|其余不变|其他不变|in the (?:image|picture|photo)|from the reference|keep (?:the )?(?:rest|same|identity|everything)|only (?:change|edit|raise|turn|smile)/i.test(t);
+    var strongAction = /抬起|举起|放下|伸手|举手|挥手|叉腰|转头|回头|侧头|低头|抬头|扭头|侧过脸|微笑|浅笑|闭眼|睁眼|眨眼|张嘴|闭嘴|raise(?:s|d)? (?:(?:the |her |his |their )?(?:left |right )?)?(?:hand|arm)|turn(?:s|ed|ing)? (?:(?:the )?head)|smil(?:e|ing)\b|frown|wink|look(?:s|ing)? (?:left|right|away)|change(?:s|d)? (?:(?:the |her |his )?hair colou?r)|slightly (?:change|adjust)/i.test(t);
+    var mildAction = /换发型|染发|发色|头发颜色|换一件|换衣服|改发型|改发色|hair colou?r|clothing tweak|\bpose\b/i.test(t);
+    var compact = t.length <= 96;
+    if (strongAction && (compact || keepCue)) return true;
+    if (keepCue && mildAction && (compact || t.length <= 180)) return true;
+    return false;
+  }
+
+  function applyLocalEditOutbound(promptEn, core, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var hasRef = !!(opts.img2img || opts.hasSourceImage);
+    if (!hasRef) return String(promptEn || '');
+    if (!opts.force && !isLocalEditCore(core || promptEn)) return String(promptEn || '');
+    var t = String(promptEn || '').replace(/\s+/g, ' ').trim();
+    if (/keep the same person identity|apply ONLY the stated local change|do not redraw the whole scene/i.test(t)) return t;
+    return (LOCAL_EDIT_KEEP_REST + (t ? ', ' + t : '')).replace(/\s{2,}/g, ' ').trim();
+  }
+
+  function preferLocalEditStrength(current) {
+    var n = Number(current);
+    var base = isFinite(n) && n > 0 ? n : 0.45;
+    if (base > 0.35) return 0.32;
+    return base;
   }
 
   function hasExplicitCropFraming(text) {
@@ -475,11 +510,14 @@
       text += ', fictional adult 18+ only, no minors';
     }
     // Merge core cue text so 全身 / 东亚 survive structure-prompt rewrite.
-    var framingSource = (coreHint ? coreHint + ', ' : '') + text;
-    if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
-      text = 'full body head-to-toe visible, feet in frame, ' + text;
+    // Local img2img edits must keep original composition — skip full-body redraw injection.
+    if (!opts.localEdit) {
+      var framingSource = (coreHint ? coreHint + ', ' : '') + text;
+      if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
+        text = 'full body head-to-toe visible, feet in frame, ' + text;
+      }
+      text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
     }
-    text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
     text = applyEastAsianEthnicity(text, coreHint || text);
     return text.replace(/\s{2,}/g, ' ').trim();
   }
@@ -1633,14 +1671,16 @@
     var engine = run.engine;
     if (run.payload.sourceImage && engine === 'sana') throw new Error('Sana 当前未接入图生图，未切换平台。');
     var coreHint = String(run.coreSource || '') || (typeof value === 'function' ? (value('角色描述') || '') : '');
+    var localEdit = !!(run.localEdit && run.payload && run.payload.sourceImage);
     if (engineFamily(engine) === 'anime') {
       // Honor anime channel wording; still reinject East Asian cues from core when present.
       prompt = applyEastAsianEthnicity(String(prompt || ''), coreHint);
     } else {
-      prompt = forcePhotorealPrompt(prompt, { core: coreHint });
+      prompt = forcePhotorealPrompt(prompt, { core: coreHint, localEdit: localEdit });
     }
     // Adult/NSFW instructions from core + hidden 成人功能状态 must survive photoreal enrich.
     prompt = withAdultDirective(prompt);
+    if (localEdit) prompt = applyLocalEditOutbound(prompt, coreHint, { img2img: true, force: true });
     run.payload.prompt = prompt;
     return runWithProviderBudget(run, engine, function (signal) {
       if (engine === 'perchance') return generatePerchance(run, prompt, index, signal);
@@ -1674,7 +1714,9 @@
         } else {
           run.payload.prompt = await promptFor(run);
         }
-        if (run.backgroundOnly && run.payload.sourceImage) {
+        if (run.localEdit && run.payload.sourceImage) {
+          run.payload.prompt = applyLocalEditOutbound(run.payload.prompt, run.coreSource || run.description, { img2img: true, force: !!run.localEdit });
+        } else if (run.backgroundOnly && run.payload.sourceImage) {
           run.payload.prompt = 'Keep the subject and composition of the reference photo, change only the background: ' + run.payload.prompt;
         }
       }
@@ -1762,15 +1804,32 @@
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
     run.coreSource = String(value('角色描述') || description || '');
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);
+    var genMode = typeof window.读取生图方式 === 'function' ? String(window.读取生图方式() || '') : '';
+    var hasRef = !!value('参考图地址');
+    var useRef = typeof window.本轮使用参考图 === 'function' ? !!window.本轮使用参考图() : (hasRef && genMode !== '重新生成');
+    if (genMode === '重新生成') {
+      run.localEdit = false;
+    } else if (genMode === '改动' && useRef) {
+      run.localEdit = true;
+    } else if (typeof window.应用局部改图 === 'function') {
+      run.localEdit = !!window.应用局部改图();
+    } else {
+      run.localEdit = !!(useRef && isLocalEditCore(run.coreSource));
+    }
+    if (run.localEdit) run.backgroundOnly = false;
     if ($('纯背景出图') && $('纯背景出图').checked) {
       run.backgroundOnly = false;
+      run.localEdit = false;
+      useRef = false;
       if (!/no people|no characters|empty scenic/i.test(description)) {
         description = 'empty scenic environment background only, no people, no characters, no humans, no faces, cinematic atmosphere, ' + description;
         run.description = description;
       }
     }
     var dimensions = value('图像比例').split('x');
-    var aspect = preferPortraitAspectForFullBody(
+    var aspect = run.localEdit
+      ? { width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512, nudged: false }
+      : preferPortraitAspectForFullBody(
       Number(dimensions[0]) || 512,
       Number(dimensions[1]) || 512,
       String(value('角色描述') || run.coreSource || description || '')
@@ -1810,11 +1869,16 @@
         negative += ', cropped at waist, cropped legs, cut off feet, cut off head, close-up portrait, half-body shot, upper body only, waist-up crop';
       }
     }
+    if (run.localEdit && !/different person|identity change|full scene redraw/i.test(negative)) {
+      negative += ', different person, different face, different clothes, new background, full scene redraw, identity change';
+    }
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
       negativePrompt: negative, seed: value('随机种子'), cfgScale: Number(value('引导强度')) || 7,
-      sourceImage: value('参考图地址'), strength: Number(value('图生图强度')) || 0.45
+      sourceImage: useRef ? value('参考图地址') : '', strength: Number(value('图生图强度')) || 0.45
     };
+    if (run.localEdit) run.payload.strength = preferLocalEditStrength(run.payload.strength);
+    try { if (typeof window.刷新记忆生成线路 === 'function') window.刷新记忆生成线路(); } catch (eLine) {}
     active = run; controls(true);
     $('图像输出').replaceChildren(); $('官方画廊').replaceChildren(); $('官方画廊').hidden = true;
     window.设平台提示(resolveEngine());
@@ -1872,6 +1936,9 @@
   window.hasEastAsianCue = hasEastAsianCue;
   window.applyEastAsianEthnicity = applyEastAsianEthnicity;
   window.wantsFullBodyFraming = wantsFullBodyFraming;
+  window.isLocalEditCore = isLocalEditCore;
+  window.applyLocalEditOutbound = applyLocalEditOutbound;
+  window.preferLocalEditStrength = preferLocalEditStrength;
   window.preferPortraitAspectForFullBody = preferPortraitAspectForFullBody;
   window.hasExplicitCropFraming = hasExplicitCropFraming;
   window.applyRealisticFrontFullBody = applyRealisticFrontFullBody;
@@ -1890,6 +1957,7 @@
     var tip = $('平台提示');
     if (!tip) return;
     tip.textContent = engineLabel(engine) + ' · 按所选通道 · 失败不更换平台';
+    try { if (typeof window.刷新记忆生成线路 === 'function') window.刷新记忆生成线路(); } catch (eTip) {}
   };
 
   async function init() {

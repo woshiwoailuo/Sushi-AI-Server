@@ -85,6 +85,22 @@
           <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
           <span>记忆模式</span>
         </label>
+        <div id="记忆线路区" class="记忆线路区">
+          <p id="记忆生成线路" class="记忆生成线路" role="status">记忆线路：加载中…</p>
+          <div class="记忆线路操作" role="group" aria-label="生图方式与清除记忆">
+            <div class="生图方式行" role="radiogroup" aria-label="改动或重新生成">
+              <label class="生图方式项">
+                <input type="radio" name="生图方式" id="生图方式改动" value="改动" onchange="切换生图方式('改动')">
+                <span>改动</span>
+              </label>
+              <label class="生图方式项">
+                <input type="radio" name="生图方式" id="生图方式重新生成" value="重新生成" onchange="切换生图方式('重新生成')">
+                <span>重新生成</span>
+              </label>
+            </div>
+            <button type="button" class="次按钮 清除本记忆钮" id="清除本记忆按钮" onclick="清除本记忆()">清除本记忆</button>
+          </div>
+        </div>
         <div class="核心操作">
 
           <button
@@ -608,6 +624,8 @@
     载入对话();
     载入记忆摘要();
     载入记忆模式();
+    同步生图方式默认(false);
+    刷新记忆生成线路();
     var 核框 = document.getElementById("角色描述");
     if (核框) {
       核框.addEventListener("input", function () {
@@ -1238,13 +1256,19 @@
     if (!核心 && !记忆摘要) 文 += "不要突然改成英文。";
     return 文;
   }
-  /** 出图：最新核心描述为主；记忆开时把短摘要作补充（不覆盖核心） */
+  /** 出图：最新核心描述为主；重新生成且记忆开时把短摘要作补充（不覆盖可见核心） */
   function 组装出图描述含记忆() {
     var 核心 = 读取当前核心描述();
     var 英文 = ((document.getElementById("英文描述") || {}).value || "").trim();
     var 基 = 核心 || 英文;
     if (!基) return "";
-    // 出图只送画面描述本身；记忆补充仅用于对话系统提示，不把助手元指令拼进生图平台。
+    // 改动走参考图局部改，不把记忆摘要拼进生图；重新生成才用记忆作补充。
+    if (记忆已开() && 记忆摘要 && 读取生图方式() === "重新生成") {
+      var 补 = String(记忆摘要).replace(/\s+/g, " ").trim().slice(-240);
+      if (补 && 基.indexOf(补.slice(0, Math.min(24, 补.length))) === -1) {
+        基 = 基 + "，" + 补;
+      }
+    }
     return 基;
   }
   window.读取当前核心描述 = 读取当前核心描述;
@@ -1263,8 +1287,96 @@
       else if (记忆模式值() === "off") localStorage.setItem(记忆模式键(), "long");
     } catch (e) {}
     载入记忆模式();
+    刷新记忆生成线路();
   }
   window.切换记忆 = 切换记忆;
+
+  var 生图方式用户自选 = false;
+  function 默认生图方式() {
+    return 有参考图() ? "改动" : "重新生成";
+  }
+  function 读取生图方式() {
+    // 用户未自选时，始终按「有参考图→改动 / 否则重新生成」即时默认，避免只改参考图字段却仍停在旧单选。
+    if (!生图方式用户自选) return 默认生图方式();
+    var 改 = document.getElementById("生图方式改动");
+    var 重 = document.getElementById("生图方式重新生成");
+    if (改 && 改.checked) return "改动";
+    if (重 && 重.checked) return "重新生成";
+    return 默认生图方式();
+  }
+  function 写入生图方式单选(值) {
+    var 改 = document.getElementById("生图方式改动");
+    var 重 = document.getElementById("生图方式重新生成");
+    var v = 值 === "改动" ? "改动" : "重新生成";
+    if (改) 改.checked = v === "改动";
+    if (重) 重.checked = v === "重新生成";
+  }
+  function 同步生图方式默认(强制) {
+    if (!强制 && 生图方式用户自选) {
+      刷新记忆生成线路();
+      return 读取生图方式();
+    }
+    var 值 = 默认生图方式();
+    写入生图方式单选(值);
+    刷新记忆生成线路();
+    return 值;
+  }
+  function 切换生图方式(值) {
+    生图方式用户自选 = true;
+    写入生图方式单选(值 === "改动" ? "改动" : "重新生成");
+    刷新记忆生成线路();
+  }
+  function 本轮使用参考图() {
+    if (!有参考图()) return false;
+    return 读取生图方式() !== "重新生成";
+  }
+  function 应用局部改图() {
+    if (!本轮使用参考图()) return false;
+    if (读取生图方式() === "改动") return true;
+    try {
+      return 是局部改图核心(读取当前核心描述());
+    } catch (e) {
+      return false;
+    }
+  }
+  function 当前平台线路名() {
+    var 引擎 = "";
+    try {
+      if (本轮使用参考图()) {
+        引擎 = (typeof 用户选定图生图平台 !== "undefined" && 用户选定图生图平台) || ((document.getElementById("图生图平台") || {}).value) || "";
+      }
+      if (!引擎) 引擎 = (typeof 当前引擎 === "function" ? 当前引擎() : "") || ((document.getElementById("出图引擎") || {}).value) || "perchance";
+    } catch (e) {
+      引擎 = ((document.getElementById("出图引擎") || {}).value) || "perchance";
+    }
+    return typeof 引擎名称 === "function" ? 引擎名称(引擎) : String(引擎 || "Perchance");
+  }
+  function 刷新记忆生成线路() {
+    var 行 = document.getElementById("记忆生成线路");
+    if (!行) return;
+    var 方式 = 读取生图方式();
+    if (!生图方式用户自选) 写入生图方式单选(方式);
+    var 记忆段 = 记忆已开() ? "记忆续生" : "记忆关闭·直出";
+    var 平台 = 当前平台线路名();
+    var 参考 = 有参考图() ? (本轮使用参考图() ? "带参考图" : "有参考图·本轮忽略") : "无参考图";
+    行.textContent = "记忆线路：" + 记忆段 + " · " + 平台 + " · " + 参考 + " · " + 方式;
+  }
+  function 清除本记忆() {
+    if (!window.confirm("清除本角色当前记忆（对话与摘要）？不影响记忆开关与其它数据。")) return;
+    对话历史 = [];
+    try { 对话抢出通道 = ""; } catch (e0) {}
+    写记忆摘要("");
+    保存对话历史();
+    try { 渲染对话(); } catch (e1) {}
+    刷新记忆生成线路();
+  }
+  window.读取生图方式 = 读取生图方式;
+  window.切换生图方式 = 切换生图方式;
+  window.同步生图方式默认 = 同步生图方式默认;
+  window.本轮使用参考图 = 本轮使用参考图;
+  window.应用局部改图 = 应用局部改图;
+  window.刷新记忆生成线路 = 刷新记忆生成线路;
+  window.清除本记忆 = 清除本记忆;
   function 记忆模式值() {
     try {
       var v = localStorage.getItem(记忆模式键()) || "long";
@@ -1285,6 +1397,7 @@
       localStorage.setItem(记忆开键(), 值 === "off" ? "0" : "1");
     } catch (e) {}
     载入记忆开关();
+    刷新记忆生成线路();
   }
   function 载入记忆摘要() {
     记忆摘要 = "";
@@ -1907,8 +2020,11 @@
     var 源 = 核 + " " + 文;
     var 要全身 = /full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in (?:the )?frame|entire body in frame|standing full figure/i.test(源);
     var 要半身 = !要全身 && /半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上|(?:close[\s-]?up|head|bust|waist[\s-]?up|upper[\s-]?body|half[\s-]?body)\s+portrait|portrait\s+(?:shot|close|crop|headshot)/i.test(文);
+    var 局部改 = false;
+    try { 局部改 = typeof 应用局部改图 === "function" ? 应用局部改图() : (有参考图() && 是局部改图核心(核)); } catch (eLoc) { 局部改 = false; }
     // 写实默认全身正面（强优先靠前）；用户写半身/特写/侧脸等则尊重原文；裸 portrait 摄影词不挡全身
-    if (!要半身) {
+    // 图生图局部改（抬手/转头/微笑等）保持原构图，不注入全身重绘。
+    if (!要半身 && !局部改) {
       var 全身片 = [];
       if (要全身) {
         全身片.push("full body head-to-toe visible", "feet in frame", "head and feet both visible", "standing full figure", "entire body in frame", "wide FOV full-body shot", "wide enough field of view", "complete figure from crown to shoes", "uncropped standing full figure", "space above head and below feet", "subject fills vertical frame from head to toe", "not cropped at waist or chest", "not a close-up", "not a half-body portrait", "no waist crop");
@@ -1951,8 +2067,32 @@
     return 文.replace(/\s{2,}/g, " ").trim();
   }
 
+  function 是局部改图核心(文) {
+    var t = String(文 || "").replace(/\s+/g, " ").trim();
+    if (!t) return false;
+    if (/换背景|改背景|更换背景|只换背景|纯背景|change (?:the )?background|replace (?:the )?background|new scene|全新场景|重画整|整张重绘|redraw (?:the )?(?:whole |entire )?scene|from scratch/i.test(t)) return false;
+    var keepCue = /图中|图里|图上|参考图|原图中|保持|只|仅仅|仅将|仅把|不要改|别改|其余不变|其他不变|in the (?:image|picture|photo)|from the reference|keep (?:the )?(?:rest|same|identity|everything)|only (?:change|edit|raise|turn|smile)/i.test(t);
+    var strongAction = /抬起|举起|放下|伸手|举手|挥手|叉腰|转头|回头|侧头|低头|抬头|扭头|侧过脸|微笑|浅笑|闭眼|睁眼|眨眼|张嘴|闭嘴|raise(?:s|d)? (?:(?:the |her |his |their )?(?:left |right )?)?(?:hand|arm)|turn(?:s|ed|ing)? (?:(?:the )?head)|smil(?:e|ing)\b|frown|wink|look(?:s|ing)? (?:left|right|away)|change(?:s|d)? (?:(?:the |her |his )?hair colou?r)|slightly (?:change|adjust)/i.test(t);
+    var mildAction = /换发型|染发|发色|头发颜色|换一件|换衣服|改发型|改发色|hair colou?r|clothing tweak|\bpose\b/i.test(t);
+    var compact = t.length <= 96;
+    if (strongAction && (compact || keepCue)) return true;
+    if (keepCue && mildAction && (compact || t.length <= 180)) return true;
+    return false;
+  }
+
+  function 补局部改图英文(英文, 核心) {
+    var 文本 = String(英文 || "").trim();
+    var 强制 = false;
+    try { 强制 = 读取生图方式() === "改动" && 本轮使用参考图(); } catch (eForce) { 强制 = false; }
+    if (!强制 && !是局部改图核心(核心 || 文本)) return 文本;
+    if (/keep the same person identity|apply ONLY the stated local change|do not redraw the whole scene/i.test(文本)) return 文本;
+    return "Keep the same person identity, face, hairstyle, body, clothing, background, lighting, camera angle, crop, and composition as the reference image, do not redraw the whole scene, apply ONLY the stated local change, everything else must stay the same, high fidelity to the reference photo" + (文本 ? ", " + 文本 : "");
+  }
+
   function 补换背景英文(英文) {
     var 文本 = String(英文 || "").trim();
+    var 核 = ((document.getElementById("角色描述") || {}).value || "");
+    if (typeof 应用局部改图 === "function" ? 应用局部改图() : (有参考图() && 是局部改图核心(核))) return 补局部改图英文(文本, 核);
     if (!正在换背景()) return 文本;
     var 锁定 =
       "use the reference photo as the base, keep the exact same person, same face, same hair, same body shape, same clothing, same pose, same crop and camera angle, do not redraw the subject, only replace the background scene, seamless foreground edge against the new background, " +
@@ -2029,6 +2169,7 @@
       压缩参考图(原始, function (结果) {
         地址.value = 结果;
         预览参考图();
+        同步生图方式默认(false);
         设图生图状态(成功文案 || "参考图已就绪，可以直接生成。");
       });
     };
@@ -2069,6 +2210,7 @@
     if (地址) 地址.value = "";
     if (文件框) 文件框.value = "";
     预览参考图();
+    同步生图方式默认(false);
     设图生图状态("已清除参考图，将按文生图。");
   }
 
@@ -2387,9 +2529,12 @@
     var 核 = document.getElementById("角色描述");
     var 安 = document.getElementById("安全英文");
     var 文 = "";
-    if (有参考图()) {
+    if (typeof 本轮使用参考图 === "function" ? 本轮使用参考图() : 有参考图()) {
       var 参考描述 = (英 && 英.value) || (核 && 核.value) || "replace the background with a natural cinematic scene";
-      文 = 补换背景英文(只留英文(去掉方括号(参考描述)));
+      var 核文 = (核 && 核.value) || "";
+      文 = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文))
+        ? 补局部改图英文(只留英文(去掉方括号(参考描述)), 核文)
+        : 补换背景英文(只留英文(去掉方括号(参考描述)));
     } else {
       文 = 只留英文(去掉方括号((英 && 英.value) || ""));
       if (!文) {
@@ -3340,8 +3485,10 @@
     var 种子框 = document.getElementById("随机种子");
     var 强度框 = document.getElementById("图生图强度");
     var 英文 = String((document.getElementById("安全英文") || {}).value || "").trim();
+    var 核文 = String((document.getElementById("角色描述") || {}).value || "").trim();
     var 原图 = String((地址框 && 地址框.value) || "").trim();
     if (!原图) return 显示全部失败();
+    if (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) 英文 = 补局部改图英文(英文, 核文);
     输出区.innerHTML = "";
     状态区.style.display = "flex";
     状态区.innerHTML = '<div class="加载动画"></div><b>正在进行图生图</b><p>参考图正在提交到备用图生图服务器，请稍候。</p>';
@@ -3358,7 +3505,7 @@
         body: JSON.stringify({
           k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
           width: 尺寸.宽, height: 尺寸.高,
-          strength: Number((强度框 && 强度框.value) || 0.52), seed: 基础种子 + 序号 * 97,
+          strength: ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number((强度框 && 强度框.value) || 0.52) > 0.35) ? 0.32 : Number((强度框 && 强度框.value) || 0.52), seed: 基础种子 + 序号 * 97,
           style: "real"
         })
       }, 95_000);
@@ -3477,6 +3624,7 @@
     if (!行) return;
     if (!引擎) 行.textContent = "生图平台：Perchance · 按所选通道";
     else 行.textContent = "生图平台：" + 引擎名称(引擎) + " · 按所选通道";
+    try { 刷新记忆生成线路(); } catch (eTip) {}
   }
 
   function 按指定引擎出图(引擎) {
@@ -3536,7 +3684,7 @@
     }
     var 选引擎 = 当前引擎() || "perchance";
     if (选引擎 === "官方" || 选引擎 === "perch") 选引擎 = "perchance";
-    if (有参考图()) {
+    if (typeof 本轮使用参考图 === "function" ? 本轮使用参考图() : 有参考图()) {
       本轮抢出 = false;
       设平台提示(用户选定图生图平台 || 选引擎);
       用图生图出图();
@@ -3558,7 +3706,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.57" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.59" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4027,6 +4175,50 @@
     border-radius: 10px;
   }
 
+  .记忆线路区 {
+    margin: -4px 0 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--边框);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .记忆生成线路 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--淡色);
+    word-break: break-word;
+  }
+  .记忆线路操作 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .生图方式行 {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .生图方式项 {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .生图方式项 input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--绿色);
+  }
+  .清除本记忆钮 {
+    min-height: 28px;
+    padding: 4px 10px;
+    font-size: 11px;
+  }
   .换背景行 {
     display: flex;
     align-items: center;

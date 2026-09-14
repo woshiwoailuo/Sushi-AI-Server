@@ -9,6 +9,9 @@ const {
   assembleStructuredPrompt,
   heuristicStructureFromText,
   buildStructureMessages,
+  isLocalEditCore,
+  applyLocalEditOutbound,
+  preferLocalEditStrength,
 } = require('../lib/structure-prompt');
 
 test('parseStructureJson accepts fenced JSON and assembles compact English', () => {
@@ -43,7 +46,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.57/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.59/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
@@ -57,4 +60,51 @@ test('heuristic preserves East Asian and 全身 framing', () => {
   assert.match(east.promptEn, /East Asian/i);
   const msgs = buildStructureMessages('韩国女性全身', { anime: false });
   assert.match(msgs[0].content, /PRESERVE ethnicity|East Asian|NEVER invent blonde/i);
+});
+
+test('img2img local-edit detection and keep-rest outbound', () => {
+  assert.equal(isLocalEditCore('图中人物抬起左手'), true);
+  assert.equal(isLocalEditCore('抬起左手'), true);
+  assert.equal(isLocalEditCore('转头微笑'), true);
+  assert.equal(isLocalEditCore('change hair color slightly'), true);
+  assert.equal(isLocalEditCore('raise left hand'), true);
+  assert.equal(isLocalEditCore('turn head'), true);
+  assert.equal(isLocalEditCore('一位东亚中国女性全身站立在雨夜街头'), false);
+  assert.equal(isLocalEditCore('背景换成宁静雪山与晨雾，人物保持原样'), false);
+  assert.equal(isLocalEditCore('左手拿着杯子站在窗边的东亚女性全身'), false);
+
+  const none = applyLocalEditOutbound('raise left hand', '图中人物抬起左手', {});
+  assert.equal(none, 'raise left hand');
+
+  const out = applyLocalEditOutbound('raise the left hand', '图中人物抬起左手', { img2img: true });
+  assert.match(out, /keep the same person identity/i);
+  assert.match(out, /apply ONLY the stated local change/i);
+  assert.match(out, /do not redraw the whole scene/i);
+  assert.match(out, /same clothing|same background|composition/i);
+  const again = applyLocalEditOutbound(out, '图中人物抬起左手', { img2img: true });
+  assert.equal(again, out);
+
+  const h = heuristicStructureFromText('图中人物抬起左手', { img2img: true });
+  assert.match(h.promptEn, /keep the same person identity|same clothing as the reference|ONLY the stated local change/i);
+  assert.match(h.fields.pose, /抬起左手|图中人物/);
+  const eastFull = heuristicStructureFromText('一位东亚中国女性全身站立在雨夜街头');
+  assert.match(eastFull.fields.appearance, /East Asian/i);
+  assert.match(eastFull.fields.pose, /full body|feet in frame/i);
+
+  const msgs = buildStructureMessages('图中人物抬起左手', { img2img: true });
+  assert.match(msgs[0].content, /LOCAL EDIT|keep identity|same as reference/i);
+  assert.match(msgs[1].content, /图中人物抬起左手/);
+
+  assert.equal(preferLocalEditStrength(0.52), 0.32);
+  assert.equal(preferLocalEditStrength(0.68), 0.32);
+  assert.equal(preferLocalEditStrength(0.28), 0.28);
+});
+
+test('force local-edit outbound even when core is not heuristic local-edit', () => {
+  const prompt = applyLocalEditOutbound('a woman in a red dress on a rainy street', '一位穿红裙的女性站在雨夜街头', { img2img: true, force: true });
+  assert.match(prompt, /Keep the same person identity/i);
+  assert.match(prompt, /red dress|rainy street/i);
+  const skipped = applyLocalEditOutbound('a woman in a red dress', '一位穿红裙的女性', { img2img: true });
+  assert.doesNotMatch(skipped, /Keep the same person identity/i);
+  assert.equal(preferLocalEditStrength(0.45), 0.32);
 });
