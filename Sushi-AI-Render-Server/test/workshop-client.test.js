@@ -73,6 +73,15 @@ async function setup(t, handler, imageFails = false) {
         };
       }
     }
+    if (href.includes('/api/workshop/structure-prompt')) {
+      const result = await handler(url, options, calls);
+      let data = {};
+      try { data = await result.json(); } catch (e) { data = {}; }
+      if (data && data.promptEn) return response(data, result.status || 200);
+      if (result.status === 503 || (data && data.error && !data.id)) return result;
+      return response({ error: 'structure unavailable in unit test' }, 503);
+    }
+    if (href.includes('/api/image-failure-stats')) return response({ ok: true, counts: {} });
     if (href.includes('/api/images/config')) return response({ perchanceUrl: 'https://perchance.org/ai-text-to-image-generator' });
     if (href.includes('/api/images/current')) return response({ job: null });
     if (href.includes('aihorde.net')) {
@@ -123,6 +132,28 @@ async function setup(t, handler, imageFails = false) {
   return { w, calls, errors, text: () => w.document.getElementById('状态提示').textContent };
 }
 
+test('structure-prompt success feeds compact English without overwriting 核心描述', async t => {
+  const f = await setup(t, (url, options) => {
+    const href = String(url);
+    if (href.includes('/api/workshop/structure-prompt')) {
+      return response({
+        ok: true,
+        source: 'chat',
+        promptEn: 'fictional adult woman, black hair, red dress, rainy street, 50mm, neon light, photoreal',
+        fields: { subject: 'fictional adult woman', clothing: 'red dress' }
+      });
+    }
+    return response(options.method === 'POST' ? job() : job('done'));
+  });
+  const coreBefore = '一位虚构成年女性穿红裙站在雨夜街头';
+  f.w.document.getElementById('角色描述').value = coreBefore;
+  await f.w.开始生成();
+  assert.equal(f.w.document.getElementById('角色描述').value, coreBefore, '核心描述 stays source of truth');
+  const payload = imagePayload(f.calls);
+  assert.match(payload.prompt, /red dress|rainy street|photoreal/i);
+  assert.doesNotMatch(payload.prompt, /一位虚构/);
+});
+
 test('the actual workshop initializes without Perchance runtime and generates only once on double click', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.ok(f.w.document.querySelector('#出图引擎 option[value="perchance"]'), 'perchance remains the only image channel');
@@ -152,9 +183,13 @@ test('submission errors are visible and exit loading state', async t => {
 test('cancel during submission waits for its id, deletes it, and never displays its late result', async t => {
   let release;
   const pending = new Promise(resolve => { release = resolve; });
-  const f = await setup(t, (url, options) => options.method === 'POST' ? pending : response(job('cancelled')));
+  const f = await setup(t, (url, options) => {
+    const href = String(url);
+    if (/structure-prompt|image-failure-stats/.test(href)) return response({ error: 'skip' }, 503);
+    return options.method === 'POST' ? pending : response(job('cancelled'));
+  });
   const running = f.w.开始生成();
-  await until(() => f.calls.some(c => c.method === 'POST'), 'submission');
+  await until(() => f.calls.some(isImageSubmit), 'image submission');
   f.w.取消生成();
   assert.equal(f.w.document.querySelector('#状态提示 .加载动画'), null);
   release(response(job()));

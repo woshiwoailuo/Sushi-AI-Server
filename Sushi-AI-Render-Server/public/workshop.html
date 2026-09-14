@@ -2785,6 +2785,17 @@
     结束本次生成("生成角色图片", false);
   }
 
+
+  var __sushiHistFull = Object.create(null);
+
+  function 历史缩略(地址, 回) {
+    if (typeof window.makeThumbnailDataUrl === 'function') {
+      window.makeThumbnailDataUrl(地址, 220, 0.65).then(function (t) { 回(t || ''); });
+      return;
+    }
+    回('');
+  }
+
   var 历史键 = "角色生成器_生成历史";
 
   function 空列表() {
@@ -2805,27 +2816,54 @@
     try {
       var 裁 = 空列表();
       var i = 0;
-      for (i = 0; i < 列表.length && i < 6; i++) 裁.push(列表[i]);
+      for (i = 0; i < 列表.length && i < 6; i++) {
+        var 源 = 列表[i] || {};
+        var 项 = new Object();
+        项.id = 源.id || ("h" + 源.t + "_" + i);
+        项.t = 源.t || Date.now();
+        项.thumb = 源.thumb || "";
+        // 只缓存缩略图与可重新拉取的 http 原图地址；不把巨大 dataURL 写入 localStorage。
+        if (源.u && String(源.u).indexOf("http") === 0) 项.u = 源.u;
+        else 项.u = "";
+        if (源.u && String(源.u).indexOf("data:image") === 0) __sushiHistFull[项.id] = 源.u;
+        裁.push(项);
+      }
       localStorage.setItem(历史键, JSON.stringify(裁));
     } catch (e) {}
   }
 
-  function 收入历史(地址) {
+  function 收入历史(地址, 缩略图) {
     if (!地址) return;
     if (地址.indexOf("http") !== 0 && 地址.indexOf("data:image") !== 0) return;
     var 旧 = 读取生成历史();
     var 列表 = 空列表();
     var i = 0;
+    var id = "h" + Date.now() + "_" + Math.floor(Math.random() * 10000);
     for (i = 0; i < 旧.length; i++) {
-      if (旧[i] && 旧[i].u !== 地址) 列表.push(旧[i]);
+      if (旧[i] && ((旧[i].u && 旧[i].u === 地址) || (旧[i].id && __sushiHistFull[旧[i].id] === 地址))) continue;
+      列表.push(旧[i]);
     }
     var 项 = new Object();
-    项.u = 地址;
+    项.id = id;
     项.t = Date.now();
+    项.thumb = 缩略图 || "";
+    if (地址.indexOf("http") === 0) 项.u = 地址;
+    else {
+      项.u = "";
+      __sushiHistFull[id] = 地址;
+    }
     列表.unshift(项);
     保存生成历史(列表);
     var 板 = document.getElementById("历史面板");
     if (板 && !板.hasAttribute("hidden")) 刷新历史面板();
+    if (!缩略图) {
+      历史缩略(地址, function (t) {
+        if (!t) return;
+        项.thumb = t;
+        保存生成历史(列表);
+        if (板 && !板.hasAttribute("hidden")) 刷新历史面板();
+      });
+    }
   }
 
   function 开关生成历史() {
@@ -2848,18 +2886,27 @@
     for (i = 0; i < 全部.length; i++) {
       if (i === 序号) 项 = 全部[i];
     }
-    if (!项 || !项.u) {
+    var 原 = 历史原图地址(项);
+    if (!项 || !原) {
       alert("这张图已经失效。");
       return;
     }
     var a = document.createElement("a");
-    a.href = 项.u;
+    a.href = 原;
     a.download = "角色图.jpg";
     a.target = "_blank";
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
     a.remove();
+  }
+
+  function 历史原图地址(项) {
+    if (!项) return "";
+    if (项.id && __sushiHistFull[项.id]) return __sushiHistFull[项.id];
+    if (项.u && String(项.u).indexOf("http") === 0) return 项.u;
+    if (项.u && String(项.u).indexOf("data:image") === 0) return 项.u;
+    return 项.thumb || "";
   }
 
   function 刷新历史面板() {
@@ -2880,20 +2927,44 @@
       var 卡 = document.createElement("div");
       卡.className = "历史卡片";
       var 图 = document.createElement("img");
-      图.alt = "历史图";
+      图.alt = "历史缩略图";
+      图.decoding = "async";
       var 钮 = document.createElement("button");
       钮.type = "button";
       钮.className = "次按钮";
       钮.textContent = "下载";
-      钮.addEventListener("click", function () { 下载历史图片(号); });
+      钮.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        下载历史图片(号);
+      });
       卡.appendChild(图);
       卡.appendChild(钮);
+      卡.addEventListener("click", function () {
+        var full = 历史原图地址(项);
+        if (!full) {
+          alert("原图未缓存，请重新生成后再查看。");
+          return;
+        }
+        if (typeof window.打开图片预览 === "function") window.打开图片预览(full, 图);
+        else window.open(full, "_blank");
+      });
       区.appendChild(卡);
       var 下一步 = function () { 加一张(号 + 1); };
       图.addEventListener("load", 下一步);
       图.addEventListener("error", 下一步);
-      if (项 && 项.u) 图.src = 项.u;
-      else 下一步();
+      // 历史画廊只加载缩略图；原图在点击预览时再取。
+      if (项 && 项.thumb) 图.src = 项.thumb;
+      else if (项 && 项.u && String(项.u).indexOf("http") === 0) {
+        历史缩略(项.u, function (t) {
+          if (t) {
+            项.thumb = t;
+            保存生成历史(列表);
+            图.src = t;
+          } else {
+            图.src = 项.u;
+          }
+        });
+      } else 下一步();
     }
     加一张(0);
   }
@@ -3507,7 +3578,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.53" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.54" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4346,6 +4417,24 @@
     font-size: 13px;
   }
 
+  .生图卡片.加载中::before {
+    content: "";
+    display: block;
+    width: 28px;
+    height: 28px;
+    margin: 18px auto 8px;
+    border: 3px solid rgba(255,255,255,.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: 旋转 0.8s linear infinite;
+  }
+  .生图卡片 .生图进度 {
+    display: block;
+    padding: 8px 10px 14px;
+    color: rgba(255,255,255,.82);
+    font-size: 13px;
+    text-align: center;
+  }
   .生图卡片 .生图重试 {
     margin: 8px 12px 12px;
   }
