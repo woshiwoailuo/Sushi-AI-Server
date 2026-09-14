@@ -1270,8 +1270,15 @@
 
     enableProviderPickers();
 
-    var description = value('角色描述') || value('英文描述');
+    // 记忆开且核心已改写：以最新核心描述为准，记忆仅补充；勿沿用过期英文
+    var enBox = $('英文描述');
+    if (enBox && enBox.dataset && enBox.dataset.staleFromCore === '1') {
+      try { enBox.value = ''; delete enBox.dataset.staleFromCore; } catch (e) {}
+    }
+    var description = (typeof window.组装出图描述含记忆 === 'function' && window.组装出图描述含记忆())
+      || value('角色描述') || value('英文描述');
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
+    if (typeof window.标记核心已用于生成 === 'function') window.标记核心已用于生成();
     resetDisabledEnginesForNewRun();
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);

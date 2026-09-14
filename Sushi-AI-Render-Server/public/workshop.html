@@ -18,14 +18,7 @@
     </div>
 
     <div class="顶栏右侧">
-      <button
-        type="button"
-        id="成人开关按钮"
-        class="成人开关 已开启"
-        aria-pressed="true"
-        title="已开启，点击关闭"
-        onclick="切换成人对勾(!成人主题已开启)"
-      ><span class="对勾符" aria-hidden="true">✓</span></button>
+      <!-- 成人主题默认开启，无顶栏对勾 UI（勿恢复复刻警告弹窗） -->
       <input id="成人模式对勾" type="checkbox" checked hidden>
       <span id="成人状态标签" class="状态标签 已开启" hidden>18+</span>
       <button
@@ -378,17 +371,17 @@
         </div>
       </details>
 
-      <details id="问答区" class="分区" open>
+      <details id="问答区" class="分区">
         <summary>AI 对话</summary>
           <label>
             回答通道
           <select id="AI通道" onchange="对话通道已改()"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
           <span id="对话通道状态" class="说明文字" role="status">使用所选对话通道，失败时不会自动更换。</span>
         </label>
-        <label class="换背景行 对勾行">
+        <label class="换背景行 对勾行" id="记忆模式对勾行">
           <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
           <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
-          <span>启用记忆</span>
+          <span>记忆模式</span>
         </label>
         <label>
           记忆模式
@@ -407,17 +400,6 @@
         <div class="核心操作">
           <button type="button" class="次按钮" onclick="清空对话()">清空对话</button>
         </div>
-      </details>
-
-      <details id="工具区" class="分区">
-        <summary>实用小工具</summary>
-        <div class="核心操作">
-          <button type="button" class="次按钮" onclick="生成随机种子()">生成随机种子</button>
-          <button type="button" class="次按钮" onclick="复制当前提示()">复制当前提示</button>
-          <button type="button" class="次按钮" onclick="清理当前提示()">清理提示词</button>
-          <button type="button" class="次按钮" onclick="重置生成参数()">重置参数</button>
-        </div>
-        <p id="工具状态" class="说明文字">可快速生成种子、复制英文提示和恢复默认参数。</p>
       </details>
 
 
@@ -559,7 +541,7 @@
       for (i = 0; i < 节点.length; i++) {
         var el = 节点[i];
         if (根 && d === document && (el === 根 || 根.contains(el))) continue;
-        if (el.closest && el.closest("[role='dialog'], .成人开关, #成人开关按钮, .对勾行, .对勾盒")) continue;
+        if (el.closest && el.closest("[role='dialog'], .对勾行, .对勾盒, #记忆模式对勾行")) continue;
         var 字 = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
         var 址 = String(el.getAttribute("href") || "").toLowerCase();
         var 类名 = "";
@@ -630,6 +612,14 @@
     if (核框) {
       核框.addEventListener("input", function () {
         try { localStorage.setItem("角色生成器_上次描述", 核框.value || ""); } catch (e) {}
+        // 记忆开启且核心被改写：不清空历史，仅让后续生成以新核心为准（英文旧稿下次出图会重译）
+        if (记忆已开()) {
+          var 英文框 = document.getElementById("英文描述");
+          // 核心改写后旧英文不再可信，留空以便出图路径重译
+          if (英文框 && 核心描述已更新()) {
+            try { 英文框.dataset.staleFromCore = "1"; } catch (e2) {}
+          }
+        }
       });
     }
     var 问框 = document.getElementById("AI问题");
@@ -689,16 +679,9 @@
   }
 
   function 恢复成人主题状态() {
-    try {
-      var 主题 = localStorage.getItem("角色生成器_成人主题");
-      if (主题 === "disabled") {
-        设置成人主题状态(false);
-      } else {
-        设置成人主题状态(true);
-      }
-    } catch (错误) {
-      设置成人主题状态(true);
-    }
+    // 无顶栏开关：成人主题始终默认开启；测试仍可调用 切换成人对勾 临时关闭
+    设置成人主题状态(true);
+    try { localStorage.setItem("角色生成器_成人主题", "enabled"); } catch (错误) {}
   }
 
   function 读取是否用户选过平台() {
@@ -1220,6 +1203,7 @@
     return 邮 ? 基 + "_" + 邮 : 基;
   }
   var 记忆摘要 = "";
+  var 上次用于生成的核心 = "";
   function 记忆已开() {
     if (记忆模式值() === "off") return false;
     try {
@@ -1228,6 +1212,53 @@
     } catch (e) {}
     return true;
   }
+  function 读取当前核心描述() {
+    var 框 = document.getElementById("角色描述");
+    return ((框 && 框.value) || "").trim();
+  }
+  function 核心描述已更新() {
+    var 现 = 读取当前核心描述();
+    return !!(现 && 现 !== 上次用于生成的核心);
+  }
+  function 标记核心已用于生成() {
+    上次用于生成的核心 = 读取当前核心描述();
+  }
+  /** 记忆开且有核心描述时：最新核心描述为准，历史记忆仅补充延续 */
+  function 组装记忆与核心系统提示() {
+    var 核心 = 读取当前核心描述();
+    var 限摘 = 记忆模式值() === "long" ? 6000 : 800;
+    var 文 = "用简体中文回复。";
+    if (核心) {
+      文 += "【当前核心描述·以此为准，冲突时覆盖旧记忆】" + 核心.slice(0, 2000);
+    }
+    if (记忆摘要) {
+      文 += "【历史记忆·仅作补充延续】" + String(记忆摘要).slice(-限摘);
+    }
+    if (!核心 && !记忆摘要) 文 += "不要突然改成英文。";
+    return 文;
+  }
+  /** 出图：最新核心描述为主；记忆开时把短摘要作补充（不覆盖核心） */
+  function 组装出图描述含记忆() {
+    var 核心 = 读取当前核心描述();
+    var 英文 = ((document.getElementById("英文描述") || {}).value || "").trim();
+    var 基 = 核心 || 英文;
+    if (!基) return "";
+    if (!记忆已开() || !记忆摘要) return 基;
+    if (!核心描述已更新() && 核心 === 上次用于生成的核心) {
+      // 核心未改：仍以当前框为准，记忆不改写画面描述
+      return 基;
+    }
+    // 核心已改写：以新核心为准，记忆仅短补人物/关系线索
+    var 补 = String(记忆摘要).replace(/\s+/g, " ").trim().slice(-280);
+    if (!补) return 基;
+    if (基.indexOf(补.slice(0, 40)) >= 0) return 基;
+    return 基 + "\n（延续记忆补充，勿覆盖核心：" + 补 + "）";
+  }
+  window.读取当前核心描述 = 读取当前核心描述;
+  window.记忆已开 = 记忆已开;
+  window.组装出图描述含记忆 = 组装出图描述含记忆;
+  window.标记核心已用于生成 = 标记核心已用于生成;
+  window.组装记忆与核心系统提示 = 组装记忆与核心系统提示;
   function 载入记忆开关() {
     var 开 = document.getElementById("记忆开关");
     if (开) 开.checked = 记忆已开();
@@ -1270,6 +1301,7 @@
     记忆摘要 = String(文 || "").slice(-限);
     try { localStorage.setItem(记忆摘要键(), 记忆摘要); } catch (e) {}
   }
+  window.写记忆摘要 = 写记忆摘要;
   function 滚动写入记忆(用户文, 助手文) {
     if (!记忆已开()) return;
     var 长 = 记忆模式值() === "long";
@@ -1291,13 +1323,16 @@
     var 列 = [];
     var i = 0;
     var 片 = String(问句 || "").slice(0, 800);
-    if (记忆已开() && 记忆摘要) {
+    if (记忆已开()) {
+      列.push({ role: "system", content: 组装记忆与核心系统提示() });
+    } else {
+      var 核心现 = 读取当前核心描述();
       列.push({
         role: "system",
-        content: "用简体中文回复。延续以下角色记忆（姓名、关系、正在发生的事）：" + String(记忆摘要).slice(-(记忆模式值() === "long" ? 6000 : 800))
+        content: 核心现
+          ? ("用简体中文回复。按当前核心描述：" + 核心现.slice(0, 2000))
+          : "用简体中文回复，不要突然改成英文。"
       });
-    } else {
-      列.push({ role: "system", content: "用简体中文回复，不要突然改成英文。" });
     }
     if (!正在预载 && 记忆已开()) {
       var 保留 = 记忆模式值() === "long" ? 80 : 12;
@@ -1317,10 +1352,17 @@
     }
     return 列;
   }
+  window.组装花粉消息 = 组装花粉消息;
 
   function 组装群体提示(问句) {
-    var 文 = "### System:\n用简体中文回复。";
-    if (记忆已开() && 记忆摘要) 文 += "角色记忆：" + String(记忆摘要).slice(-(记忆模式值() === "long" ? 6000 : 800));
+    var 文 = "### System:\n";
+    if (记忆已开()) 文 += 组装记忆与核心系统提示();
+    else {
+      var 核心现 = 读取当前核心描述();
+      文 += 核心现
+        ? ("用简体中文回复。按当前核心描述：" + 核心现.slice(0, 2000))
+        : "用简体中文回复。";
+    }
     文 += "\n";
     var i = 0;
     var 片 = "### User:\n" + String(问句 || "").slice(0, 800) + "\n### Assistant:\n";
@@ -1593,6 +1635,7 @@
     对话历史.push(助手项);
     保存对话历史();
     滚动写入记忆(文本, 回复);
+    标记核心已用于生成();
     var 助手泡 = 追加对话气泡("assistant", 回复, 用通道, false);
     正在回答对话 = false;
     var 区 = document.getElementById("对话列表");
@@ -2852,47 +2895,9 @@
   }
 
   function 工具提示(文案) {
-    var 状态 = document.getElementById("工具状态");
-    if (状态) 状态.textContent = 文案 || "";
-  }
-  function 生成随机种子() {
-    var 框 = document.getElementById("随机种子");
-    if (!框) return;
-    var 值 = Math.floor(Math.random() * 2147483646) + 1;
-    框.value = String(值);
-    工具提示("已生成新随机种子：" + 值);
-  }
-  async function 复制当前提示() {
-    var 框 = document.getElementById("英文描述");
-    var 文 = String((框 && 框.value) || document.getElementById("角色描述").value || "").trim();
-    if (!文) return 工具提示("当前还没有可复制的提示词。");
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(文);
-      else { 框.focus(); 框.select(); document.execCommand("copy"); }
-      工具提示("当前提示词已复制。");
-    } catch (e) { 工具提示("复制失败，请手动选择文字复制。"); }
-  }
-  function 清理当前提示() {
-    ["角色描述", "英文描述", "中文译文"].forEach(function (id) {
-      var 框 = document.getElementById(id);
-      if (框) 框.value = 去掉方括号(框.value).replace(/\s+/g, " ").trim();
-    });
-    刷新画面说明();
-    工具提示("已清理多余空格和括号，未删除主要描述。");
-  }
-  function 重置生成参数() {
-    var 默认值 = {
-      "出图引擎": "perchance", "图像比例": "512x512", "生成数量": "1",
-      "引导强度": "7", "图生图强度": "0.52"
-    };
-    Object.keys(默认值).forEach(function (id) {
-      var 框 = document.getElementById(id);
-      if (框) 框.value = 默认值[id];
-    });
-    用户选定平台 = "perchance";
-    同步换背景强度();
-    设平台提示("perchance");
-    工具提示("已恢复推荐参数，核心描述和历史记录未改变。");
+    // 实用小工具区已移除；短暂提示改写到分类状态（若存在）
+    var 状态 = document.getElementById("分类状态");
+    if (状态 && 文案) 状态.textContent = 文案;
   }
 
   function 刷新十八禁开关() {
