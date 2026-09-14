@@ -2393,6 +2393,23 @@
     }
   }
 
+  var CLARITY_QUALITY_LEAD =
+    'tack-sharp focus across the entire image, crisp detailed face and eyes, sharp skin and hair detail, high-resolution, clear foreground and background, no blur, no soft focus, no depth-of-field blur, no motion blur';
+  var CLARITY_NEGATIVE =
+    'blur, blurry, out of focus, soft focus, soft image, motion blur, depth of field blur, bokeh blur, smeared details, hazy image, low resolution, pixelated, facial blur, blurry face, blurry eyes';
+
+  function applyClarityQuality(prompt, negative) {
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!/tack-sharp focus across the entire image/i.test(text)) {
+      text = (text ? text + ', ' : '') + CLARITY_QUALITY_LEAD;
+    }
+    var neg = String(negative || '').replace(/\s+/g, ' ').trim();
+    if (!/\bblur(?:ry)?\b|out of focus|soft focus/i.test(neg)) {
+      neg = (neg ? neg + ', ' : '') + CLARITY_NEGATIVE;
+    }
+    return { prompt: text, negative: neg };
+  }
+
   async function generateOne(run, prompt, index) {
     var engine = run.engine;
     if (run.payload.sourceImage && engine === 'sana') throw new Error('Sana 当前未接入图生图，未切换平台。');
@@ -2405,6 +2422,9 @@
     // action, or style locks before sending it to the image provider.
     prompt = String(prompt || coreHint).replace(/\s+/g, ' ').trim();
     if (localEdit) prompt = applyLocalEditOutbound(prompt, coreHint, { img2img: true, force: true });
+    var clarity = applyClarityQuality(prompt, run.payload.negativePrompt);
+    prompt = clarity.prompt;
+    run.payload.negativePrompt = clarity.negative;
     run.payload.prompt = prompt;
     return runWithProviderBudget(run, engine, function (signal) {
       if (engine === 'perchance') return generatePerchance(run, prompt, index, signal);
