@@ -3878,7 +3878,7 @@
         body: JSON.stringify({
           k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
           width: 尺寸.宽, height: 尺寸.高,
-          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; if (typeof preferLocalEditStrength === "function") return preferLocalEditStrength(base, 核文); if (局部改姿势手势(核文)) { var poseCap = 0.55, poseFloor = 0.45; if (base > poseCap) return poseCap; if (base < poseFloor) return poseFloor; return base; } var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.22 : 0.28; var floor = 0.2; if (base > cap) return cap; if (base < floor) return floor; return base; })(), seed: (function () { if (局部改姿势手势(核文)) return undefined; var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
+          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; if (typeof preferLocalEditStrength === "function") return preferLocalEditStrength(base, 核文); if (局部改姿势手势(核文)) { var poseCap = 0.65, poseFloor = 0.55; if (base > poseCap) return poseCap; if (base < poseFloor) return poseFloor; return base; } var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.22 : 0.28; var floor = 0.2; if (base > cap) return cap; if (base < floor) return floor; return base; })(), seed: (function () { if (局部改姿势手势(核文)) return undefined; var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
           style: "real"
         })
       }, 95_000);
@@ -4079,7 +4079,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.65" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.66" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -5000,15 +5000,15 @@
   }
 
   .画廊 {
-    max-height: 78vh;
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
     display: grid;
-    grid-template-columns:
-      repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: 1fr;
     gap: 16px;
     flex: 0 1 auto;
     align-content: start;
     min-height: 0;
+    width: 100%;
   }
 
   .画廊 img,
@@ -5017,7 +5017,7 @@
     width: 100% !important;
     max-width: 100%;
     height: auto !important;
-    max-height: min(62vh, 640px);
+    max-height: none;
     object-fit: contain;
     object-position: center top;
     border: 0;
@@ -5033,7 +5033,7 @@
     margin: 0;
     cursor: pointer;
     border-radius: 17px;
-    overflow: hidden;
+    overflow: visible;
     background: #FFFFFF;
     box-shadow:
       0 18px 60px
@@ -5445,20 +5445,23 @@
     }
 
     .画廊 {
-    max-height: 72vh;
-    overflow: auto;
+      max-height: none;
+      overflow: visible;
       grid-template-columns: 1fr;
       min-height: 0;
       flex: 0 1 auto;
+      width: 100%;
     }
 
     .画廊 img,
     .画廊 iframe {
       border-radius: 12px;
       min-height: 0;
-      max-height: min(58vh, 480px);
+      max-height: none;
       height: auto !important;
+      width: 100% !important;
       object-fit: contain;
+      object-position: center top;
     }
 
     .画面说明 {
@@ -5513,7 +5516,7 @@
 
   }
 
-  /* Desktop/web: gallery dominates under 「角色画廊」; even columns */
+  /* Desktop/web: gallery stacks downward; full images, no fixed-height crop */
   @media (min-width: 901px) {
     .工作区 {
       grid-template-columns: minmax(240px, 22vw) minmax(0, 1fr);
@@ -5534,16 +5537,18 @@
 
     .画廊 {
       min-height: 0;
-      gap: 16px;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+      grid-template-columns: 1fr;
       flex: 0 1 auto;
-      max-height: 78vh;
+      max-height: none;
+      overflow: visible;
+      width: 100%;
     }
 
     .画廊 img,
     .画廊 iframe {
       min-height: 0;
-      max-height: min(64vh, 640px);
+      max-height: none;
       width: 100% !important;
       height: auto !important;
       object-fit: contain;
@@ -5554,12 +5559,15 @@
     .生图卡片 {
       min-height: 0;
       aspect-ratio: auto;
+      overflow: visible;
     }
 
     .生图卡片 img {
-      max-height: min(64vh, 640px);
+      max-height: none;
       height: auto !important;
+      width: 100% !important;
       object-fit: contain;
+      object-position: center top;
     }
 
     .对话列表 {

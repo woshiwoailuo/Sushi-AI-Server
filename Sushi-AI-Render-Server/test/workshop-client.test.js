@@ -1205,7 +1205,7 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   assert.equal(f.w.isLocalEditCore('背景换成宁静雪山与晨雾，人物保持原样'), false);
   assert.ok(f.w.isPoseGestureEdit('图中人物抬起左手'));
   const poseBand = f.w.preferLocalEditStrength(0.52, '图中人物抬起左手');
-  assert.ok(poseBand >= 0.45 && poseBand <= 0.55, 'pose strength harder band, got ' + poseBand);
+  assert.ok(poseBand >= 0.55 && poseBand <= 0.65, 'pose strength gesture band, got ' + poseBand);
 
   const core = '图中人物抬起左手';
   f.w.document.getElementById('角色描述').value = core;
@@ -1227,7 +1227,7 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   assert.doesNotMatch(pos, /change only the background/i);
   assert.ok(payload.source_image);
   const strength = (payload.params && payload.params.denoising_strength);
-  assert.ok(Number(strength) >= 0.45 && Number(strength) <= 0.55, 'pose local edit harder strength, got ' + strength);
+  assert.ok(Number(strength) >= 0.55 && Number(strength) <= 0.65, 'pose local edit gesture strength, got ' + strength);
   assert.match(neg, /different person|identity change|full scene redraw/i);
 });
 
@@ -1483,12 +1483,12 @@ test('memory route list shows each generation description; per-step clear', asyn
 test('pose local-edit harder strength; mild color lower; pose omits seed lock; raised-hand prompt', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const pose = f.w.preferLocalEditStrength(0.52, '抬起左手');
-  assert.ok(pose >= 0.45 && pose <= 0.55, 'pose harder band, got ' + pose);
+  assert.ok(pose >= 0.55 && pose <= 0.65, 'pose gesture band, got ' + pose);
   assert.match(f.w.localEditChangeDirective('抬起左手'), /left hand raised high|raised left hand clearly visible/i);
   const mild = f.w.preferLocalEditStrength(0.52, 'change hair color slightly');
   assert.ok(mild >= 0.2 && mild <= 0.28, 'mild color low band, got ' + mild);
   const longPose = f.w.preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景');
-  assert.ok(longPose >= 0.45 && longPose <= 0.55, 'long text with 站姿 uses pose band, got ' + longPose);
+  assert.ok(longPose >= 0.55 && longPose <= 0.65, 'long text with 站姿 uses pose band, got ' + longPose);
   assert.equal(f.w.resolveLocalEditSeed('424242', '抬起左手'), '', 'pose omits identical seed lock');
   f.w.切换记忆(true);
   f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
@@ -1503,7 +1503,7 @@ test('pose local-edit harder strength; mild color lower; pose omits seed lock; r
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   const strength = body.params && body.params.denoising_strength;
-  assert.ok(Number(strength) >= 0.45 && Number(strength) <= 0.55, 'pose local edit strength, got ' + strength);
+  assert.ok(Number(strength) >= 0.55 && Number(strength) <= 0.65, 'pose local edit strength, got ' + strength);
   assert.ok(body.source_image, '改动必须带 source_image');
   assert.equal(body.source_processing, 'img2img');
   assert.ok(body.params.seed === undefined || body.params.seed === '' || body.params.seed == null, 'pose should omit seed lock, got ' + body.params.seed);
@@ -1554,7 +1554,7 @@ test('改动 payload includes source_image from memory step image', async t => {
   const body = imagePayload(f.calls);
   assert.ok(body.source_image, '改动必须带 source_image');
   assert.equal(body.source_processing, 'img2img');
-  assert.ok(Number(body.params.denoising_strength) >= 0.45 && Number(body.params.denoising_strength) <= 0.55, 'pose band, got ' + body.params.denoising_strength);
+  assert.ok(Number(body.params.denoising_strength) >= 0.55 && Number(body.params.denoising_strength) <= 0.65, 'pose band, got ' + body.params.denoising_strength);
   assert.match(String(body.prompt || ''), /left hand raised|raised left hand clearly visible/i);
   assert.ok(body.params.seed === undefined || body.params.seed === '' || body.params.seed == null, 'pose omits seed');
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手');
@@ -1573,3 +1573,36 @@ test('generation success stores image on memory route step', async t => {
   assert.equal(f.w.document.getElementById('参考图地址').value, f.w.记忆路线[0].image);
 });
 
+
+test('改动 ON ⇒ payload has source_image + denoising in pose band; 核心描述 unchanged', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const core = '抬起左手';
+  f.w.切换记忆(true);
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.document.getElementById('图生图强度').value = '0.52';
+  f.w.document.getElementById('图生图平台').value = 'perchance';
+  f.w.用户选定图生图平台 = 'perchance';
+  f.w.document.getElementById('出图引擎').value = 'perchance';
+  f.w.同步生图方式默认(true);
+  f.w.切换生图方式('改动');
+  assert.equal(f.w.读取生图方式(), '改动');
+  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'horde-real');
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.ok(body.source_image, '改动必须带 source_image');
+  assert.equal(body.source_processing, 'img2img');
+  const ds = Number(body.params && body.params.denoising_strength);
+  assert.ok(ds >= 0.55 && ds <= 0.65, 'pose band denoising, got ' + ds);
+  assert.match(String(body.prompt || ''), /CRITICAL EDIT.*left hand raised|raised left hand clearly visible/i);
+  assert.match(String(body.prompt || ''), /allow pose\/gesture\/limbs to change/i);
+  assert.doesNotMatch(String(body.prompt || ''), /camera angle and crop as the reference/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, core, '核心描述不变');
+});
+
+test('gallery CSS stacks full images without fixed-height crop', () => {
+  assert.match(html, /\.画廊\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.match(html, /\.画廊 img[\s\S]*?max-height:\s*none/);
+  assert.match(html, /Desktop\/web: gallery stacks downward/);
+  assert.doesNotMatch(html, /grid-template-columns:\s*repeat\(auto-fit, minmax\(260px/);
+});

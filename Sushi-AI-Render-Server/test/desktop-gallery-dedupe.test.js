@@ -10,9 +10,11 @@ const workshop = fs.readFileSync(path.join(__dirname, '../public/workshop.html')
 const chatLib = fs.readFileSync(path.join(__dirname, '../lib/chat-response.js'), 'utf8');
 const genJs = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
 
-test('desktop gallery hugs default image size; no oversized empty vh box', () => {
+test('desktop gallery stacks full images downward; no oversized empty vh box', () => {
   assert.match(workshop, /@media \(min-width: 901px\)/);
-  assert.match(workshop, /minmax\(260px, 1fr\)/);
+  assert.match(workshop, /gallery stacks downward/);
+  assert.match(workshop, /\.画廊\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.match(workshop, /\.画廊 img[\s\S]*?max-height:\s*none/);
   assert.doesNotMatch(workshop, /minmax\(540px, 1fr\)/);
   assert.doesNotMatch(workshop, /minmax\(360px, 1fr\)/);
   assert.doesNotMatch(workshop, /min-height: 48vh/);
