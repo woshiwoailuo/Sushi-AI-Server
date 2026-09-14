@@ -3,9 +3,9 @@
 /** Field order for compact English gen prompts (platform-friendly, not long NL). */
 const STRUCTURE_FIELDS = [
   'subject',
-  'appearance',
-  'clothing',
   'pose',
+  'clothing',
+  'appearance',
   'scene',
   'camera',
   'lighting',
@@ -16,8 +16,8 @@ const STRUCTURE_FIELDS = [
 const STRUCTURE_SYSTEM = [
   'You convert a user scene description into a compact STRUCTURED image prompt.',
   'Reply with ONLY one JSON object (no markdown fences) using these English keys:',
-  '{"subject":"","appearance":"","clothing":"","pose":"","scene":"","camera":"","lighting":"","style":"","extras":""}',
-  'Rules: FAITHFUL TO CORE — translate and slot ONLY facts present in the core; lead with core facts; include every explicitly described clothing, prop, pose, scene, action, and count — omit none; prefer completeness of core facts over filler style words; do NOT invent clothing, props, pose, identity, gender, background, or setting absent from the core; empty string if unknown;',
+  '{"subject":"","pose":"","clothing":"","appearance":"","scene":"","camera":"","lighting":"","style":"","extras":""}',
+  'Rules: FAITHFUL TO CORE — translate and slot ONLY facts present in the core; ACTION-FIRST order: put concrete verbs/actions and key props in pose/subject before filler style; include every explicitly described clothing, prop, pose, scene, action, lighting, and count — omit none (e.g. 翻炒→stir-frying/tossing food in wok mid-motion; 蒸汽升腾→visible rising steam/vapor; 不锈钢锅→stainless steel wok with specular highlights; 围裙/食材→apron + ingredients clearly visible); when core says 纪实/写实/抓拍 amplify documentary candid photojournalistic photoreal language; prefer completeness of core facts over filler style words; do NOT invent clothing, props, pose, identity, gender, background, or setting absent from the core; empty string if unknown;',
   'fictional consenting adults 18+ only; no minors; keep adult/NSFW details if the user asked; do NOT invent nudity, undressing, revealing outfits, lingerie, cleavage, skimpy clothes, seductive posing, or remove clothing unless the core explicitly describes nude/naked/unclothed/全裸/裸体/暴露/性感;',
   'do NOT invent woman, female, girl, beautiful woman, breasts, feminine body, or gendered identity unless the core explicitly states female gender (女人/女性/woman/female/girl); if the core explicitly states male gender (男人/男性/男主/帅哥/大叔/男孩/male/man/him/he as person), subject MUST lead with adult man / male / masculine and MUST NOT be woman/girl/female/she/her/breasts; if gender is unspecified use gender-neutral subject (person/adult/figure) with NO woman/sexy female default; do NOT invent revealing outfits, lingerie, cleavage, nude, or extra people unless explicitly in the core;',
   'prefer photoreal photography wording unless the user explicitly asked for anime/manga/illustration;',
@@ -30,7 +30,7 @@ const STRUCTURE_SYSTEM = [
 
 /** Outbound lead: models must prioritize core facts over style/filler packs. Visible 核心描述 is never rewritten. */
 const CORE_FIDELITY_LEAD =
-  'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; do not invent clothing, props, pose, identity, gender, revealing outfits, extra people, or setting not in the core; when gender is unspecified stay gender-neutral with no woman default; lead with core facts';
+  'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; lead with described actions then subject props lighting camera before generic fillers; do not invent clothing, props, pose, identity, gender, revealing outfits, extra people, or setting not in the core; when gender is unspecified stay gender-neutral with no woman default; lead with core facts';
 
 function applyCoreFidelityLead(prompt) {
   let text = String(prompt || '').replace(/\s+/g, ' ').trim();
@@ -191,25 +191,44 @@ function heuristicStructureFromText(text, options = {}) {
   const eastAsian = /东亚|亚洲人|中国人|韩国人|日本人|华人|east[\s-]?asian|\bchinese\b|\bkorean\b|\bjapanese\b|asian (?:woman|man|features|face)/i.test(cleaned);
   const wantFull = /full[\s-]?body|全身|head to toe|feet in (?:the )?frame|从头到脚/i.test(cleaned);
   const localEdit = options.img2img === true && isLocalEditCore(cleaned);
+  const cookAction = /翻炒|颠勺|炒菜|stir[\s-]?fry|wok[\s-]?toss/i.test(cleaned);
+  const cookSteam = /蒸汽升腾|冒着?蒸汽|热气腾腾|steam\s+ris|rising\s+steam/i.test(cleaned);
+  const cookKitchen = /厨房|kitchen/i.test(cleaned);
+  const docuCue = /纪实|抓拍|documentary|candid|photojournal/i.test(cleaned);
+  const poseBits = [];
+  if (cookAction) poseBits.push('stir-frying tossing food in wok mid-motion');
+  if (cookSteam) poseBits.push('visible rising steam vapor');
+  if (/运动感|略带运动|motion/i.test(cleaned)) poseBits.push('slight motion blur hint from cooking action');
+  if (wantFull) {
+    poseBits.push(wantAnime
+      ? 'full body standing, entire figure visible, head and feet in frame'
+      : 'full body front view, head-to-toe, feet in frame, head and feet both visible, uncropped standing full figure, not cropped');
+  }
+  const clothingBits = [];
+  if (/围裙|apron/i.test(cleaned)) clothingBits.push('apron clearly visible');
+  if (/不锈钢锅|炒锅|锅具|stainless|wok/i.test(cleaned)) clothingBits.push('stainless steel wok with specular highlights');
+  if (/食材|ingredients/i.test(cleaned)) clothingBits.push('ingredients and food details clearly visible');
   const fields = {
     subject: localEdit ? 'same person as the reference image' : cleaned.slice(0, 220),
     appearance: eastAsian
       ? 'East Asian, East Asian facial features, distinctly East Asian appearance'
       : (localEdit ? 'same face, same hair, same identity as the reference image' : ''),
-    clothing: localEdit ? 'same clothing as the reference image' : '',
+    clothing: localEdit ? 'same clothing as the reference image' : clothingBits.join(', '),
     pose: localEdit
       ? (isPoseGestureEdit(cleaned) ? localEditChangeDirective(cleaned) : cleaned.slice(0, 220))
-      : (wantFull
-        ? (wantAnime ? 'full body standing, entire figure visible, head and feet in frame' : 'full body front view, head-to-toe, feet in frame, head and feet both visible, uncropped standing full figure, not cropped')
-        : ''),
-    scene: localEdit ? 'same background and composition as the reference image' : '',
+      : poseBits.join(', '),
+    scene: localEdit ? 'same background and composition as the reference image' : (cookKitchen ? 'kitchen' : ''),
     camera: localEdit
       ? 'same camera angle and crop as the reference image'
       : (wantAnime ? '' : (wantFull ? 'eye-level, 28mm wide FOV full-body framing, vertical portrait composition' : 'eye-level, 50mm')),
-    lighting: wantAnime ? '' : 'natural light',
+    lighting: wantAnime ? '' : (/顶灯|窗光|overhead|window light/i.test(cleaned) && cookKitchen
+      ? 'mixed overhead and window light'
+      : 'natural light'),
     style: wantAnime
       ? 'anime illustration'
-      : 'photorealistic RAW photo, DSLR',
+      : (docuCue
+        ? 'documentary candid photojournalistic photorealistic RAW photo, DSLR'
+        : 'photorealistic RAW photo, DSLR'),
     extras: (localEdit ? ((isPoseGestureEdit(cleaned) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST) + ', ') : '') + 'fictional adult 18+ only, no minors; faithful to core, include all described elements, omit none, do not invent gender, woman, revealing outfits, or clothing absent from core',
   };
   const promptEn = applyCoreFidelityLead(assembleStructuredPrompt(fields));

@@ -2665,9 +2665,9 @@
       ),
       丰富随机项(
         "厨房里忙碌的成年女人，纪实摄影",
-        "documentary photoreal photo of a fictional adult woman cooking in a kitchen",
+        "documentary photoreal photo of a fictional adult woman stir-frying in a kitchen with steam",
         "厨房里忙碌的虚构成年女人正在翻炒，蒸汽升腾；纪实抓拍全身正面面向镜头，略带运动感；顶灯与窗光混合，不锈钢锅具有高光；围裙与食材细节清楚，表情专注；无未成年人。",
-        "documentary photoreal photo of a fictional adult woman cooking in a kitchen, steam rising, candid full-body front view facing camera with slight motion, mixed overhead and window light, stainless cookware highlights, apron and food detail, focused expression, fictional adult 18+ only, no minors"
+        "documentary photoreal photo of a fictional adult woman stir-frying tossing food in wok mid-motion in a kitchen, visible rising steam vapor, candid full-body front view facing camera with slight motion, mixed overhead and window light, stainless steel wok with specular highlights, apron and ingredients clearly visible, focused expression, fictional adult 18+ only, no minors"
       ),
       丰富随机项(
         "图书馆窗边读书的成年男人",
@@ -2782,9 +2782,16 @@
     if (/裤|trousers|pants|jeans/i.test(文)) 衣.push("trousers/pants as described");
     if (/伞|umbrella/i.test(文)) 衣.push("umbrella prop kept");
     if (/帽|hat|cap/i.test(文)) 衣.push("hat as described");
-    if (!衣.length && /穿|衣|服|outfit|clothing|wear(?:ing)?|dressed|sweater|coat|dress|shirt|jacket|裙|裤/i.test(文)) {
+    if (/围裙|apron/i.test(文)) 衣.push("apron clearly visible as described");
+    if (!衣.length && /穿|衣|服|outfit|clothing|wear(?:ing)?|dressed|sweater|coat|dress|shirt|jacket|裙|裤|围裙/i.test(文)) {
       衣.push("clothing exactly as described", "fabric detail matching the core outfit");
     }
+    var 动 = [];
+    if (/翻炒|颠勺|炒菜|stir[\s-]?fry|wok[\s-]?toss/i.test(文)) 动.push("stir-frying tossing food in wok mid-motion");
+    if (/蒸汽升腾|冒着?蒸汽|热气腾腾|steam\s+ris|rising\s+steam/i.test(文)) 动.push("visible rising steam vapor");
+    if (/运动感|略带运动|motion\s+blur|slight\s+motion/i.test(文)) 动.push("slight motion blur hint from cooking action");
+    if (/不锈钢锅|炒锅|锅具|stainless.*wok|wok/i.test(文)) 动.push("stainless steel wok with specular highlights");
+    if (/食材|ingredients|food\s+detail/i.test(文)) 动.push("ingredients and food details clearly visible");
     var 景 = [];
     if (/雨|rain/i.test(文)) 景.push("rainy atmosphere from the core");
     if (/窗|window/i.test(文)) 景.push("window-side setting as described");
@@ -2792,6 +2799,8 @@
     if (/图书馆|library/i.test(文)) 景.push("library interior as described");
     if (/海|seaside|beach|栈道|boardwalk/i.test(文)) 景.push("seaside setting as described");
     if (/厨房|kitchen/i.test(文)) 景.push("kitchen environment as described");
+    if (/纪实|抓拍|documentary|candid/i.test(文)) 景.push("documentary candid photojournalistic capture");
+    if (/顶灯与窗光|顶灯|窗光|overhead|window light/i.test(文) && /厨房|kitchen|翻炒|蒸汽/i.test(文)) 景.push("mixed overhead and window light");
     if (/室内|indoor|房间|bedroom|studio/i.test(文)) 景.push("indoor scene as described");
     if (/室外|outdoor|户外/i.test(文)) 景.push("outdoor scene as described");
     if (/夜|night/i.test(文)) 景.push("nighttime mood from the core");
@@ -2802,8 +2811,8 @@
     if (/轻松|relax/i.test(文)) 情.push("relaxed expression");
     if (/专注|focused/i.test(文)) 情.push("focused expression");
     if (/对视|facing each other/i.test(文)) 情.push("natural mutual gaze as described");
-    var 偏 = 衣.concat(景, 情).filter(Boolean);
-    var 偏串 = 偏.length ? 偏.slice(0, 6).join(", ") + ", " : "";
+    var 偏 = 动.concat(衣, 景, 情).filter(Boolean);
+    var 偏串 = 偏.length ? 偏.slice(0, 8).join(", ") + ", " : "";
     // 修饰词一律英文：仅叠加入站出图 prompt，不回写核心描述原文语言。
     if (画风) {
       return [

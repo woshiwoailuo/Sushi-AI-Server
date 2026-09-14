@@ -1937,3 +1937,54 @@ test('gallery CSS stacks full images without fixed-height crop', () => {
   assert.match(html, /Desktop\/web: gallery stacks downward/);
   assert.doesNotMatch(html, /grid-template-columns:\s*repeat\(auto-fit, minmax\(260px/);
 });
+
+test('core action coverage: 翻炒+蒸汽 front-loaded even when smart-mod off', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.applyCoreActionCoverage, 'function');
+  assert.equal(typeof f.w.hasDynamicCookingAction, 'function');
+
+  const core =
+    '厨房里忙碌的虚构成年女人正在翻炒，蒸汽升腾；纪实抓拍全身正面面向镜头，略带运动感；顶灯与窗光混合，不锈钢锅具有高光；围裙与食材细节清楚，表情专注；无未成年人。';
+  assert.equal(f.w.hasDynamicCookingAction(core), true);
+
+  // Weak English that dropped stir-fry / steam (common translate miss)
+  const weakEn = 'a fictional adult woman cooking in a kitchen, full-body front view facing camera';
+  const covered = f.w.applyCoreActionCoverage(weakEn, core);
+  assert.match(covered, /stir[\s-]?fry|tossing food in wok|mid-motion/i);
+  assert.match(covered, /steam|vapor|vapour/i);
+  assert.match(covered, /wok|stainless/i);
+  assert.match(covered, /apron/i);
+  assert.match(covered, /ingredient|food detail/i);
+  assert.match(covered, /documentary|candid|photojournal/i);
+  // Action phrases should lead before the weak cooking filler
+  const stirIdx = covered.search(/stir[\s-]?fry|tossing food in wok/i);
+  const cookIdx = covered.search(/cooking in a kitchen/i);
+  assert.ok(stirIdx >= 0 && (cookIdx < 0 || stirIdx < cookIdx), 'action should front-load before generic cooking');
+
+  // Smart-mod OFF path must still inject coverage
+  const minimal = f.w.minimalOutboundPrompt(weakEn, { core: core });
+  assert.match(minimal, /stir[\s-]?fry|tossing food in wok|mid-motion/i);
+  assert.match(minimal, /steam|vapor|vapour/i);
+  assert.match(minimal, /apron|wok|stainless/i);
+  assert.match(minimal, /photoreal|documentary|candid/i);
+  f.w.document.getElementById('角色描述').value = core;
+  assert.equal(f.w.document.getElementById('角色描述').value, core);
+
+  // Gen path: outbound + negatives kill static/no-steam
+  f.w.document.getElementById('英文描述').value = weakEn;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  // Ensure smart-mod off
+  try { if (typeof f.w.清除智能修饰 === 'function') f.w.清除智能修饰(); } catch (e) {}
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  const neg = String(payload.prompt || '').split(' ### ')[1] || String(payload.negativePrompt || '');
+  assert.match(pos, /stir[\s-]?fry|tossing food in wok|mid-motion/i);
+  assert.match(pos, /steam|vapor|vapour/i);
+  assert.match(pos, /apron|wok|stainless/i);
+  assert.match(neg, /static pose|standing idle|no steam/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心不改写');
+  // Woman+apron OK because core states 女人+围裙; no invented nude
+  assert.match(pos, /woman|female|apron/i);
+  assert.doesNotMatch(pos, /\bnude\b|\blingerie\b|\bcleavage\b/i);
+});
