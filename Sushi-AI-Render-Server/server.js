@@ -1423,8 +1423,9 @@ app.post('/api/workshop/structure-prompt', async (req, res) => {
   const anime = !!(req.body && req.body.anime);
   const img2img = !!(req.body && (req.body.img2img || req.body.hasSourceImage || req.body.sourceImage));
   const forceLocalEdit = !!(req.body && (req.body.localEdit || req.body.forceLocalEdit));
+  const smart = !!(req.body && req.body.smart);
   const started = Date.now();
-  const messages = buildStructureMessages(core, { anime, img2img: img2img || forceLocalEdit });
+  const messages = buildStructureMessages(core, { anime, smart, img2img: img2img || forceLocalEdit });
   const preferred = normalizeChatModel((req.body && req.body.model) || 'glm');
   const tryModels = [preferred, 'glm', 'groq', 'gemini', 'openrouter', 'deepseek', 'grok'].filter((v, i, a) => v && a.indexOf(v) === i);
   const keyedCfg = {
