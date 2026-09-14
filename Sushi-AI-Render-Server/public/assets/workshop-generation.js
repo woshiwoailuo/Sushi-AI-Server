@@ -692,7 +692,25 @@
     };
   }
 
-  function buildHordeBody(run, prompt, index, styleName, shrink) {
+  function preferNsfwModels(models, isReal, aggressive) {
+    var preferred = isReal
+      ? ['Realistic Vision', 'majicMIX realistic', 'AbsoluteReality', 'Photon']
+      : ['WAI-NSFW-illustrious-SDXL', 'Counterfeit', 'Anima-Turbo-v1.1'];
+    var rest = models.slice();
+    var head = [];
+    var i = 0;
+    for (; i < preferred.length; i += 1) {
+      var idx = rest.indexOf(preferred[i]);
+      if (idx >= 0) {
+        head.push(preferred[i]);
+        rest.splice(idx, 1);
+      }
+    }
+    if (aggressive && head.length) return head.concat(rest.slice(0, 2));
+    return head.concat(rest);
+  }
+
+  function buildHordeBody(run, prompt, index, styleName, shrink, aggressiveNsfw) {
     var width = Number(run.payload && run.payload.width) || 512;
     var height = Number(run.payload && run.payload.height) || 512;
     if (shrink) {
@@ -712,6 +730,8 @@
     var seed = run.payload && run.payload.seed;
     if (seed !== '' && seed != null) params.seed = String(Number(seed) + (index || 0));
     var nsfwOn = typeof window.成人主题已开启 === 'undefined' ? true : !!window.成人主题已开启;
+    var models = isReal ? HORDE_REAL_MODELS.slice() : HORDE_ANIME_MODELS.slice();
+    if (nsfwOn) models = preferNsfwModels(models, isReal, !!aggressiveNsfw);
     var body = {
       prompt: String(prompt || '') + (negative ? ' ### ' + negative : ''),
       params: params,
@@ -719,7 +739,7 @@
       nsfw: nsfwOn,
       censor_nsfw: !nsfwOn,
       slow_workers: true,
-      models: isReal ? HORDE_REAL_MODELS.slice() : HORDE_ANIME_MODELS.slice()
+      models: models
     };
     var source = run.payload && run.payload.sourceImage;
     if (source) {
@@ -787,11 +807,20 @@
       var result = await hordeFetch('/generate/status/' + encodeURIComponent(id), 'GET', undefined, signal);
       var gens = Array.isArray(result.generations) ? result.generations : [];
       var image = null;
+      var hadCensored = false;
       var i = 0;
       for (; i < gens.length; i += 1) {
+        if (gens[i] && gens[i].censored) hadCensored = true;
         if (gens[i] && gens[i].img && !gens[i].censored) { image = gens[i]; break; }
       }
-      if (!image || !image.img) throw new Error('任务结束但没有可显示的图片，请修改描述后重试');
+      if (!image || !image.img) {
+        if (hadCensored) {
+          var censoredErr = new Error('成人内容被生图节点审查');
+          censoredErr.code = 'HORDE_CENSORED';
+          throw censoredErr;
+        }
+        throw new Error('任务结束但没有可显示的图片，请修改描述后重试');
+      }
       run.job.state = 'done';
       return image.img;
     }
@@ -803,9 +832,12 @@
     var signal = providerSignal || run.controller.signal;
     var lastError = null;
     var shrink = false;
-    for (var attempt = 0; attempt < 4; attempt += 1) {
+    var censoredRetries = 0;
+    var maxCensoredRetries = 3;
+    var rateRetries = 0;
+    for (var attempt = 0; attempt < 8; attempt += 1) {
       ensureActive(run);
-      var payload = buildHordeBody(run, prompt, index, styleName, shrink);
+      var payload = buildHordeBody(run, prompt, index, styleName, shrink, censoredRetries > 0);
       status('正在出图 · 第 ' + (run.completed + 1) + '/' + run.total + ' 张', '有结果立即显示。', true);
       try {
         var accepted = await hordeFetch('/generate/async', 'POST', payload, signal);
@@ -817,13 +849,26 @@
       } catch (error) {
         lastError = error;
         if (run.cancelled || (error && error.name === 'AbortError')) throw error;
+        if (error && error.code === 'HORDE_CENSORED') {
+          var nsfwOn = typeof window.成人主题已开启 === 'undefined' ? true : !!window.成人主题已开启;
+          if (nsfwOn && censoredRetries < maxCensoredRetries) {
+            censoredRetries += 1;
+            status('节点审查了成人内容，正在换节点重试', '换用更适合成人内容的模型重试（' + censoredRetries + '/' + maxCensoredRetries + '）。', true);
+            await pause(run, 400);
+            continue;
+          }
+          throw new Error(nsfwOn
+            ? '成人内容被生图节点审查，请换写实/动漫通道或稍后再试'
+            : '任务结束但没有可显示的图片，请修改描述后重试');
+        }
         var statusCode = error && error.status;
         if (statusCode === 403 && !shrink) {
           shrink = true;
           await pause(run, 300);
           continue;
         }
-        if ((statusCode === 429 || statusCode === 409 || statusCode === 503) && attempt < 3) {
+        if ((statusCode === 429 || statusCode === 409 || statusCode === 503) && rateRetries < 3) {
+          rateRetries += 1;
           await pause(run, 800);
           continue;
         }

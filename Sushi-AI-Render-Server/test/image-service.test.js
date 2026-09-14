@@ -199,22 +199,68 @@ test('concurrent polls share one request and cancellation ignores late results',
 
 test('failed submissions, faulted tasks, censored/missing images and expiry refund quota', async () => {
   for (const mode of ['unreachable', 'faulted', 'empty', 'censored', 'expired']) {
+    let asyncCount = 0;
     const f = fixture((url) => {
       if (mode === 'unreachable') throw new Error('network offline');
-      if (url.endsWith('/async')) return response({ id: 'remote' }, 202);
+      if (url.endsWith('/async')) {
+        asyncCount += 1;
+        return response({ id: 'remote-' + asyncCount }, 202);
+      }
       if (url.includes('/check/')) return response({ done: mode !== 'faulted', faulted: mode === 'faulted' });
       return response({ generations: mode === 'censored' ? [{ img: PNG, censored: true }] : [] });
     });
     if (mode === 'unreachable') await assert.rejects(f.service.create(1, { prompt: 'A cat' }), e => e.code === 'UPSTREAM_UNREACHABLE');
     else {
-      const job = await f.service.create(1, { prompt: 'A cat' });
+      const job = await f.service.create(1, { prompt: 'A cat', style: 'anime' });
       if (mode === 'expired') f.advance(600001);
-      assert.equal((await f.service.get(1, job.id)).state, 'failed');
+      let snap = await f.service.get(1, job.id);
+      // Censored path retries up to 3 times (each get may resubmit then return queued).
+      for (let i = 0; i < 8 && snap.state !== 'failed' && snap.state !== 'done'; i += 1) {
+        f.advance(900);
+        snap = await f.service.get(1, job.id);
+      }
+      assert.equal(snap.state, 'failed', mode + ' state=' + snap.state + ' err=' + snap.error);
+      if (mode === 'censored') {
+        assert.match(String(snap.error || ''), /成人内容被生图节点审查，请换写实\/动漫通道或稍后再试/);
+        assert.ok(asyncCount >= 4, 'initial + 3 censored retries, got ' + asyncCount);
+      }
       await f.service.get(1, job.id);
     }
     assert.equal(f.refunded.length, 1, mode);
     assert.equal(f.service.current(1), null, mode);
   }
+});
+
+test('censored Horde result retries then succeeds with clearer adult path', async () => {
+  let asyncCount = 0;
+  const f = fixture((url) => {
+    if (url.endsWith('/async')) {
+      asyncCount += 1;
+      return response({ id: 'remote-' + asyncCount }, 202);
+    }
+    if (url.includes('/check/')) return response({ done: true, faulted: false, is_possible: true });
+    return response({
+      generations: asyncCount <= 2
+        ? [{ img: PNG, censored: true }]
+        : [{ img: PNG, censored: false, seed: '7', model: 'WAI-NSFW-illustrious-SDXL' }],
+    });
+  });
+  const job = await f.service.create(1, { prompt: 'A cat', style: 'anime', width: 512, height: 512 });
+  let snap = await f.service.get(1, job.id);
+  for (let i = 0; i < 8 && snap.state !== 'done' && snap.state !== 'failed'; i += 1) {
+    f.advance(900);
+    snap = await f.service.get(1, job.id);
+  }
+  assert.equal(snap.state, 'done', snap.error);
+  assert.ok(snap.image && snap.image.url);
+  assert.ok(asyncCount >= 3, 'got asyncCount=' + asyncCount);
+  const posts = f.calls.filter((c) => c.method === 'POST');
+  assert.ok(posts.length >= 3);
+  const retryBody = JSON.parse(posts[1].body);
+  assert.equal(retryBody.nsfw, true);
+  assert.equal(retryBody.censor_nsfw, false);
+  assert.equal(retryBody.models[0], 'WAI-NSFW-illustrious-SDXL');
+  assert.deepEqual(f.committed, [[1, 1]]);
 });
 
 test('transient poll errors can be retried without resubmission or an early refund', async () => {

@@ -678,3 +678,107 @@ test('adult mode is on by default without a blocking in-app overlay', async t =>
   assert.equal(tick.checked, true);
   assert.equal(sw.textContent.trim(), '✓');
 });
+
+
+test('adult on: censored Horde generations retry then succeed with NSFW-preferred models', async t => {
+  let hordeSubmits = 0;
+  const f = await setup(t, (url, options) => {
+    const method = (options && options.method) || 'GET';
+    const href = String(url || '');
+    if (method === 'POST') {
+      // setup maps Horde async POST to /api/images; chat POSTs must not count.
+      if (href.includes('/api/images')) {
+        hordeSubmits += 1;
+        return response(job());
+      }
+      return response({ choices: [{ message: { content: 'a cat' } }] });
+    }
+    if (hordeSubmits <= 2) {
+      return response({
+        done: true,
+        faulted: false,
+        is_possible: true,
+        processing: 0,
+        generations: [{ img: PNG, censored: true }]
+      });
+    }
+    return response({
+      done: true,
+      faulted: false,
+      is_possible: true,
+      processing: 0,
+      generations: [{ img: PNG, censored: false }]
+    });
+  });
+  f.w.切换成人对勾(true);
+  f.w.document.getElementById('出图引擎').value = 'horde-anime';
+  const statuses = [];
+  const realStatus = f.w.document.getElementById('状态提示');
+  const obs = new f.w.MutationObserver(() => {
+    const title = realStatus.querySelector('b');
+    if (title && title.textContent) statuses.push(title.textContent);
+  });
+  obs.observe(realStatus, { childList: true, subtree: true });
+  await f.w.开始生成();
+  obs.disconnect();
+  assert.ok(hordeSubmits >= 3, 'expected censored retries then success, got hordeSubmits=' + hordeSubmits);
+  assert.ok(statuses.some((s) => /节点审查了成人内容，正在换节点重试/.test(s)), 'statuses=' + statuses.join(' | '));
+  const posts = f.calls.filter(isImageSubmit);
+  assert.ok(posts.length >= 3);
+  const first = JSON.parse(posts[0].body);
+  assert.equal(first.nsfw, true);
+  assert.equal(first.censor_nsfw, false);
+  assert.equal(first.models[0], 'WAI-NSFW-illustrious-SDXL');
+  const retry = JSON.parse(posts[1].body);
+  assert.equal(retry.models[0], 'WAI-NSFW-illustrious-SDXL');
+  assert.ok(f.w.document.querySelector('#图像输出 img'));
+});
+
+test('adult on: still-censored after retries shows explicit node-censor error', async t => {
+  const f = await setup(t, (url, options) => {
+    const method = (options && options.method) || 'GET';
+    if (method === 'POST') return response(job());
+    return response({
+      done: true,
+      faulted: false,
+      is_possible: true,
+      processing: 0,
+      generations: [{ img: PNG, censored: true }]
+    });
+  });
+  f.w.切换成人对勾(true);
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const detail = f.w.document.getElementById('状态提示').textContent;
+  assert.match(detail, /成人内容被生图节点审查，请换写实\/动漫通道或稍后再试/);
+  assert.doesNotMatch(detail, /没有可显示的图片/);
+  const posts = f.calls.filter(isImageSubmit);
+  assert.ok(posts.length >= 4, 'initial + up to 3 censored retries, got ' + posts.length);
+  const payload = JSON.parse(posts[0].body);
+  assert.equal(payload.nsfw, true);
+  assert.equal(payload.censor_nsfw, false);
+  assert.equal(payload.models[0], 'Realistic Vision');
+});
+
+test('adult off keeps censor_nsfw true and does not use adult censor retry copy', async t => {
+  const f = await setup(t, (url, options) => {
+    const method = (options && options.method) || 'GET';
+    if (method === 'POST') return response(job());
+    return response({
+      done: true,
+      faulted: false,
+      is_possible: true,
+      processing: 0,
+      generations: [{ img: PNG, censored: true }]
+    });
+  });
+  f.w.切换成人对勾(false);
+  f.w.document.getElementById('出图引擎').value = 'horde-anime';
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  assert.equal(payload.nsfw, false);
+  assert.equal(payload.censor_nsfw, true);
+  const detail = f.w.document.getElementById('状态提示').textContent;
+  assert.match(detail, /没有可显示的图片|请修改描述后重试/);
+  assert.doesNotMatch(detail, /换节点重试/);
+});
