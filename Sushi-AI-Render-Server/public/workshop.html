@@ -85,8 +85,6 @@
           <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
           <span>记忆模式</span>
         </label>
-        <p id="记忆开关说明" class="说明文字">默认开启：对话与出图会参考本机记忆；改写核心描述后以最新核心为准，记忆仅补充。</p>
-
         <div class="核心操作">
 
           <button
@@ -393,7 +391,6 @@
             <option value="off">关闭记忆</option>
           </select>
         </label>
-        <p id="记忆说明" class="说明文字">默认长记忆：对话与摘要保存在本机 localStorage（单域约数 MB）。服务端 SQLite 在 Vercel 上会重置，故跨设备不以服务端为准。</p>
         <div id="对话列表" class="对话列表" aria-live="polite"></div>
         <div class="对话输入行">
           <textarea id="AI问题" rows="2" placeholder="输入想问的话…"></textarea>
@@ -443,7 +440,7 @@
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">生图平台：Perch · 官网出图</p>
+      <p id="平台提示" class="平台提示">生图平台：Perch · 按所选通道</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
@@ -1914,6 +1911,17 @@
     if (!/fictional adult|18\+|no minors/i.test(文)) {
       文 += ", fictional adult 18+ only, no minors";
     }
+    // 写实默认全身正面；用户写半身/特写/侧脸等则尊重原文
+    if (!/半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|portrait|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上/i.test(文)) {
+      if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe/i.test(文)) {
+        文 += ", full-body framing, full figure visible head to toe";
+      }
+      if (!/侧脸|侧面|侧身|背面|背影|后视|微仰|俯拍|仰拍|three[\s-]?quarter|profile|from behind|back view|side view|rear view|over[\s-]?shoulder|low angle|high angle/i.test(文)) {
+        if (!/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(文)) {
+          文 += ", front view, eye-level, facing camera, looking at camera";
+        }
+      }
+    }
     return 文.replace(/\s{2,}/g, " ").trim();
   }
 
@@ -2053,9 +2061,9 @@
 
   function 扩写随机核心(简中, 简英) {
     var 核心 = 简中 +
-      "。虚构成年角色，五官与发型清晰，皮肤质感自然；半身或全身构图，浅景深；主光明确、辅光柔和，阴影层次清楚；服装面料与场景材质可辨；无未成年人。";
+      "。虚构成年角色，五官与发型清晰，皮肤质感自然；全身正面构图，平视镜头、面向镜头，从头到脚完整入画；浅景深；主光明确、辅光柔和，阴影层次清楚；服装面料与场景材质可辨；无未成年人。";
     var 详英 = 简英 +
-      ", detailed facial features and hair, natural skin texture, half-body or full-body framing, shallow depth of field, clear key light with soft fill, readable fabric and environment materials, cinematic composition, fictional consenting adults 18+ only, no minors";
+      ", detailed facial features and hair, natural skin texture, full-body front view framing, eye-level facing camera, full figure visible head to toe, shallow depth of field, clear key light with soft fill, readable fabric and environment materials, cinematic composition, fictional consenting adults 18+ only, no minors";
     return 丰富随机项(简中, 简英, 核心, 详英);
   }
 
@@ -2064,56 +2072,56 @@
       丰富随机项(
         "黄昏窗边的成年女人，写实照片",
         "photoreal photo of a fictional adult woman by a dusk window",
-        "黄昏窗边的虚构成年女人，侧脸看向窗外暖橙余晖；半身构图，浅景深虚化室内；窗边轮廓光勾勒发丝与肩线，室内有一盏柔和补光；针织衫纹理清晰，皮肤与眼神自然写实；无未成年人。",
-        "photoreal photo of a fictional adult woman by a dusk window, three-quarter profile looking outside, warm orange rim light on hair and shoulders, soft indoor fill, half-body framing, shallow depth of field, visible knitwear texture, natural skin detail, cinematic still, fictional adult 18+ only, no minors"
+        "黄昏窗边的虚构成年女人，正面平视面向镜头，窗外暖橙余晖；全身构图，从头到脚入画，浅景深虚化室内；窗边轮廓光勾勒发丝与肩线，室内有一盏柔和补光；针织衫纹理清晰，皮肤与眼神自然写实；无未成年人。",
+        "photoreal photo of a fictional adult woman by a dusk window, front view eye-level facing camera, warm orange rim light on hair and shoulders, soft indoor fill, full-body framing head to toe, shallow depth of field, visible knitwear texture, natural skin detail, cinematic still, fictional adult 18+ only, no minors"
       ),
       丰富随机项(
         "雨夜街道上的成年男人，电影感",
         "cinematic photoreal photo of a fictional adult man on a rainy night street",
-        "雨夜街道上的虚构成年男人，湿润沥青反光，霓虹冷暖交织；全身或七分身构图，微仰视角；街灯作主光，雨丝与积水高光清楚；风衣面料微湿，面部轮廓锐利写实；无未成年人。",
-        "cinematic photoreal photo of a fictional adult man on a rainy night street, wet asphalt reflections, mixed neon key light, visible rain streaks, slight low angle, full or three-quarter body, damp coat fabric detail, sharp facial structure, fictional adult 18+ only, no minors"
+        "雨夜街道上的虚构成年男人，湿润沥青反光，霓虹冷暖交织；全身正面平视面向镜头；街灯作主光，雨丝与积水高光清楚；风衣面料微湿，面部轮廓锐利写实；无未成年人。",
+        "cinematic photoreal photo of a fictional adult man on a rainy night street, wet asphalt reflections, mixed neon key light, visible rain streaks, full-body front view eye-level facing camera, damp coat fabric detail, sharp facial structure, fictional adult 18+ only, no minors"
       ),
       丰富随机项(
         "两名成年人在暖光室内对视",
         "photoreal photo of two fictional adults facing each other in warm indoor light",
-        "两名虚构成年人在暖光室内近距离对视，肩线相对；双人半身构图，浅景深；钨丝暖黄主光从侧前方打来，背景墙面柔和虚化；表情克制、眼神交汇，服装与皮肤质感清晰；无未成年人。",
-        "photoreal photo of two fictional adults facing each other in warm indoor light, intimate half-body two-shot, tungsten key from front-side, shallow depth of field, restrained expressions with eye contact, clear clothing and skin texture, fictional consenting adults 18+ only, no minors"
+        "两名虚构成年人在暖光室内并肩站立，正面平视面向镜头；双人全身构图，从头到脚入画，浅景深；钨丝暖黄主光从侧前方打来，背景墙面柔和虚化；表情自然，服装与皮肤质感清晰；无未成年人。",
+        "photoreal photo of two fictional adults standing side by side in warm indoor light, front view eye-level facing camera, full-body two-shot head to toe, tungsten key from front-side, shallow depth of field, natural expressions, clear clothing and skin texture, fictional consenting adults 18+ only, no minors"
       ),
       丰富随机项(
         "旧沙发上的成年女人，胶片质感",
         "film-look photoreal photo of a fictional adult woman sitting on an old sofa",
-        "旧沙发上的虚构成年女人侧坐，一条腿收起；中景半身，轻微胶片颗粒；落地窗柔光作主光，室内阴影偏冷；沙发绒面与针织纹理清楚，表情放松自然；无未成年人。",
-        "film-look photoreal photo of a fictional adult woman sitting sideways on an old sofa, mid shot, gentle film grain, soft window key light with cooler shadow, visible sofa velvet and knit texture, relaxed natural expression, fictional adult 18+ only, no minors"
+        "旧沙发上的虚构成年女人正面坐姿面向镜头；全身构图，从头到脚入画，轻微胶片颗粒；落地窗柔光作主光，室内阴影偏冷；沙发绒面与针织纹理清楚，表情放松自然；无未成年人。",
+        "film-look photoreal photo of a fictional adult woman sitting on an old sofa, front view eye-level facing camera, full-body framing head to toe, gentle film grain, soft window key light with cooler shadow, visible sofa velvet and knit texture, relaxed natural expression, fictional adult 18+ only, no minors"
       ),
       丰富随机项(
         "靠在车门边的成年男人，黄金时刻",
         "golden hour photoreal photo of a fictional adult man leaning on a car door",
-        "黄金时刻靠在车门边的虚构成年男人，手臂搭在车顶；七分身构图，逆光勾边；低角度阳光拉长影子，车漆反光清楚；衬衫微皱，面部高光自然；无未成年人。",
-        "golden hour photoreal photo of a fictional adult man leaning on a car door, arm on roof, three-quarter body, backlight rim, long shadows, clear car-paint reflections, slightly wrinkled shirt, natural facial highlights, fictional adult 18+ only, no minors"
+        "黄金时刻靠在车门边的虚构成年男人，手臂搭在车顶；全身正面平视面向镜头，逆光勾边；阳光拉长影子，车漆反光清楚；衬衫微皱，面部高光自然；无未成年人。",
+        "golden hour photoreal photo of a fictional adult man leaning on a car door, arm on roof, full-body front view eye-level facing camera, backlight rim, long shadows, clear car-paint reflections, slightly wrinkled shirt, natural facial highlights, fictional adult 18+ only, no minors"
       ),
       丰富随机项(
         "厨房里忙碌的成年女人，纪实摄影",
         "documentary photoreal photo of a fictional adult woman cooking in a kitchen",
-        "厨房里忙碌的虚构成年女人正在翻炒，蒸汽升腾；纪实抓拍半身，略带运动感；顶灯与窗光混合，不锈钢锅具有高光；围裙与食材细节清楚，表情专注；无未成年人。",
-        "documentary photoreal photo of a fictional adult woman cooking in a kitchen, steam rising, candid half-body with slight motion, mixed overhead and window light, stainless cookware highlights, apron and food detail, focused expression, fictional adult 18+ only, no minors"
+        "厨房里忙碌的虚构成年女人正在翻炒，蒸汽升腾；纪实抓拍全身正面面向镜头，略带运动感；顶灯与窗光混合，不锈钢锅具有高光；围裙与食材细节清楚，表情专注；无未成年人。",
+        "documentary photoreal photo of a fictional adult woman cooking in a kitchen, steam rising, candid full-body front view facing camera with slight motion, mixed overhead and window light, stainless cookware highlights, apron and food detail, focused expression, fictional adult 18+ only, no minors"
       ),
       丰富随机项(
         "图书馆窗边读书的成年男人",
         "photoreal photo of a fictional adult man reading by a library window",
-        "图书馆窗边读书的虚构成年男人，手持书本；半身侧光构图，书架虚化；冷白窗光为主，室内暖台灯为辅；纸张纤维与毛衣纹理清楚，神情安静；无未成年人。",
-        "photoreal photo of a fictional adult man reading by a library window, half-body side light, soft bookshelf bokeh, cool window key with warm desk-lamp fill, visible paper fiber and sweater knit, calm expression, fictional adult 18+ only, no minors"
+        "图书馆窗边读书的虚构成年男人，手持书本；全身正面平视面向镜头，书架虚化；冷白窗光为主，室内暖台灯为辅；纸张纤维与毛衣纹理清楚，神情安静；无未成年人。",
+        "photoreal photo of a fictional adult man reading by a library window, full-body front view eye-level facing camera, soft bookshelf bokeh, cool window key with warm desk-lamp fill, visible paper fiber and sweater knit, calm expression, fictional adult 18+ only, no minors"
       ),
       丰富随机项(
         "海边栈道上的成年女人，自然光",
         "photoreal photo of a fictional adult woman on a seaside boardwalk, natural light",
-        "海边栈道上的虚构成年女人迎风而立，发丝轻扬；全身远中景，地平线偏低；阴天柔和自然光，海面与木板纹理清楚；休闲外套质感写实，表情轻松；无未成年人。",
-        "photoreal photo of a fictional adult woman on a seaside boardwalk in natural light, wind-lifted hair, full-body mid-distance framing, low horizon, overcast soft daylight, clear wood plank and sea texture, casual jacket detail, relaxed expression, fictional adult 18+ only, no minors"
+        "海边栈道上的虚构成年女人迎风而立面向镜头，发丝轻扬；全身正面远中景，地平线偏低；阴天柔和自然光，海面与木板纹理清楚；休闲外套质感写实，表情轻松；无未成年人。",
+        "photoreal photo of a fictional adult woman on a seaside boardwalk in natural light, wind-lifted hair, full-body front view mid-distance framing facing camera, low horizon, overcast soft daylight, clear wood plank and sea texture, casual jacket detail, relaxed expression, fictional adult 18+ only, no minors"
       ),
       丰富随机项(
-        "三名成年人站在一起的半身写实照",
-        "photoreal half-body photo of three fictional adults standing together",
-        "三名虚构成年人并肩半身站立，间距自然；水平机位、轻微广角；均匀影棚柔光，背景干净浅灰；各自发型服装可辨，表情自然互动；无未成年人。",
-        "photoreal half-body photo of three fictional adults standing together, even spacing, eye-level slight wide framing, soft studio key light, clean light-gray backdrop, distinct hairstyles and outfits, natural interaction, fictional adults 18+ only, no minors"
+        "三名成年人站在一起的全身正面写实照",
+        "photoreal full-body front-view photo of three fictional adults standing together",
+        "三名虚构成年人并肩全身站立面向镜头，间距自然；水平机位、轻微广角，从头到脚入画；均匀影棚柔光，背景干净浅灰；各自发型服装可辨，表情自然互动；无未成年人。",
+        "photoreal full-body front-view photo of three fictional adults standing together, even spacing, eye-level slight wide framing head to toe, soft studio key light, clean light-gray backdrop, distinct hairstyles and outfits, natural interaction, fictional adults 18+ only, no minors"
       )
     ];
     return 池[Math.floor(Math.random() * 池.length)];
@@ -3251,7 +3259,7 @@
     if (typeof update !== "function") {
       输出区.innerHTML = "";
       状态区.style.display = "flex";
-      状态区.innerHTML = '<div class="加载动画"></div><b>正在用 Perch 官方出图</b><p>官网 perchance.org/ai-text-to-image-generator · 不嵌入、不转接。</p>';
+      状态区.innerHTML = '<div class="加载动画"></div><b>正在用 Perch 出图</b><p>按所选通道出图，失败不更换平台。</p>';
       记录失败原因("Perchance 页面组件未加载，改走官方出图接口");
       if (typeof window.开始生成 === "function") window.开始生成();
       return;
@@ -3305,7 +3313,7 @@
           /* Turbo / Horde 已在跑，官方迟到不再挡 */
         } else if (!抢出已定) {
           var 行 = document.getElementById("平台提示");
-          if (行) 行.textContent = "生图平台：Perch 官方出图超时，未转接其他平台";
+          if (行) 行.textContent = "生图平台：Perch 出图超时，未更换平台";
           结束本次生成("生成角色图片");
         } else {
           结束本次生成("生成角色图片");
@@ -3317,17 +3325,24 @@
   function 设平台提示(引擎) {
     var 行 = document.getElementById("平台提示");
     if (!行) return;
-    if (!引擎) 行.textContent = "生图平台：Perch · 官网出图";
-    else 行.textContent = "生图平台：" + 引擎名称(引擎);
+    if (!引擎) 行.textContent = "生图平台：Perch · 按所选通道";
+    else 行.textContent = "生图平台：" + 引擎名称(引擎) + " · 按所选通道";
   }
 
   function 按指定引擎出图(引擎) {
-    void 引擎;
-    本轮已试引擎.push("perchance");
+    var 选 = String(引擎 || 当前引擎() || "perchance");
+    if (选 === "官方" || 选 === "perch") 选 = "perchance";
+    本轮已试引擎.push(选);
     var 框 = document.getElementById("出图引擎");
-    if (框) 框.value = "perchance";
-    设平台提示("perchance");
-    用官方插件出图(false);
+    if (框) 框.value = 选;
+    设平台提示(选);
+    // 选定平台独占：交给 workshop-generation 按所选引擎出图，不强制跳 Perch
+    if (typeof window.开始生成 === "function") {
+      window.开始生成();
+      return;
+    }
+    if (选 === "perchance") 用官方插件出图(false);
+    else 显示全部失败();
   }
 
   function 真正生成图片(令牌) {
@@ -3369,20 +3384,31 @@
       用写实引擎出图("perchance", 1);
       return;
     }
-    var 选引擎 = "perchance";
-    void 选引擎;
+    var 选引擎 = 当前引擎() || "perchance";
+    if (选引擎 === "官方" || 选引擎 === "perch") 选引擎 = "perchance";
     if (有参考图()) {
       本轮抢出 = false;
-      设平台提示("perchance");
+      设平台提示(用户选定图生图平台 || 选引擎);
       用图生图出图();
       return;
     }
     本轮抢出 = false;
-    设平台提示("perchance");
-    用官方插件出图(false);
+    设平台提示(选引擎);
+    // 不强制跳到 Perch：优先走已覆盖的 window.开始生成（workshop-generation）
+    if (typeof window.__sushiReady !== "undefined" && window.__sushiReady && typeof window.开始生成 === "function") {
+      // HTML 旧路径被 generation.js 覆盖后不应落到这里；若落到则按所选提示失败，避免静默换平台
+      记录失败原因("旧出图路径已停用，请使用所选生图平台重试");
+      结束本次生成("生成角色图片", false);
+      return;
+    }
+    if (选引擎 === "perchance") 用官方插件出图(false);
+    else {
+      记录失败原因("所选平台 " + 选引擎 + " 需由生图组件出图，未更换平台");
+      结束本次生成("生成角色图片", false);
+    }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.52" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.53" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

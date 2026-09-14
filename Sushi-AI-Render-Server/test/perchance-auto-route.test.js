@@ -37,3 +37,13 @@ test('GLM remains chat-only and management UI stays hidden', () => {
   assert.match(workshopHtml, /#平台管理区, #管理面板/);
   assert.doesNotMatch(workshopHtml, /#平台管理区, #管理面板, #工具区/);
 });
+
+test('no official-site tip copy and random enrich prefers full-body front', () => {
+  assert.doesNotMatch(source, /perchance\.org\/ai-text-to-image-generator/);
+  assert.doesNotMatch(workshopHtml, /perchance\.org\/ai-text-to-image-generator/);
+  assert.doesNotMatch(workshopHtml, /id="记忆开关说明"/);
+  assert.doesNotMatch(workshopHtml, /id="记忆说明"/);
+  assert.match(workshopHtml, /全身正面构图/);
+  assert.match(source, /applyRealisticFrontFullBody/);
+  assert.match(source, /失败不更换平台/);
+});
