@@ -377,19 +377,32 @@
     if (hasExplicitCropFraming(t) && !userFull) return t;
     var bits = [];
     if (!userFull) {
-      bits.push('full body head-to-toe visible', 'feet in frame', 'standing full figure', 'entire body in frame', 'not cropped at waist or chest');
+      bits.push(
+        'full body head-to-toe visible',
+        'feet in frame',
+        'head and feet both visible',
+        'standing full figure',
+        'entire body in frame',
+        'not cropped at waist or chest'
+      );
     } else {
       // User asked 全身 / full body: stronger, earlier, repeated constraints win over model defaults.
       bits.push(
         'full body head-to-toe visible',
         'feet in frame',
+        'head and feet both visible',
         'standing full figure',
         'entire body in frame',
-        'wide full-body shot',
-        'complete figure from head to feet',
+        'wide FOV full-body shot',
+        'wide enough field of view',
+        'complete figure from crown to shoes',
+        'uncropped standing full figure',
+        'space above head and below feet',
+        'subject fills vertical frame from head to toe',
         'not cropped at waist or chest',
         'not a close-up',
-        'not a half-body portrait'
+        'not a half-body portrait',
+        'no waist crop'
       );
     }
     if (!hasExplicitCameraAngle(t) && !/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(t)) {
@@ -397,20 +410,39 @@
     }
     if (!bits.length) return t;
     var inject = bits.join(', ');
-    // Prefer 35mm for full-body; rewrite portrait-biased 85mm lead if present.
-    t = t.replace(/\bshot on DSLR,\s*85mm\b/gi, 'shot on DSLR, 35mm');
+    // Prefer wider FOV for full-body; rewrite portrait-biased 85/50mm lead if present.
+    if (userFull) {
+      t = t.replace(/\bshot on DSLR,\s*(?:85|50|35)mm\b/gi, 'shot on DSLR, 28mm');
+    } else {
+      t = t.replace(/\bshot on DSLR,\s*85mm\b/gi, 'shot on DSLR, 35mm');
+    }
     // Higher priority: place framing right after the photoreal camera lead, before scene text.
-    var m = t.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+    var m = t.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:28|35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
     if (m) {
       t = m[1] + ', ' + inject + t.slice(m[1].length);
     } else {
       t = inject + ', ' + t;
     }
     // Repeat a short full-body anchor near the end when user explicitly asked, so truncation still keeps framing.
-    if (userFull && !/, full body head-to-toe visible, feet in frame\s*$/i.test(t)) {
-      t += ', full body head-to-toe visible, feet in frame';
+    if (userFull && !/, full body head-to-toe visible, feet in frame, head and feet both visible\s*$/i.test(t)) {
+      t += ', full body head-to-toe visible, feet in frame, head and feet both visible';
     }
     return t.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  /** When user asks 全身 and UI size is square, nudge outbound to portrait 2:3 (safe sizes only). Does not rewrite core text. */
+  function preferPortraitAspectForFullBody(width, height, coreText) {
+    var w = Number(width) || 512;
+    var h = Number(height) || 512;
+    if (!(w > 0 && h > 0) || w !== h) return { width: w, height: h, nudged: false };
+    if (!wantsFullBodyFraming(coreText)) return { width: w, height: h, nudged: false };
+    var map = {
+      512: { width: 512, height: 768 },
+      768: { width: 768, height: 1024 },
+      1024: { width: 768, height: 1024 }
+    };
+    var next = map[w] || { width: 512, height: 768 };
+    return { width: next.width, height: next.height, nudged: true };
   }
 
   function forcePhotorealPrompt(prompt, options) {
@@ -419,10 +451,12 @@
     var text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
     if (!text) text = 'a fictional adult, natural light, DSLR';
     var bare = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(text);
-    // 35mm is ethnicity-neutral and favors full-body over classic 85mm portrait crop.
+    // Wider FOV favors full-body over classic 85mm portrait crop; 28mm when user asked 全身.
+    var fullCue = wantsFullBodyFraming(coreHint) || wantsFullBodyFraming(text);
+    var lensMm = fullCue ? '28mm' : '35mm';
     var lead = bare
-      ? 'photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores'
-      : 'photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores, realistic fabric texture';
+      ? 'photorealistic RAW photo, shot on DSLR, ' + lensMm + ', natural skin pores'
+      : 'photorealistic RAW photo, shot on DSLR, ' + lensMm + ', natural skin pores, realistic fabric texture';
     if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
       text = lead + ', ' + text;
     } else if (!/^\s*photoreal/i.test(text)) {
@@ -565,10 +599,11 @@
     layer.id = '图片预览层';
     layer.className = '图片预览层';
     layer.setAttribute('hidden', '');
-    layer.innerHTML = '<button type="button" class="图片预览关闭" aria-label="关闭预览">×</button>'
+    layer.innerHTML = '<button type="button" class="图片预览关闭" aria-label="关闭预览" title="关闭">×</button>'
       + '<figure class="图片预览框">'
       + '<img alt="预览大图" referrerpolicy="no-referrer">'
       + '<figcaption class="图片预览状态"></figcaption>'
+      + '<p class="图片预览提示">点击图片再放大 · 右上角关闭</p>'
       + '<button type="button" class="次按钮 图片预览重试" hidden>重新加载图片</button>'
       + '</figure>';
     document.body.appendChild(layer);
@@ -576,6 +611,15 @@
       if (e.target === layer || (e.target.classList && e.target.classList.contains('图片预览关闭'))) {
         closeImagePreview();
       }
+    });
+    var previewImg = layer.querySelector('img');
+    previewImg.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (previewImg.hidden) return;
+      // Two-step: first open is fit-to-screen; click again toggles further zoom / pan.
+      layer.classList.toggle('放大');
+      var tip = layer.querySelector('.图片预览提示');
+      if (tip) tip.textContent = layer.classList.contains('放大') ? '点击缩小 · 右上角关闭' : '点击图片再放大 · 右上角关闭';
     });
     var retry = layer.querySelector('.图片预览重试');
     retry.addEventListener('click', function (e) {
@@ -596,6 +640,9 @@
     if (!layer) return;
     layer.setAttribute('hidden', '');
     layer.classList.remove('开');
+    layer.classList.remove('放大');
+    var tip = layer.querySelector('.图片预览提示');
+    if (tip) tip.textContent = '点击图片再放大 · 右上角关闭';
   }
 
   function markCardFailed(card, url, thumb) {
@@ -666,6 +713,9 @@
     var layer = ensurePreviewLayer();
     layer.removeAttribute('hidden');
     layer.classList.add('开');
+    layer.classList.remove('放大');
+    var tip = layer.querySelector('.图片预览提示');
+    if (tip) tip.textContent = '点击图片再放大 · 右上角关闭';
     layer.setAttribute('data-full-url', url);
     if (thumb) {
       if (!thumb.id) thumb.id = '生图预览_' + String(Date.now()) + '_' + Math.floor(Math.random() * 10000);
@@ -1720,6 +1770,12 @@
       }
     }
     var dimensions = value('图像比例').split('x');
+    var aspect = preferPortraitAspectForFullBody(
+      Number(dimensions[0]) || 512,
+      Number(dimensions[1]) || 512,
+      String(value('角色描述') || run.coreSource || description || '')
+    );
+    dimensions = [String(aspect.width), String(aspect.height)];
     var negative = englishizeNegativePrompt(value('负面提示'));
     if (hasCjk(value('负面提示'))) {
       // Keep the textarea English after convert so cached CN does not stick.
@@ -1748,6 +1804,11 @@
     var ethSrc = String(value('角色描述') || run.coreSource || '');
     if (hasEastAsianCue(ethSrc) && !/caucasian|blonde|european/i.test(negative)) {
       negative += ', caucasian, european, blonde, blue eyes, western european features';
+    }
+    if (wantsFullBodyFraming(ethSrc) || wantsFullBodyFraming(description)) {
+      if (!/cropped at waist|cut off feet|half-body shot|upper body only/i.test(negative)) {
+        negative += ', cropped at waist, cropped legs, cut off feet, cut off head, close-up portrait, half-body shot, upper body only, waist-up crop';
+      }
     }
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
@@ -1811,6 +1872,7 @@
   window.hasEastAsianCue = hasEastAsianCue;
   window.applyEastAsianEthnicity = applyEastAsianEthnicity;
   window.wantsFullBodyFraming = wantsFullBodyFraming;
+  window.preferPortraitAspectForFullBody = preferPortraitAspectForFullBody;
   window.hasExplicitCropFraming = hasExplicitCropFraming;
   window.applyRealisticFrontFullBody = applyRealisticFrontFullBody;
   window.applyRealisticFrontFullBody = applyRealisticFrontFullBody;

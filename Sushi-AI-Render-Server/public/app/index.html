@@ -85,11 +85,14 @@
     .chat-channel-row select { width: auto; min-width: 160px; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
     .bubble img.chat-img { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 12px; margin: 4px 0 8px; background: #fff; cursor: pointer; }
     .bubble.bot img.chat-img { box-shadow: 0 8px 24px rgba(27,31,42,.08); }
-    .图片预览层 { position: fixed; inset: 0; z-index: 10050; display: grid; place-items: center; padding: 24px; background: rgba(5,7,8,.92); }
+    .图片预览层 { position: fixed; inset: 0; z-index: 10050; display: grid; place-items: center; padding: max(20px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px)); background: rgba(5,7,8,.92); overflow: auto; -webkit-overflow-scrolling: touch; }
     .图片预览层[hidden] { display: none; }
-    .图片预览关闭 { position: absolute; top: 16px; right: 18px; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; font-size: 28px; cursor: pointer; }
-    .图片预览层 img { max-width: min(96vw, 920px); max-height: 82vh; object-fit: contain; border-radius: 12px; background: #111; }
+    .图片预览关闭 { position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 10060; width: 48px; height: 48px; border: 1px solid rgba(255,255,255,.4); border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; font-size: 30px; line-height: 1; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+    .图片预览层 img { max-width: min(96vw, 100%); max-height: min(90vh, calc(100dvh - 72px)); width: auto; height: auto; object-fit: contain; border-radius: 12px; background: #111; cursor: zoom-in; }
+    .图片预览层.放大 { place-items: start center; align-content: start; padding-top: max(64px, calc(env(safe-area-inset-top, 0px) + 52px)); }
+    .图片预览层.放大 img { max-width: none; max-height: none; width: min(180vw, 2400px); height: auto; cursor: zoom-out; }
     .图片预览状态 { margin-top: 12px; color: #e5e7eb; font-size: 14px; text-align: center; }
+    .图片预览提示 { margin-top: 8px; color: rgba(229,231,235,.78); font-size: 12px; text-align: center; }
     .图片预览重试 { margin-top: 12px; }
     .limit-note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 8px; }
     .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
@@ -457,15 +460,25 @@
       layer.id = '图片预览层';
       layer.className = '图片预览层';
       layer.hidden = true;
-      layer.innerHTML = '<button type="button" class="图片预览关闭" aria-label="关闭预览">×</button>'
+      layer.innerHTML = '<button type="button" class="图片预览关闭" aria-label="关闭预览" title="关闭">×</button>'
         + '<figure class="图片预览框"><img alt="预览大图" referrerpolicy="no-referrer">'
         + '<figcaption class="图片预览状态"></figcaption>'
+        + '<p class="图片预览提示">点击图片再放大 · 右上角关闭</p>'
         + '<button type="button" class="btn btn-ghost 图片预览重试" hidden>重新加载图片</button></figure>';
       document.body.appendChild(layer);
       layer.addEventListener('click', function (e) {
         if (e.target === layer || (e.target.classList && e.target.classList.contains('图片预览关闭'))) {
           layer.hidden = true;
+          layer.classList.remove('放大');
         }
+      });
+      var previewImg = layer.querySelector('img');
+      previewImg.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (previewImg.hidden) return;
+        layer.classList.toggle('放大');
+        var tip = layer.querySelector('.图片预览提示');
+        if (tip) tip.textContent = layer.classList.contains('放大') ? '点击缩小 · 右上角关闭' : '点击图片再放大 · 右上角关闭';
       });
       layer.querySelector('.图片预览重试').addEventListener('click', function (e) {
         e.stopPropagation();
@@ -474,7 +487,10 @@
         openHomePreview(url, id ? document.getElementById(id) : null);
       });
       document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') { var ly = $('图片预览层'); if (ly) ly.hidden = true; }
+        if (e.key === 'Escape') {
+          var ly = $('图片预览层');
+          if (ly) { ly.hidden = true; ly.classList.remove('放大'); }
+        }
       });
       return layer;
     }
@@ -482,6 +498,9 @@
       if (!url) return;
       var layer = ensureHomePreviewLayer();
       layer.hidden = false;
+      layer.classList.remove('放大');
+      var tip0 = layer.querySelector('.图片预览提示');
+      if (tip0) tip0.textContent = '点击图片再放大 · 右上角关闭';
       layer.setAttribute('data-full-url', url);
       if (thumb) {
         if (!thumb.id) thumb.id = 'chat_img_' + Date.now();

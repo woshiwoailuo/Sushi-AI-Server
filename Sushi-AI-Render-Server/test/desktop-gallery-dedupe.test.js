@@ -27,6 +27,17 @@ test('client and server expose reply dedupe helpers', () => {
   assert.match(home, /collapseRepeatedText\(content\)/);
 });
 
+test('lightbox close + history fit + two-step zoom CSS present', () => {
+  assert.match(workshop, /\.图片预览关闭/);
+  assert.match(workshop, /position:\s*fixed/);
+  assert.match(workshop, /safe-area-inset-top/);
+  assert.match(workshop, /\.图片预览层\.放大/);
+  assert.match(genJs, /点击图片再放大/);
+  assert.match(workshop, /\.历史卡片 img[\s\S]*?object-fit:\s*contain/);
+  assert.match(genJs, /classList\.toggle\('放大'\)/);
+  assert.match(genJs, /preferPortraitAspectForFullBody/);
+});
+
 test('success hides bulky 已生成 status so gallery sits under 角色画廊', () => {
   assert.match(workshop, /<h2>角色画廊<\/h2>/);
   assert.match(genJs, /function hideStatusPanel/);
