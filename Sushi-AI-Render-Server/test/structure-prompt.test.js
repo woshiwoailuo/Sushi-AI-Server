@@ -51,7 +51,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.72/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.73/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
