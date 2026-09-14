@@ -1688,14 +1688,42 @@ app.post('/api/workshop/horde-image', async (req, res) => {
     });
     const acceptedJson = await accepted.json().catch(() => ({}));
     if (!accepted.ok || !acceptedJson.id) return workshopImageError(res, accepted.status === 429 ? 429 : 502, 'Horde 生图服务器未受理请求');
+    let jobId = acceptedJson.id;
+    let censoredRetries = 0;
+    const maxCensoredRetries = 3;
     for (let i = 0; i < 150; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1200));
       if (controller.signal.aborted) break;
-      const status = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(acceptedJson.id), { signal: controller.signal, headers: { apikey: process.env.HORDE_API_KEY || '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' } });
+      const status = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(jobId), { signal: controller.signal, headers: { apikey: process.env.HORDE_API_KEY || '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' } });
       const statusJson = await status.json().catch(() => ({}));
       if (statusJson && statusJson.faulted) return workshopImageError(res, 502, 'Horde 生图服务器生成失败');
-      const image = statusJson && statusJson.generations && statusJson.generations[0] && statusJson.generations[0].img;
-      if (image) { res.set('Cache-Control', 'no-store'); return res.json({ url: image, provider: 'aihorde' }); }
+      const gens = statusJson && Array.isArray(statusJson.generations) ? statusJson.generations : [];
+      if (!gens.length && !(statusJson && statusJson.done)) continue;
+      const image = gens.find((g) => g && g.img && !g.censored);
+      if (image && image.img) { res.set('Cache-Control', 'no-store'); return res.json({ url: image.img, provider: 'aihorde' }); }
+      if (statusJson && statusJson.done) {
+        const hadCensored = gens.some((g) => g && g.censored);
+        if (hadCensored && censoredRetries < maxCensoredRetries) {
+          censoredRetries += 1;
+          const retryModels = isAnime
+            ? ['WAI-NSFW-illustrious-SDXL', ...models.filter((m) => m !== 'WAI-NSFW-illustrious-SDXL')].slice(0, Math.max(3, models.length))
+            : ['Realistic Vision', 'majicMIX realistic', 'AbsoluteReality', ...models].filter((m, idx, arr) => arr.indexOf(m) === idx);
+          const retry = await fetch('https://aihorde.net/api/v2/generate/async', {
+            method: 'POST', signal: controller.signal,
+            headers: { 'Content-Type': 'application/json', apikey: process.env.HORDE_API_KEY || '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
+            body: JSON.stringify({ prompt: hordePrompt, nsfw: true, censor_nsfw: false, slow_workers: true, models: retryModels, params: { n: 1, width, height, steps: 16, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
+          });
+          const retryJson = await retry.json().catch(() => ({}));
+          if (!retry.ok || !retryJson.id) {
+            return workshopImageError(res, 502, '成人内容被生图节点审查，请换写实/动漫通道或稍后再试');
+          }
+          jobId = retryJson.id;
+          continue;
+        }
+        return workshopImageError(res, 502, hadCensored
+          ? '成人内容被生图节点审查，请换写实/动漫通道或稍后再试'
+          : '任务结束但没有可显示的图片，请修改描述后重试');
+      }
     }
     return workshopImageError(res, 504, 'Horde 生图服务器排队超时');
   } catch (error) {

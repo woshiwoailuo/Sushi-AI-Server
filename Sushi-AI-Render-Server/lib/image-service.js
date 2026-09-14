@@ -30,23 +30,40 @@ function imageSource(value) {
 }
 
 const HORDE_REAL_MODELS = [
-  'ICBINP - I Can\'t Believe It\'s Not Photography',
-  'AbsoluteReality',
   'Realistic Vision',
+  'majicMIX realistic',
+  'AbsoluteReality',
   'Photon',
+  'ICBINP - I Can\'t Believe It\'s Not Photography',
   'ICBINP XL',
   'Edge Of Realism',
-  'majicMIX realistic',
 ];
 const HORDE_IMG2IMG_REAL_MODELS = HORDE_REAL_MODELS.filter((name) => !/flux|z-image/i.test(name));
 const HORDE_ANIME_MODELS = [
+  'WAI-NSFW-illustrious-SDXL',
   'Counterfeit',
   'Anima-Turbo-v1.1',
   'Anything v5',
   'Flat-2D Animerge',
   'Rev Animated',
-  'WAI-NSFW-illustrious-SDXL',
 ];
+
+function preferNsfwModels(models, isAnime, aggressive) {
+  const preferred = isAnime
+    ? ['WAI-NSFW-illustrious-SDXL', 'Counterfeit', 'Anima-Turbo-v1.1']
+    : ['Realistic Vision', 'majicMIX realistic', 'AbsoluteReality', 'Photon'];
+  const rest = models.slice();
+  const head = [];
+  for (const name of preferred) {
+    const idx = rest.indexOf(name);
+    if (idx >= 0) {
+      head.push(name);
+      rest.splice(idx, 1);
+    }
+  }
+  if (aggressive && head.length) return head.concat(rest.slice(0, 2));
+  return head.concat(rest);
+}
 const REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render';
 
 function stripArtStyleWords(text) {
@@ -271,6 +288,7 @@ function createImageService(options = {}) {
       id: randomUUID(), userId, state: 'submitting', reservation,
       expiresAt: now() + maxWaitMs, queuePosition: null, waitTimeSeconds: null,
       controller: new AbortController(), lastPoll: -Infinity,
+      payload, censoredRetries: 0,
     };
     jobs.set(job.id, job);
     active.set(userId, job.id);
@@ -332,8 +350,41 @@ function createImageService(options = {}) {
       if (check.done) {
         const result = await request('/generate/status/' + encodeURIComponent(job.upstreamId), 'GET', undefined, job.controller.signal);
         if (terminal(job)) return snapshot(job);
-        const image = Array.isArray(result.generations) && result.generations.find((item) => item && item.img && !item.censored);
-        if (!image) throw new ImageError('任务结束但没有可显示的图片，请修改描述后重试');
+        const gens = Array.isArray(result.generations) ? result.generations : [];
+        const image = gens.find((item) => item && item.img && !item.censored);
+        const hadCensored = gens.some((item) => item && item.censored);
+        if (!image) {
+          const maxCensoredRetries = 3;
+          if (hadCensored && job.payload && job.censoredRetries < maxCensoredRetries) {
+            job.censoredRetries += 1;
+            const retryPayload = JSON.parse(JSON.stringify(job.payload));
+            retryPayload.nsfw = true;
+            retryPayload.censor_nsfw = false;
+            const isAnime = Array.isArray(retryPayload.models)
+              && retryPayload.models.some((name) => /wai-nsfw|counterfeit|anima|anything|animerge|rev animated/i.test(String(name)));
+            if (Array.isArray(retryPayload.models) && retryPayload.models.length) {
+              retryPayload.models = preferNsfwModels(retryPayload.models, isAnime, true);
+            }
+            const data = await request('/generate/async', 'POST', retryPayload, job.controller.signal);
+            if (typeof data.id !== 'string' || !data.id) {
+              throw new ImageError('成人内容被生图节点审查，请换写实/动漫通道或稍后再试', 502, 'HORDE_CENSORED');
+            }
+            job.upstreamId = data.id;
+            lastUpstreamId = data.id;
+            job.state = 'queued';
+            job.queuePosition = null;
+            job.waitTimeSeconds = null;
+            job.lastPoll = now();
+            return snapshot(job);
+          }
+          throw new ImageError(
+            hadCensored
+              ? '成人内容被生图节点审查，请换写实/动漫通道或稍后再试'
+              : '任务结束但没有可显示的图片，请修改描述后重试',
+            502,
+            hadCensored ? 'HORDE_CENSORED' : 'NO_IMAGE'
+          );
+        }
         job.image = { url: imageSource(image.img), seed: String(image.seed ?? ''), model: String(image.model || '') };
         await finish(job, 'done');
       }
@@ -386,4 +437,4 @@ function createImageService(options = {}) {
   return { create, get, cancel, current, sweep };
 }
 
-module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, hordeModelsFor, sanitizeRealPrompt };
+module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, hordeModelsFor, sanitizeRealPrompt, preferNsfwModels };
