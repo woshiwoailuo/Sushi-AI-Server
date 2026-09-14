@@ -646,7 +646,7 @@ test('production feature injection preserves manual choice through two generatio
   assert.equal(f.calls.filter(isImageSubmit).length, 2);
 });
 
-test('adult mode defaults on with top-bar toggle and no replica confirmation UI', async t => {
+test('adult mode defaults on with no top-bar toggle and no replica confirmation UI', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.equal(f.w.document.getElementById('成人确认层'), null);
   assert.equal(f.w.document.getElementById('官方警告确认'), null);
@@ -658,17 +658,13 @@ test('adult mode defaults on with top-bar toggle and no replica confirmation UI'
   assert.equal(typeof f.w.确认开启成人主题, 'undefined');
   const tick = f.w.document.getElementById('成人模式对勾');
   assert.equal(f.w.document.getElementById('成人图标按钮'), null);
-  assert.doesNotMatch(f.w.document.querySelector('.顶栏右侧').textContent, /成人模式/);
-  const sw = f.w.document.getElementById('成人开关按钮');
+  assert.equal(f.w.document.getElementById('成人开关按钮'), null);
+  assert.doesNotMatch(f.w.document.querySelector('.顶栏右侧').textContent, /成人模式|✓/);
   assert.ok(f.w.document.querySelector('#只换背景') && f.w.document.querySelector('#只换背景').nextElementSibling.classList.contains('对勾盒'));
-  assert.ok(sw);
-  assert.equal(sw.textContent.trim(), '✓');
-  assert.equal(sw.getAttribute('aria-pressed'), 'true');
   assert.ok(tick);
   assert.equal(tick.checked, true);
   assert.equal(f.w.成人主题已开启, true);
   assert.match(f.w.document.getElementById('成人功能状态').value, /NSFW allowed/);
-  // 藏编辑钮 must not strip official dialogs / our adult toggle
   const official = f.w.document.createElement('div');
   official.setAttribute('role', 'dialog');
   official.id = 'fakeOfficialWarn';
@@ -676,19 +672,63 @@ test('adult mode defaults on with top-bar toggle and no replica confirmation UI'
   f.w.document.body.appendChild(official);
   f.w.藏编辑钮();
   assert.ok(f.w.document.getElementById('fakeOfficialWarn'));
-  assert.equal(f.w.document.getElementById('成人开关按钮')?.textContent.trim(), '✓');
+  assert.ok(f.w.document.getElementById('记忆开关'));
   tick.checked = false;
   f.w.切换成人对勾(false);
   assert.equal(f.w.成人主题已开启, false);
   assert.equal(tick.checked, false);
-  assert.equal(sw.textContent.trim(), '');
   assert.equal(f.w.document.getElementById('成人确认层'), null);
   tick.checked = true;
   f.w.切换成人对勾(true);
   assert.equal(f.w.成人主题已开启, true);
   assert.equal(tick.checked, true);
-  assert.equal(sw.textContent.trim(), '✓');
   assert.equal(f.w.localStorage.getItem('角色生成器_成人主题'), 'enabled');
+});
+
+test('memory mode checkmark defaults on; rewritten core description overrides old memory on generate', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const mem = f.w.document.getElementById('记忆开关');
+  assert.ok(mem);
+  assert.equal(mem.checked, true);
+  assert.equal(f.w.记忆已开(), true);
+  const row = f.w.document.getElementById('记忆模式对勾行');
+  assert.ok(row);
+  assert.match(row.textContent, /记忆模式/);
+  const chat = f.w.document.getElementById('问答区');
+  assert.ok(chat);
+  assert.equal(chat.open, false);
+  assert.equal(f.w.document.getElementById('工具区'), null);
+  assert.equal(typeof f.w.生成随机种子, 'undefined');
+  assert.equal(typeof f.w.复制当前提示, 'undefined');
+  assert.equal(typeof f.w.清理当前提示, 'undefined');
+  assert.equal(typeof f.w.重置生成参数, 'undefined');
+  f.w.document.getElementById('角色描述').value = '旧角色：红发剑士在雨夜';
+  f.w.写记忆摘要('用户：旧角色红发剑士\n助手：他在雨夜拔剑');
+  f.w.标记核心已用于生成();
+  f.w.document.getElementById('角色描述').value = '新角色：银发法师在雪原施法';
+  f.w.document.getElementById('英文描述').value = 'stale english about red-haired swordsman';
+  f.w.document.getElementById('英文描述').dataset.staleFromCore = '1';
+  const sys = f.w.组装记忆与核心系统提示();
+  assert.match(sys, /银发法师在雪原施法/);
+  assert.match(sys, /以此为准/);
+  assert.match(sys, /历史记忆/);
+  assert.match(sys, /红发剑士/);
+  const msgs = f.w.组装花粉消息('继续写下一幕');
+  assert.equal(msgs[0].role, 'system');
+  assert.match(msgs[0].content, /银发法师/);
+  assert.doesNotMatch(msgs[0].content, /^用简体中文回复。延续以下角色记忆/);
+  const blended = f.w.组装出图描述含记忆();
+  assert.match(blended, /银发法师在雪原施法/);
+  assert.doesNotMatch(blended, /^stale english/);
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  assert.equal(f.w.document.getElementById('英文描述').value, '');
+  const posts = f.calls.filter(isImageSubmit);
+  assert.ok(posts.length >= 1, 'expected image submit, calls=' + f.calls.map(c => c.method + ' ' + c.url).join(' | '));
+  const body = JSON.parse(posts[0].body);
+  const prompt = String(body.prompt || '');
+  assert.match(prompt, /银发法师/);
+  assert.doesNotMatch(prompt, /stale english about red-haired/);
 });
 
 
