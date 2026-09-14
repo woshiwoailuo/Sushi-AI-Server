@@ -1,12 +1,9 @@
 'use strict';
 
-const { Agent, fetch: undiciFetch } = require('undici');
-const agent = new Agent({
-  keepAliveTimeout: 30_000,
-  keepAliveMaxTimeout: 60_000,
-  connections: 16,
-  pipelining: 1,
-});
+/**
+ * Outbound fetch helpers for Vercel serverless / Node 20+.
+ * Uses global fetch only (no undici package) so cold boot never fails MODULE_NOT_FOUND.
+ */
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -25,9 +22,9 @@ function sleep(ms, signal) {
   });
 }
 
-/** Connection-reusing fetch for outbound image/chat upstreams. */
+/** Same signature as prior fetchReuse; connection pooling is left to the runtime. */
 function fetchReuse(url, options = {}) {
-  return undiciFetch(url, Object.assign({}, options, { dispatcher: agent }));
+  return fetch(url, options);
 }
 
 function isRetryableFetchError(error, status) {
@@ -39,7 +36,7 @@ function isRetryableFetchError(error, status) {
 }
 
 /**
- * Limited retries for transient upstream failures. Does not retry 4xx (except 429).
+ * Limited retries for transient upstream failures. Does not retry 4xx (except via 502/503/504).
  */
 async function fetchLimitedRetry(url, options = {}, retryOptions = {}) {
   const retries = Math.max(0, Number(retryOptions.retries != null ? retryOptions.retries : 2));
@@ -90,7 +87,7 @@ function createRequestQueue(concurrency) {
 const imageUpstreamQueue = createRequestQueue(Number(process.env.SUSHI_IMAGE_QUEUE || 2));
 
 module.exports = {
-  agent,
+  agent: null,
   fetchReuse,
   fetchLimitedRetry,
   createRequestQueue,
