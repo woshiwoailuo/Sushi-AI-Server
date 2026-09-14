@@ -30,7 +30,7 @@ test('parseStructureJson accepts fenced JSON and assembles compact English', () 
 
 test('heuristicStructureFromText prefers photoreal unless anime is requested', () => {
   const real = heuristicStructureFromText('一位虚构的成年女性站在雨夜街头');
-  assert.match(real.promptEn, /photorealistic RAW photo/i);
+  assert.match(real.promptEn, /photorealistic/i);
   const anime = heuristicStructureFromText('二次元少女在霓虹巷', { anime: true });
   assert.match(anime.promptEn, /anime illustration/i);
 });
@@ -51,7 +51,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.71/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.72/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
@@ -59,9 +59,9 @@ test('workshop client structures before gen and shows wake copy', () => {
 test('heuristic preserves East Asian and 全身 framing', () => {
   const east = heuristicStructureFromText('一位东亚中国女性全身站立在雨夜街头');
   assert.match(east.fields.appearance, /East Asian/i);
+  assert.doesNotMatch(east.fields.appearance, /distinctly East Asian appearance/i);
   assert.match(east.fields.pose, /full body|feet in frame/i);
   assert.match(east.fields.camera, /28mm/i);
-  assert.match(east.fields.pose, /head and feet both visible|uncropped/i);
   assert.match(east.promptEn, /East Asian/i);
   const msgs = buildStructureMessages('韩国女性全身', { anime: false });
   assert.match(msgs[0].content, /PRESERVE ethnicity|East Asian|NEVER invent blonde/i);
@@ -84,7 +84,7 @@ test('img2img local-edit detection and keep-rest outbound', () => {
   assert.equal(none, 'raise left hand');
 
   const out = applyLocalEditOutbound('raise the left hand', '图中人物抬起左手', { img2img: true });
-  assert.match(out, /CRITICAL EDIT \(must be clearly visible\).*left hand raised/i);
+  assert.match(out, /(?:CRITICAL EDIT \(must be clearly visible\)|Visible edit:).*left hand raised/i);
   assert.match(out, /keep the same person identity|same clothing|background/i);
   assert.match(out, /allow pose\/gesture\/limbs to change|stated local change must stay clearly visible|do NOT invent a new person/i);
   assert.match(out, /raise the left hand/i);
@@ -93,8 +93,8 @@ test('img2img local-edit detection and keep-rest outbound', () => {
   assert.equal(again, out);
 
   const h = heuristicStructureFromText('图中人物抬起左手', { img2img: true });
-  assert.match(h.promptEn, /left hand raised|CRITICAL EDIT|same clothing as the reference|allow pose\/gesture\/limbs|stated local change must stay clearly visible/i);
-  assert.match(h.fields.pose, /left hand raised|抬起左手|CRITICAL EDIT/i);
+  assert.match(h.promptEn, /left hand raised|CRITICAL EDIT|Visible edit:|same clothing as the reference|allow pose\/gesture\/limbs|stated local change must stay clearly visible/i);
+  assert.match(h.fields.pose, /left hand raised|抬起左手|CRITICAL EDIT|Visible edit:/i);
   const eastFull = heuristicStructureFromText('一位东亚中国女性全身站立在雨夜街头');
   assert.match(eastFull.fields.appearance, /East Asian/i);
   assert.match(eastFull.fields.pose, /full body|feet in frame/i);
@@ -143,9 +143,9 @@ test('core fidelity lead and heuristic do not invent clothing', () => {
   const msgs = buildStructureMessages('穿红毛衣的东亚女性侧身站在图书馆窗边', { anime: false });
   assert.match(msgs[0].content, /FAITHFUL TO CORE|do NOT invent clothing, props/i);
   assert.match(msgs[0].content, /do NOT invent woman|gender-neutral|omit none/i);
-  assert.match(msgs[0].content, /adult man|male \/ masculine|男人|男性/i);
+  assert.match(msgs[0].content, /adult man|男人|男性/i);
   assert.match(msgs[1].content, /translate faithfully|include ALL explicitly described|do not invent gender/i);
-  assert.match(msgs[1].content, /adult man|male\/masculine|never woman/i);
+  assert.match(msgs[1].content, /adult man|never woman/i);
   assert.match(msgs[1].content, /红毛衣|图书馆/);
   const h = heuristicStructureFromText('穿红毛衣的东亚女性侧身站在图书馆窗边');
   assert.match(h.promptEn, /Faithful to core description/i);
@@ -166,9 +166,22 @@ test('heuristic covers 翻炒+蒸汽 action-first from kitchen core', () => {
   assert.match(h.fields.lighting, /overhead|window light/i);
   // Action (pose) appears before appearance filler in assembled prompt order
   const poseIdx = h.promptEn.search(/stir[\s-]?fry|tossing/i);
-  const styleIdx = h.promptEn.search(/photorealistic RAW|DSLR/i);
+  const styleIdx = h.promptEn.search(/photorealistic|documentary|candid/i);
   assert.ok(poseIdx >= 0);
   assert.ok(styleIdx < 0 || poseIdx < styleIdx, 'action should appear before style filler');
   assert.match(CORE_FIDELITY_LEAD, /lead with described actions|actions then subject props/i);
   assert.match(STRUCTURE_SYSTEM, /ACTION-FIRST|翻炒|steam/i);
+});
+
+test('heuristic covers 两名对视+暖光室内 count-first', () => {
+  const core = '两名成年人在暖光室内对视';
+  const h = heuristicStructureFromText(core);
+  assert.match(h.fields.subject, /\btwo\b|两名/i);
+  assert.match(h.fields.pose, /looking at each other|eye\s*contact/i);
+  assert.match(h.fields.scene, /indoor|interior/i);
+  assert.match(h.fields.lighting, /warm/i);
+  assert.match(h.promptEn, /\btwo\b/i);
+  assert.match(h.promptEn, /looking at each other|eye\s*contact/i);
+  assert.match(h.promptEn, /warm/i);
+  assert.match(STRUCTURE_SYSTEM, /两名|对视|two adults|looking at each other/i);
 });

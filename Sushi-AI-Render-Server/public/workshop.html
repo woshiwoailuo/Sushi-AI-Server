@@ -2362,24 +2362,19 @@
       .replace(/二次元|动漫风格|动漫|卡通|漫画|插画|手绘|赛璐璐|视觉小说/g, " ")
       .replace(/\s{2,}/g, " ")
       .trim();
-    if (!文) 文 = "photorealistic RAW photo of a fictional adult, natural light, DSLR";
-    var 裸露 = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(文);
-    var 头 = 裸露
-      ? "photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores"
-      : "photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores, realistic fabric texture";
-    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(文)) {
+    if (!文) 文 = "photorealistic photograph of a fictional adult, natural light";
+    // 最小写实默认：不钉死 35mm / RAW / cinematic / skin-pore 长墙
+    var 头 = "photorealistic photograph, natural light";
+    if (!/photoreal|RAW photo|DSLR|real human|写实摄影|写实照片|documentary|candid/i.test(文)) {
       文 = 头 + ", " + 文;
-    } else if (!/^\s*photoreal/i.test(文)) {
+    } else if (!/^\s*photoreal/i.test(文) && !/documentary|candid/i.test(文)) {
       文 = "photorealistic photograph of " + 文;
     }
-    if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric|shallow depth/i.test(文)) {
-      文 += ", natural light, cinematic still, shallow depth of field";
+    if (!/natural light|warm light|soft light|golden hour|studio light|window light|overhead/i.test(文)) {
+      文 += ", natural light";
     }
-    if (!/skin pores|subsurface|imperfection|fabric texture|material detail|sharp focus/i.test(文)) {
-      文 += ", natural skin texture, clear material detail, sharp focus, real human";
-    }
-    if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(文)) {
-      文 += ", not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading";
+    if (!/not anime|no anime|非卡通|非动漫|NOT anime|not cartoon|not 2d/i.test(文)) {
+      文 += ", not anime, not cartoon, not 2d";
     }
     if (!/fictional adult|18\+|no minors/i.test(文)) {
       文 += ", fictional adult 18+ only, no minors";
@@ -2389,46 +2384,39 @@
     var 要半身 = !要全身 && /半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上|(?:close[\s-]?up|head|bust|waist[\s-]?up|upper[\s-]?body|half[\s-]?body)\s+portrait|portrait\s+(?:shot|close|crop|headshot)/i.test(文);
     var 局部改 = false;
     try { 局部改 = typeof 应用局部改图 === "function" ? 应用局部改图() : (有参考图() && 是局部改图核心(核)); } catch (eLoc) { 局部改 = false; }
-    // 写实默认全身正面（强优先靠前）；用户写半身/特写/侧脸等则尊重原文；裸 portrait 摄影词不挡全身
-    // 图生图局部改（抬手/转头/微笑等）保持原构图，不注入全身重绘。
-    if (!要半身 && !局部改) {
+    // 软覆盖：仅当核心要求全身时补 framing；不默认钉死全身正面/面向镜头
+    if (要全身 && !要半身 && !局部改) {
       var 全身片 = [];
-      if (要全身) {
-        全身片.push("full body head-to-toe visible", "feet in frame", "head and feet both visible", "standing full figure", "entire body in frame", "wide FOV full-body shot", "wide enough field of view", "complete figure from crown to shoes", "uncropped standing full figure", "space above head and below feet", "subject fills vertical frame from head to toe", "not cropped at waist or chest", "not a close-up", "not a half-body portrait", "no waist crop");
-      } else if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in frame/i.test(文)) {
-        全身片.push("full body head-to-toe visible", "feet in frame", "head and feet both visible", "standing full figure", "entire body in frame", "not cropped at waist or chest");
+      if (!/full[\s-]?body|head[\s-]?to[\s-]?toe|feet in frame/i.test(文)) {
+        全身片.push("full body head-to-toe visible", "feet in frame");
       } else {
         if (!/feet in frame/i.test(文)) 全身片.push("feet in frame");
-        if (!/head and feet both visible/i.test(文)) 全身片.push("head and feet both visible");
-        if (!/not cropped/i.test(文)) 全身片.push("not cropped at waist or chest");
-        if (!/standing full figure|entire body in frame/i.test(文)) 全身片.push("standing full figure");
+        if (!/head and feet both visible|head[\s-]?to[\s-]?toe/i.test(文)) 全身片.push("head and feet both visible");
       }
-      if (!/侧脸|侧面|侧身|背面|背影|后视|微仰|俯拍|仰拍|three[\s-]?quarter|profile|from behind|back view|side view|rear view|over[\s-]?shoulder|low angle|high angle/i.test(文)) {
-        if (!/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(文)) {
-          全身片.push("front view facing camera", "eye-level", "looking at camera");
-        }
+      if (/正面|面向镜头|平视|facing\s+(?:the\s+)?camera|front\s+view|eye[\s-]?level/i.test(源)
+          && !/侧脸|侧面|侧身|背面|背影|后视|profile|from behind|back view|side view/i.test(文)
+          && !/front[\s-]?view|facing (the )?camera|eye[\s-]?level|looking at (the )?camera/i.test(文)) {
+        全身片.push("front view facing camera");
       }
-      if (要全身) 文 = 文.replace(/\bshot on DSLR,\s*(?:85|50|35)mm\b/gi, "shot on DSLR, 28mm");
-      else 文 = 文.replace(/\bshot on DSLR,\s*85mm\b/gi, "shot on DSLR, 35mm");
+      文 = 文.replace(/\bshot on DSLR,\s*(?:85|50|35)mm\b/gi, "shot on DSLR, 28mm");
       if (全身片.length) {
         var 注入 = 全身片.join(", ");
-        var 头匹配 = 文.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:28|35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+        var 头匹配 = 文.match(/^(photorealistic (?:RAW )?photo(?:graph)?(?:,\s*shot on DSLR,\s*(?:28|35|50|85)mm)?(?:,\s*natural (?:skin pores|light))?(?:,\s*realistic fabric texture)?)/i);
         if (头匹配) {
           文 = 头匹配[1] + ", " + 注入 + 文.slice(头匹配[1].length);
         } else {
           文 = 注入 + ", " + 文;
         }
       }
-      if (要全身) 文 += ", full body head-to-toe visible, feet in frame, head and feet both visible";
     }
-    // 东亚外貌：出图英文强化；去掉会盖过东亚的西方默认美貌词
+    // 东亚外貌：核心有才软强化；去掉西方默认美貌词
     if (/东亚|亚洲人|中国人|韩国人|日本人|华人|east[\s-]?asian|\bchinese\b|\bkorean\b|\bjapanese\b|asian (?:woman|man|features|face)/i.test(源)) {
       文 = 文.replace(/\b(blonde|blond|caucasian|european|western european|blue[\s-]?eyes)\b/gi, " ").replace(/\s{2,}/g, " ").replace(/[，,]{2,}/g, ",").trim();
       if (!/east[\s-]?asian/i.test(文)) {
-        var 族 = "East Asian, East Asian facial features, distinctly East Asian appearance";
-        var 头2 = 文.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
-        if (头2) 文 = 头2[1] + ", " + 族 + 文.slice(头2[1].length);
-        else 文 = 族 + ", " + 文;
+        var 族 = "East Asian, East Asian facial features";
+        文 = 族 + ", " + 文;
+      } else if (!/east[\s-]?asian facial features|asian facial features/i.test(文)) {
+        文 = 文.replace(/east[\s-]?asian/i, "East Asian, East Asian facial features");
       }
     }
     return 文.replace(/\s{2,}/g, " ").trim();
@@ -2455,12 +2443,12 @@
   function 局部改变化英文(核心) {
     if (typeof localEditChangeDirective === "function") return localEditChangeDirective(核心);
     var t = String(核心 || "").replace(/\s+/g, " ").trim();
-    if (/抬起左手|左手抬起|左手举起/i.test(t)) return "CRITICAL EDIT (must be clearly visible): left hand raised high, left arm lifted upward, raised left hand clearly visible";
-    if (/抬起右手|右手抬起|右手举起/i.test(t)) return "CRITICAL EDIT (must be clearly visible): right hand raised high, right arm lifted upward, raised right hand clearly visible";
-    if (/举手|抬起|举起|抬手|伸手|挥手/i.test(t)) return "CRITICAL EDIT (must be clearly visible): hand/arm raised as requested, pose change obvious and limbs clearly different from the reference";
-    if (/转头|回头|侧头|扭头|侧过脸|低头|抬头/i.test(t)) return "CRITICAL EDIT (must be clearly visible): head turned/oriented as requested, new head direction clearly visible";
-    if (局部改姿势手势(t)) return "CRITICAL EDIT (must be clearly visible): apply the requested pose/gesture change strongly so limbs/posture clearly differ from the reference";
-    return "CRITICAL EDIT (must be clearly visible): apply the stated local change so it is obvious";
+    if (/抬起左手|左手抬起|左手举起/i.test(t)) return "Visible edit: left hand raised high, left arm lifted upward, raised left hand clearly visible";
+    if (/抬起右手|右手抬起|右手举起/i.test(t)) return "Visible edit: right hand raised high, right arm lifted upward, raised right hand clearly visible";
+    if (/举手|抬起|举起|抬手|伸手|挥手/i.test(t)) return "Visible edit: hand/arm raised as requested, pose change obvious and limbs clearly different from the reference";
+    if (/转头|回头|侧头|扭头|侧过脸|低头|抬头/i.test(t)) return "Visible edit: head turned/oriented as requested, new head direction clearly visible";
+    if (局部改姿势手势(t)) return "Visible edit: apply the requested pose/gesture change strongly so limbs/posture clearly differ from the reference";
+    return "Visible edit: apply the stated local change so it is obvious";
   }
   function 补局部改图英文(英文, 核心) {
     if (typeof applyLocalEditOutbound === "function") {
@@ -2474,7 +2462,7 @@
     var 强制 = false;
     try { 强制 = 读取生图方式() === "改动" && 本轮使用参考图(); } catch (eForce) { 强制 = false; }
     if (!强制 && !是局部改图核心(核心 || 文本)) return 文本;
-    if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(文本)) return 文本;
+    if (/CRITICAL EDIT \(must be clearly visible\)|Visible edit:|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(文本)) return 文本;
     var 变化 = 局部改变化英文(核心 || 文本);
     var 姿势 = 局部改姿势手势(核心 || 文本);
     var 锁定 = 姿势
@@ -4142,7 +4130,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.71" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.72" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
