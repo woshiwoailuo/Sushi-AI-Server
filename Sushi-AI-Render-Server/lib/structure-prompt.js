@@ -84,23 +84,46 @@ function applyLocalEditOutbound(promptEn, core, options) {
   const hasRef = !!(opts.img2img || opts.hasSourceImage);
   if (!hasRef) return String(promptEn || '');
   if (!opts.force && !isLocalEditCore(core || promptEn)) return String(promptEn || '');
-  const text = String(promptEn || '').replace(/\s+/g, ' ').trim();
-  if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(text)) {
+  let text = String(promptEn || '').replace(/\s+/g, ' ').trim();
+  const pose = isPoseGestureEdit(core || text);
+  const change = localEditChangeDirective(core || text);
+  const keep = pose ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST;
+  // Pose: strip long composition locks that fight limb changes, then (re)prefix CRITICAL EDIT.
+  if (pose) {
+    text = text
+      .replace(/IMG2IMG local edit of the REFERENCE IMAGE only:\s*/gi, '')
+      .replace(/Keep the same person identity[^.]*\./gi, '')
+      .replace(/do NOT invent a new person or background[^.]*\./gi, '')
+      .replace(/the stated local change must stay clearly visible[^.]*\./gi, '')
+      .replace(/apply ONLY the stated local change[^.]*\./gi, '')
+      .replace(/do not (?:redraw|recompose)[^.]*\./gi, '')
+      .replace(/same camera angle and crop as the reference image/gi, '')
+      .replace(/body proportions, clothing, accessories, background, and lighting/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[，,]{2,}/g, ',')
+      .replace(/^[,\s]+|[,\s]+$/g, '')
+      .trim();
+  } else if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(text)) {
     return text;
   }
-  const change = localEditChangeDirective(core || text);
-  const keep = isPoseGestureEdit(core || text) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST;
+  if (/CRITICAL EDIT \(must be clearly visible\)/i.test(text)) {
+    // Already has directive; still append pose-friendly keep-rest if missing.
+    if (pose && !/allow pose\/gesture\/limbs to change/i.test(text)) {
+      return (text + ', ' + keep).replace(/\s{2,}/g, ' ').trim();
+    }
+    return text;
+  }
   return (change + (text ? ', ' + text : '') + ', ' + keep).replace(/\s{2,}/g, ' ').trim();
 }
 
 function preferLocalEditStrength(current, core) {
   const n = Number(current);
-  const base = Number.isFinite(n) && n > 0 ? n : 0.45;
+  const base = Number.isFinite(n) && n > 0 ? n : 0.6;
   const coreText = String(core || '').replace(/\s+/g, ' ').trim();
   if (isPoseGestureEdit(coreText)) {
-    // Harder band: 0.35–0.45 still often froze limbs under keep-rest + seed lock.
-    const floor = 0.45;
-    const cap = 0.55;
+    // Pose/gesture needs stronger denoising so raised-hand etc. are visible (0.55–0.65).
+    const floor = 0.55;
+    const cap = 0.65;
     if (base > cap) return cap;
     if (base < floor) return floor;
     return base;
@@ -174,7 +197,7 @@ function heuristicStructureFromText(text, options = {}) {
     style: wantAnime
       ? 'anime illustration'
       : 'photorealistic RAW photo, DSLR',
-    extras: (localEdit ? LOCAL_EDIT_KEEP_REST + ', ' : '') + 'fictional adult 18+ only, no minors',
+    extras: (localEdit ? ((isPoseGestureEdit(cleaned) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST) + ', ') : '') + 'fictional adult 18+ only, no minors',
   };
   return { fields, promptEn: assembleStructuredPrompt(fields) };
 }
@@ -197,6 +220,7 @@ module.exports = {
   STRUCTURE_FIELDS,
   STRUCTURE_SYSTEM,
   LOCAL_EDIT_KEEP_REST,
+  LOCAL_EDIT_KEEP_REST_POSE,
   parseStructureJson,
   assembleStructuredPrompt,
   heuristicStructureFromText,

@@ -382,20 +382,43 @@
     if (!hasRef) return String(promptEn || '');
     if (!opts.force && !isLocalEditCore(core || promptEn)) return String(promptEn || '');
     var t = String(promptEn || '').replace(/\s+/g, ' ').trim();
-    if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(t)) return t;
+    var pose = isPoseGestureEdit(core || t);
     var change = localEditChangeDirective(core || t);
-    var keep = isPoseGestureEdit(core || t) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST;
+    var keep = pose ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST;
+    if (pose) {
+      t = t
+        .replace(/IMG2IMG local edit of the REFERENCE IMAGE only:\s*/gi, '')
+        .replace(/Keep the same person identity[^.]*\./gi, '')
+        .replace(/do NOT invent a new person or background[^.]*\./gi, '')
+        .replace(/the stated local change must stay clearly visible[^.]*\./gi, '')
+        .replace(/apply ONLY the stated local change[^.]*\./gi, '')
+        .replace(/do not (?:redraw|recompose)[^.]*\./gi, '')
+        .replace(/same camera angle and crop as the reference image/gi, '')
+        .replace(/body proportions, clothing, accessories, background, and lighting/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/[，,]{2,}/g, ',')
+        .replace(/^[,\s]+|[,\s]+$/g, '')
+        .trim();
+    } else if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(t)) {
+      return t;
+    }
+    if (/CRITICAL EDIT \(must be clearly visible\)/i.test(t)) {
+      if (pose && !/allow pose\/gesture\/limbs to change/i.test(t)) {
+        return (t + ', ' + keep).replace(/\s{2,}/g, ' ').trim();
+      }
+      return t;
+    }
     return (change + (t ? ', ' + t : '') + ', ' + keep).replace(/\s{2,}/g, ' ').trim();
   }
 
   function preferLocalEditStrength(current, core) {
     var n = Number(current);
-    var base = isFinite(n) && n > 0 ? n : 0.45;
+    var base = isFinite(n) && n > 0 ? n : 0.6;
     var coreText = String(core || '').replace(/\s+/g, ' ').trim();
     if (isPoseGestureEdit(coreText)) {
-      // Harder band: 0.35–0.45 still often froze under keep-rest + identical seed.
-      var poseFloor = 0.45;
-      var poseCap = 0.55;
+      // Pose/gesture: 0.45–0.55 still often left limbs frozen; use 0.55–0.65.
+      var poseFloor = 0.55;
+      var poseCap = 0.65;
       if (base > poseCap) return poseCap;
       if (base < poseFloor) return poseFloor;
       return base;
@@ -1318,9 +1341,12 @@
       n: 1,
       width: width,
       height: height,
-      steps: shrink ? 8 : 12,
+      steps: shrink ? 8 : (run.localEdit ? 20 : 12),
       cfg_scale: Number((run.payload && run.payload.cfgScale) || 7)
     };
+    if (run.localEdit && isPoseGestureEdit(run.coreSource || (run.payload && run.payload.prompt) || '')) {
+      if (!(Number(params.cfg_scale) > 7)) params.cfg_scale = 8;
+    }
     var seed = run.payload && run.payload.seed;
     if (seed !== '' && seed != null) {
       if (run.localEdit) params.seed = String(Number(seed));
@@ -1347,11 +1373,11 @@
       var comma = text.indexOf(',');
       body.source_image = comma >= 0 ? text.slice(comma + 1) : text;
       body.source_processing = 'img2img';
-      var ds = Number((run.payload && run.payload.strength) || 0.45);
-      if (!isFinite(ds) || ds <= 0) ds = 0.45;
+      var ds = Number((run.payload && run.payload.strength) || 0.6);
+      if (!isFinite(ds) || ds <= 0) ds = 0.6;
       if (run.localEdit && isPoseGestureEdit(run.coreSource || (run.payload && run.payload.prompt) || '')) {
-        if (ds < 0.45) ds = 0.45;
-        if (ds > 0.55) ds = 0.55;
+        if (ds < 0.55) ds = 0.55;
+        if (ds > 0.65) ds = 0.65;
       }
       params.denoising_strength = ds;
     }
@@ -1444,7 +1470,15 @@
     if (run.payload && run.payload.sourceImage) {
       try {
         run.payload.sourceImage = await materializeSourceImage(run.payload.sourceImage);
-      } catch (eMat) {}
+      } catch (eMat) {
+        if (run.localEdit) throw new Error('改动参考图无法读取，请重新点选记忆路线图片或插入参考图');
+      }
+      if (run.localEdit) {
+        var srcNow = String(run.payload.sourceImage || '');
+        if (!/^data:image\//i.test(srcNow)) {
+          throw new Error('改动需要可用的参考图（base64），当前源图无法用于 img2img');
+        }
+      }
     }
     for (var attempt = 0; attempt < 8; attempt += 1) {
       ensureActive(run);
@@ -2130,7 +2164,7 @@
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
       negativePrompt: negative, seed: value('随机种子'), cfgScale: Number(value('引导强度')) || 7,
-      sourceImage: (useRef || run.localEdit) ? sourceForRun : '', strength: Number(value('图生图强度')) || 0.45
+      sourceImage: (useRef || run.localEdit) ? sourceForRun : '', strength: Number(value('图生图强度')) || 0.6
     };
     if (run.localEdit) {
       var poseEdit = isPoseGestureEdit(run.coreSource || description);
