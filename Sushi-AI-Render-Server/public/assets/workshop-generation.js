@@ -938,6 +938,35 @@
   var ANTI_LINGERIE_NEG =
     'lingerie, underwear as outerwear, bra visible, panties, cleavage focus, sheer blouse, seductive pose, revealing outfit, underwear only, skimpy outfit, bikini, sheer clothing, nude, naked, nudity, topless, bottomless';
 
+  // Chest exposure: soft clothed chest when core omits 露胸/cleavage/bare breasts/topless.
+  // Parallel to #98 lingerie rule; do NOT hard-kill midriff (#100). Visible 核心 never mutated.
+  var CHEST_EXPOSURE_INTENT_RE = /露胸|露乳|胸部露出|露点|开胸|深\s*V|低胸|爆乳|裸胸|bare breasts?|cleavage|topless|deep neckline|plunging neckline|bare chest|exposed (?:breasts?|chest|cleavage)|breasts? (?:out|exposed|visible)|chest exposed|underboob|sideboob/i;
+  var ANTI_CHEST_NEG =
+    'cleavage, bare breasts, topless, deep neckline focus, plunging neckline, exposed breasts, chest exposed, underboob, sideboob';
+  // Affirmative only — bans stay in negatives (#95/#98).
+  var CHEST_COVER_LEAD = 'chest covered by clothing, modest neckline';
+
+  function hasChestExposureIntent(text) {
+    return CHEST_EXPOSURE_INTENT_RE.test(String(text || ''));
+  }
+
+  /** Soft clothed-chest lead when core does not ask for chest exposure / nude. */
+  function applyChestCoverageLocks(text, core) {
+    var src = String(core || '');
+    var t = String(text || '');
+    if (!t) return t;
+    if (hasNudeIntent(src) || hasChestExposureIntent(src)) return t;
+    if (/chest covered by clothing|modest neckline/i.test(t)) return t;
+    t = t
+      .replace(/^\s*chest covered by clothing,?\s*(?:modest neckline,?\s*)?/i, '')
+      .replace(/,?\s*chest covered by clothing(?:,?\s*modest neckline)?\b/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[，,]{2,}/g, ',')
+      .replace(/^[\s,]+|[\s,]+$/g, '')
+      .trim();
+    return (CHEST_COVER_LEAD + ', ' + t).replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
+  }
+
   // Positive clothing leads when core does NOT ask for revealing/nude.
   // Soft: match described outfit; if core omits outfit, everyday clothes (counters female lingerie model prior).
   // Affirmative wording only — lingerie bans stay in negatives (no ban-tokens in positive lead).
@@ -1124,6 +1153,7 @@
       .replace(/^[\s,]+|[\s,]+$/g, '')
       .trim();
     t = applyClothingFidelityLocks(t, c);
+    t = applyChestCoverageLocks(t, c);
     t = applyMaleGenderLocks(t, c);
     // Absolute lead order: gender → clothing → adult → rest (Faithful/photoreal follow)
     var leads = [];
@@ -1137,6 +1167,10 @@
         .replace(/^\s*wearing ordinary everyday clothing,?\s*(?:fully clothed,?\s*)?/i, '')
         .replace(/^\s*clothing matching the core,?\s*(?:fully clothed as described,?\s*)?/i, '')
         .replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '');
+    }
+    if (!hasNudeIntent(c) && !hasChestExposureIntent(c) && /^\s*chest covered by clothing\b/i.test(t)) {
+      leads.push(CHEST_COVER_LEAD);
+      t = t.replace(/^\s*chest covered by clothing,?\s*(?:modest neckline,?\s*)?/i, '');
     }
     var head = leads.length ? leads.join(', ') + ', ' : '';
     if (adultPrefix) head += adultPrefix + ', ';
@@ -2000,6 +2034,16 @@
       if (run.localEdit) {
         var srcNow = String(run.payload.sourceImage || '');
         if (!/^data:image\//i.test(srcNow)) {
+          // Last-ditch: re-collect history/memory/gallery before failing
+          try {
+            var again = await ensureEditSourceBase64(srcNow || run.editSourcePreferred || '');
+            if (again && /^data:image\//i.test(again)) {
+              run.payload.sourceImage = again;
+              srcNow = again;
+            }
+          } catch (eAgain) {}
+        }
+        if (!/^data:image\//i.test(String(run.payload.sourceImage || ''))) {
           throw new Error('改动需要可用的参考图（base64）。请先生成至少一张图，或点记忆路线最大编号（末步）后再改动');
         }
       }
@@ -2443,7 +2487,8 @@
     }
   }
 
-  /** Collect candidate source URLs for 改动：最大编号记忆步 / 软缩略 / 画廊 / 历史。 */
+  /** Collect candidate source URLs for 改动：最大编号记忆步 / 软缩略 / 历史 / 画廊。
+   * Prefer data:image base64 first so Horde img2img succeeds without CORS. */
   function collectEditSourceCandidates(preferred) {
     var out = [];
     function push(u, why) {
@@ -2479,17 +2524,41 @@
         }
       }
     } catch (eM) {}
+    // 记忆空但有历史：取全部 6 槽，最新优先；优先 thumb/data 再 http
+    try {
+      if (typeof window.读取生成历史 === 'function') {
+        var hist = window.读取生成历史() || [];
+        for (var hi = 0; hi < hist.length; hi += 1) {
+          var hItem = hist[hi];
+          if (!hItem) continue;
+          push(hItem.thumb, 'history-thumb-' + hi);
+          var full = '';
+          try {
+            full = typeof window.历史原图地址 === 'function' ? window.历史原图地址(hItem) : (hItem.u || hItem.thumb || '');
+          } catch (eFull) { full = hItem.u || hItem.thumb || ''; }
+          push(full, 'history-full-' + hi);
+        }
+      }
+    } catch (eH) {}
     try {
       var gallery = $('图像输出');
       if (gallery) {
-        var nodes = gallery.querySelectorAll('[data-thumb-url], [data-full-url]');
+        var nodes = gallery.querySelectorAll('[data-thumb-url], [data-full-url], img');
         for (var i = nodes.length - 1; i >= 0; i -= 1) {
           push(nodes[i].getAttribute('data-thumb-url'), 'gallery-thumb');
           push(nodes[i].getAttribute('data-full-url'), 'gallery-full');
+          if (nodes[i].tagName === 'IMG' && nodes[i].src) push(nodes[i].src, 'gallery-src');
         }
       }
     } catch (eG) {}
-    return out;
+    // data: first, then http — prefer succeeding over error when any numbered gen exists
+    var dataFirst = [];
+    var rest = [];
+    for (var oi = 0; oi < out.length; oi += 1) {
+      if (/^data:image\//i.test(out[oi])) dataFirst.push(out[oi]);
+      else rest.push(out[oi]);
+    }
+    return dataFirst.concat(rest);
   }
 
   /** Materialize first usable base64 among candidates; update 参考图地址 when found. */
@@ -2683,10 +2752,25 @@
         var editChecked = !!(editEl && editEl.checked);
         var memOn = !!(typeof window.记忆已开 === 'function' && window.记忆已开());
         var userPicked = !!(typeof window.生图方式已自选 === 'function' && window.生图方式已自选());
-        // 显式勾选改动（已自选）时保留；自动默认勾选不保留（#99 清软采用）
-        var userEdit = !!(userPicked && memOn && editChecked);
+        var modePeek = '';
+        try { modePeek = typeof window.读取生图方式 === 'function' ? String(window.读取生图方式() || '') : ''; } catch (ePeek) { modePeek = ''; }
+        // 勾选改动或本轮将走改动：必须保留 softThumb/参考图，避免 clear-cache 竞态清掉源图
+        // #99：仅当明确全文生图（不勾改动）时清软采用
+        var userEdit = !!(memOn && (editChecked || modePeek === '改动' || (userPicked && editChecked)));
         var intentionalRef = !!(addrEl && String(addrEl.value || '').trim() && !soft);
+        var keepSoftThumb = '';
+        try {
+          if (userEdit && addrEl && addrEl.dataset && addrEl.dataset.softThumb) {
+            keepSoftThumb = String(addrEl.dataset.softThumb || '');
+          }
+        } catch (eKeepT) {}
         window.清除生图工作缓存({ 保留参考图: userEdit || intentionalRef });
+        // 若仍被清掉 softThumb，立刻回填快照
+        try {
+          if (keepSoftThumb && addrEl && !(addrEl.dataset && addrEl.dataset.softThumb)) {
+            addrEl.dataset.softThumb = keepSoftThumb;
+          }
+        } catch (eRestoreT) {}
       }
     } catch (eClearCache) {}
 
@@ -2806,6 +2890,12 @@
         negative += ', ' + ANTI_LINGERIE_NEG;
       }
     }
+    // 核心未明确露胸/cleavage/bare breasts/topless 时，软压胸部暴露（#98 平行；不压 midriff）
+    if (!hasNudeIntent(ethSrc) && !hasChestExposureIntent(ethSrc) && !hasNudeIntent(description) && !hasChestExposureIntent(description)) {
+      if (!/bare breasts|deep neckline focus|chest exposed|underboob|sideboob/i.test(negative)) {
+        negative += ', ' + ANTI_CHEST_NEG;
+      }
+    }
     // 核心有翻炒/蒸汽等动态烹饪动作时，负面压制静态站立、无蒸汽
     if (hasDynamicCookingAction(ethSrc) || hasDynamicCookingAction(String(run.coreSource || '')) || hasDynamicCookingAction(description)) {
       if (!/static pose|standing idle|no steam|empty cold pan/i.test(negative)) {
@@ -2854,10 +2944,11 @@
       } catch (eMax) {}
     }
     if (run.localEdit && !sourceForRun) {
-      try { console.warn('[改动] 勾选改动但无 source_image/参考图，回退全文生图'); } catch (eNoSrc) {}
-      try { status('改动需要参考图', '未找到源图，本轮将改走全文生图。请点记忆路线最大编号步或插入参考图后再改动。', false); } catch (eSt) {}
-      run.localEdit = false;
-      useRef = false;
+      // Prefer succeeding: keep localEdit and let ensureEditSourceBase64 dig history/memory/gallery
+      try { console.warn('[改动] 勾选改动暂无 source，将在 materialize 时回填历史/记忆/画廊'); } catch (eNoSrc) {}
+      useRef = true;
+      run.engine = resolveImg2imgEngine(value('图生图平台'));
+      run.needsEditSourceBase64 = true;
     } else if (run.localEdit) {
       useRef = true;
       run.engine = resolveImg2imgEngine(value('图生图平台'));
@@ -2905,11 +2996,37 @@
       } catch (eKeep) {}
     }
     try { if (typeof window.刷新记忆生成线路 === 'function') window.刷新记忆生成线路(); } catch (eLine) {}
-    active = run; controls(true);
-    $('图像输出').replaceChildren(); $('官方画廊').replaceChildren(); $('官方画廊').hidden = true;
-    window.设平台提示(resolveEngine());
-    run.promise = execute(run, false);
-    return run.promise;
+    // 改动：在清空画廊之前先 materialize 成 base64，避免竞态丢掉唯一源图
+    var startAfterMaterialize = function () {
+      active = run; controls(true);
+      $('图像输出').replaceChildren(); $('官方画廊').replaceChildren(); $('官方画廊').hidden = true;
+      window.设平台提示(resolveEngine());
+      run.promise = execute(run, false);
+      return run.promise;
+    };
+    if (run.localEdit || run.needsEditSourceBase64) {
+      return ensureEditSourceBase64(run.payload.sourceImage || run.editSourcePreferred || sourceForRun || '')
+        .then(function (b64) {
+          if (b64 && /^data:image\//i.test(b64)) {
+            run.payload.sourceImage = b64;
+            try {
+              var aEarly = $('参考图地址');
+              if (aEarly) {
+                if (!aEarly.value) aEarly.value = b64;
+                try { aEarly.dataset.softThumb = b64; } catch (eST) {}
+              }
+            } catch (eAddr) {}
+          } else if (run.localEdit && !run.payload.sourceImage) {
+            try { console.warn('[改动] 预 materialize 未得到 base64，将在 Horde 前提交前再试'); } catch (eW) {}
+          }
+          return startAfterMaterialize();
+        })
+        .catch(function (eMatEarly) {
+          try { console.warn('[改动] 预 materialize 异常', eMatEarly && eMatEarly.message); } catch (eW2) {}
+          return startAfterMaterialize();
+        });
+    }
+    return startAfterMaterialize();
   };
 
   window.开始随机生成 = function () {
@@ -3042,6 +3159,10 @@
   window.hasClothingCue = hasClothingCue;
   window.clothingLeadForCore = clothingLeadForCore;
   window.ANTI_LINGERIE_NEG = ANTI_LINGERIE_NEG;
+  window.hasChestExposureIntent = hasChestExposureIntent;
+  window.applyChestCoverageLocks = applyChestCoverageLocks;
+  window.CHEST_COVER_LEAD = CHEST_COVER_LEAD;
+  window.ANTI_CHEST_NEG = ANTI_CHEST_NEG;
   window.ADULT_DIR_BASE = ADULT_DIR_BASE;
   window.ADULT_DIR_NUDE = ADULT_DIR_NUDE;
   window.hasExplicitArtStyle = hasExplicitArtStyle;

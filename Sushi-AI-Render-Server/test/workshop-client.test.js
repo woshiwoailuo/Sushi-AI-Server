@@ -2318,3 +2318,96 @@ test('#99 non-改动 still clears soft-adopted; 改动 rehydrates max step', asy
   assert.equal(ref.step, f.w.记忆路线.length, '改动参照应为当前最大编号步');
   assert.ok(ref.step >= 2);
 });
+
+test('no chest exposure unless core asks: soft cover + negatives; explicit 露胸 allowed', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.hasChestExposureIntent, 'function');
+  assert.equal(typeof f.w.applyChestCoverageLocks, 'function');
+  assert.equal(f.w.hasChestExposureIntent('穿红毛衣的虚构成年女人站在窗边'), false);
+  assert.equal(f.w.hasChestExposureIntent('一位露胸的虚构成年女人'), true);
+  assert.equal(f.w.hasChestExposureIntent('a woman with cleavage and bare breasts'), true);
+  assert.equal(f.w.hasChestExposureIntent('topless fictional adult'), true);
+  assert.equal(f.w.hasChestExposureIntent('一位露脐的虚构成年女人'), false, '露脐 alone is not chest exposure');
+
+  const core = '穿蓝连衣裙的虚构成年女人站在窗边';
+  const locked = f.w.applyChestCoverageLocks('a woman in a blue dress by a window', core);
+  assert.match(locked, /chest covered by clothing|modest neckline/i);
+  assert.doesNotMatch(locked, /\bno cleavage\b/i);
+
+  const allowed = f.w.applyChestCoverageLocks('woman with cleavage, bare breasts', '一位露胸的虚构成年女人');
+  assert.match(allowed, /cleavage|bare breasts/i);
+  assert.doesNotMatch(allowed, /chest covered by clothing/i);
+
+  const out = f.w.finalizeOutboundCoreLocks('a woman in a blue dress by a window, photoreal', core);
+  assert.match(out, /chest covered by clothing|modest neckline/i);
+
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  const prompt = String(body.prompt || '');
+  const neg = String(body.prompt || '').split(' ### ')[1] || String(body.negativePrompt || '');
+  assert.match(prompt, /chest covered by clothing|modest neckline/i);
+  assert.match(neg, /cleavage|bare breasts|topless|deep neckline focus/i);
+  assert.doesNotMatch(neg, /bare midriff|crop top|exposed navel|exposed stomach/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心不改写');
+
+  // explicit chest intent: no soft cover forced
+  f.calls.length = 0;
+  const chestCore = '一位露胸的虚构成年女人站在窗边';
+  f.w.document.getElementById('角色描述').value = chestCore;
+  await f.w.开始生成();
+  const body2 = imagePayload(f.calls);
+  const prompt2 = String(body2.prompt || '');
+  assert.doesNotMatch(prompt2.split(/adult mode enabled/i)[0] || prompt2, /chest covered by clothing/i);
+});
+
+test('改动 auto-picks history max when memory empty; survives clear-cache race', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.切换记忆(true);
+  // memory empty — history has numbered gens
+  assert.equal(f.w.记忆路线.length, 0);
+  f.w.收入历史('https://example.com/h0.jpg', PNG);
+  f.w.收入历史('https://example.com/h1.jpg', PNG);
+  assert.equal(f.w.读取生成历史().length, 2);
+  const histRef = f.w.改动参照源图();
+  assert.ok(histRef, '记忆空时应落到历史');
+  assert.match(String(histRef.source || ''), /history/);
+  assert.ok(histRef.thumb === PNG || String(histRef.url || '').indexOf('data:image') === 0 || /h[01]\.jpg/.test(String(histRef.url || '')));
+
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  const addr = f.w.document.getElementById('参考图地址');
+  addr.value = 'https://blocked.example/gone.jpg';
+  addr.dataset.softAdopted = '1';
+  addr.dataset.softThumb = PNG;
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.切换生图方式('改动');
+  // stub http materialize fail — must succeed via softThumb or history thumb
+  const orig = f.w.materializeSourceImage;
+  f.w.materializeSourceImage = async (src) => {
+    if (String(src || '').indexOf('data:image') === 0) return src;
+    return '';
+  };
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.ok(body.source_image, '改动应在 clear-cache 后仍拿到 base64（softThumb/历史）');
+  // Horde payload may strip data:image prefix and send raw base64
+  assert.match(String(body.source_image), /^(?:data:image\/|iVBOR|[A-Za-z0-9+/=]{32,})/);
+  f.w.materializeSourceImage = orig;
+});
+
+test('改动 collect candidates prefer data URLs from history over http', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.collectEditSourceCandidates, 'function');
+  f.w.切换记忆(true);
+  f.w.收入历史('https://example.com/old.jpg', PNG);
+  const cands = f.w.collectEditSourceCandidates('https://example.com/preferred.jpg');
+  assert.ok(cands.length >= 2);
+  const firstData = cands.find(u => String(u).indexOf('data:image') === 0);
+  assert.ok(firstData, '应收集到历史 data thumb');
+  const dataIdx = cands.indexOf(firstData);
+  const httpIdx = cands.findIndex(u => String(u).indexOf('http') === 0);
+  if (httpIdx >= 0) assert.ok(dataIdx < httpIdx, 'data: 候选应排在 http 之前');
+});
