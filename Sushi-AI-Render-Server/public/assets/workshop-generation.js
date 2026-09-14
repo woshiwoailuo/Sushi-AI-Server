@@ -204,6 +204,26 @@
       .trim();
   }
 
+  function hasExplicitCropFraming(text) {
+    return /半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|portrait|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|from (the )?waist|face only|面部特写|脸部特写|肩部以上/i.test(String(text || ''));
+  }
+
+  function hasExplicitCameraAngle(text) {
+    return /侧脸|侧面|侧身|背面|背影|后视|微仰|俯拍|仰拍|three[\s-]?quarter|profile|from behind|back view|side view|rear view|over[\s-]?shoulder|low angle|high angle/i.test(String(text || ''));
+  }
+
+  function applyRealisticFrontFullBody(text) {
+    var t = String(text || '');
+    if (hasExplicitCropFraming(t)) return t;
+    if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe/i.test(t)) {
+      t += ', full-body framing, full figure visible head to toe';
+    }
+    if (!hasExplicitCameraAngle(t) && !/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(t)) {
+      t += ', front view, eye-level, facing camera, looking at camera';
+    }
+    return t;
+  }
+
   function forcePhotorealPrompt(prompt) {
     var text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
     if (!text) text = 'a fictional adult, natural light, DSLR';
@@ -228,6 +248,7 @@
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
     }
+    text = applyRealisticFrontFullBody(text);
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
@@ -1128,7 +1149,7 @@
     var signal = providerSignal || run.controller.signal;
     status(
       '正在用 Perch 官方出图 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
-      '官网 perchance.org/ai-text-to-image-generator · 不嵌入、不跳转、不转接。',
+      '按所选 Perch 通道出图，失败不更换平台。',
       true
     );
     var key = '';
@@ -1275,7 +1296,7 @@
       var title = run.cancelled ? '已停止本轮生成' : (run.completed ? '已生成 ' + run.completed + ' 张，后续未完成' : '本次未完成');
       var detail = run.cancelled ? '已保留已完成的图片。' : String(error && error.message || error || '');
       if (/Load failed|Failed to fetch|NetworkError/i.test(detail)) {
-        detail = '官网出图接口不可用，未完成。';
+        detail = 'Perch 出图接口不可用，未完成，未更换平台。';
       }
       if (!run.cancelled && (error && (error.status === 429 || error.code === 'ENGINE_COOLDOWN' || error.code === 'ALL_COOLDOWN' || /限流|冷却|429/.test(detail)))) {
         title = run.completed ? title : '出图通道限流';
@@ -1399,6 +1420,8 @@
   window.当前引擎 = function () { return resolveEngine(); };
   window.photorealPrompt = photorealPrompt;
   window.forcePhotorealPrompt = forcePhotorealPrompt;
+  window.applyRealisticFrontFullBody = applyRealisticFrontFullBody;
+  window.hasExplicitCropFraming = hasExplicitCropFraming;
   window.animePrompt = animePrompt;
   window.withAdultDirective = withAdultDirective;
   window.adultDirectiveText = adultDirectiveText;
@@ -1409,8 +1432,8 @@
     if (!tip) return;
     var name = normalizeEngineName(engine);
     tip.textContent = name === 'perchance'
-      ? 'Perch · 官网出图 · 不嵌入'
-      : engineLabel(engine) + ' · 未完成时不会自动更换平台';
+      ? 'Perch · 按所选通道 · 失败不更换平台'
+      : engineLabel(engine) + ' · 按所选通道 · 失败不更换平台';
     var info = $('官网信息');
     if (info) info.hidden = true;
   };

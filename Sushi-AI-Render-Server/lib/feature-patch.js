@@ -8,14 +8,8 @@ function patchWorkshop(source) {
   let html = String(source || '');
 
   // Provider <select> is owned by runtime-patch (写实/动漫 split). Do not overwrite here.
-  html = html.replace(
-    '<div id="管理面板" class="分区" hidden>',
-    '<label class="换背景行" style="margin-top:10px">\n' +
-      '  <input id="生成记忆模式" type="checkbox" checked>\n' +
-      '  <span>生成记忆模式 · 自动记住描述、比例、参数与上次创作设置</span>\n' +
-      '</label>\n' +
-      '<div id="管理面板" class="分区" hidden>'
-  );
+  // 不再注入「生成记忆模式」可见提示（与工坊「记忆模式」易混淆且已失效为冗余提示）。
+  // 脚本仍静默读写 sushi_generation_memory_v2；无勾选框时视为开启。
 
   html = html.replace(
     '<button type="button" class="次按钮" onclick="清空对话()">清空对话</button>',

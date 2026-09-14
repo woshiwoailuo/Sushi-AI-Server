@@ -135,3 +135,17 @@ test('homepage enterGen uses authenticated /workshop path (no AES unlock race)',
   assert.match(server, /workshop_tickets/);
   assert.match(server, /readWorkshopPlaintext\(\)/);
 });
+
+test('Perch failure must not fall through to Horde; photoreal prefers full-body front', () => {
+  const gen = home.slice(home.indexOf('async function generateHomeImage'), home.indexOf('async function askOneChat'));
+  assert.match(gen, /throw perchErr/);
+  assert.match(gen, /未更换平台/);
+  assert.match(gen, /60000/);
+  assert.doesNotMatch(gen, /, 1000\)/);
+  // After Perch block, hard guard before Horde path
+  assert.match(gen, /if \(engine === 'perchance'\) \{[\s\S]*throw new Error\('Perch 出图失败，未更换平台'\)/);
+  const fn = home.slice(home.indexOf('function photorealHomePrompt'), home.indexOf('function homeImageError'));
+  assert.match(fn, /full-body framing/);
+  assert.match(fn, /facing camera/);
+  assert.match(fn, /半身/);
+});

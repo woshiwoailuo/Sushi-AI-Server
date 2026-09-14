@@ -739,7 +739,17 @@
         if (!/not anime|no anime/i.test(t)) t += ', not anime, not manga, not cartoon, not illustration';
       }
       if (!/fictional adult|18\+|no minors|虚构成年/i.test(t)) t += ', fictional adult 18+ only, no minors';
-      return t.slice(0, 1200);
+      if (!/半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|portrait|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上/i.test(t)) {
+        if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe/i.test(t)) {
+          t += ', full-body framing, full figure visible head to toe';
+        }
+        if (!/侧脸|侧面|侧身|背面|背影|后视|微仰|俯拍|仰拍|three[\s-]?quarter|profile|from behind|back view|side view|rear view|over[\s-]?shoulder|low angle|high angle/i.test(t)) {
+          if (!/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(t)) {
+            t += ', front view, eye-level, facing camera, looking at camera';
+          }
+        }
+      }
+      return t.slice(0, 1400);
     }
     function homeImageError(err) {
       var status = err && err.status;
@@ -784,7 +794,8 @@
           var perchTimer = 0;
           try {
             var perchCtrl = new AbortController();
-            perchTimer = setTimeout(function () { try { perchCtrl.abort(); } catch (e) {} }, 1000);
+            // 选定 Perch 时给足时间；失败只报错，绝不落到 Horde
+            perchTimer = setTimeout(function () { try { perchCtrl.abort(); } catch (e) {} }, 60000);
             var perchPrompt = photorealHomePrompt(promptText);
           var perchNeg = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
           var key = '';
@@ -810,23 +821,29 @@
           });
           var gRes = await fetch('https://image-generation.perchance.org/api/generate?' + q.toString(), { cache: 'no-store', signal: perchCtrl.signal });
           var gText = await gRes.text();
-          if (!gText || gText.trim().charAt(0) === '<') throw new Error('官方出图接口被拦截，未转接其他平台');
+          if (!gText || gText.trim().charAt(0) === '<') throw new Error('Perch 出图接口被拦截，未更换平台');
           var gJson = JSON.parse(gText);
-          if (!gJson || !gJson.imageId) throw new Error((gJson && (gJson.message || gJson.status)) || '官方没有返回图片，未转接其他平台');
+          if (!gJson || !gJson.imageId) throw new Error((gJson && (gJson.message || gJson.status)) || 'Perch 没有返回图片，未更换平台');
           var dRes = await fetch('https://image-generation.perchance.org/api/downloadTemporaryImage?imageId=' + encodeURIComponent(gJson.imageId), { cache: 'no-store', signal: perchCtrl.signal });
-          if (!dRes.ok) throw new Error('官方图片下载失败，未转接其他平台');
+          if (!dRes.ok) throw new Error('Perch 图片下载失败，未更换平台');
           var dBlob = await dRes.blob();
           var dUrl = await new Promise(function (resolve, reject) {
             var reader = new FileReader();
             reader.onload = function () { resolve(reader.result); };
-            reader.onerror = function () { reject(new Error('官方图片读取失败')); };
+            reader.onerror = function () { reject(new Error('Perch 图片读取失败，未更换平台')); };
             reader.readAsDataURL(dBlob);
           });
           if (perchTimer) clearTimeout(perchTimer);
           return { url: dUrl, channel: 'Perch' };
           } catch (perchErr) {
             if (perchTimer) clearTimeout(perchTimer);
+            throw perchErr && perchErr.message
+              ? perchErr
+              : new Error('Perch 出图失败，未更换平台');
           }
+        }
+        if (engine === 'perchance') {
+          throw new Error('Perch 出图失败，未更换平台');
         }
         var isAnime = engine === 'horde-anime';
         var prompt = isAnime ? promptText : photorealHomePrompt(promptText);

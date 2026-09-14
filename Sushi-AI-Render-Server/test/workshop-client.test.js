@@ -878,3 +878,40 @@ test('adult off keeps censor_nsfw true and does not use adult censor retry copy'
   assert.match(detail, /没有可显示的图片|请修改描述后重试/);
   assert.doesNotMatch(detail, /换节点重试/);
 });
+
+test('photoreal default prefers full-body front view unless user asks half-body', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const plain = f.w.forcePhotorealPrompt('fictional adult woman in a park');
+  assert.match(plain, /full-body framing|full figure visible head to toe/i);
+  assert.match(plain, /front view|facing camera|eye-level/i);
+  const half = f.w.forcePhotorealPrompt('半身肖像 fictional adult woman close-up portrait');
+  assert.doesNotMatch(half, /full-body framing/i);
+  const side = f.w.forcePhotorealPrompt('fictional adult man side view profile');
+  assert.match(side, /side view|profile/i);
+  assert.doesNotMatch(side, /facing camera, looking at camera/i);
+});
+
+test('memory tip copy and perch official-site tips are removed; platform tip stays selection-only', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(f.w.document.getElementById('记忆开关说明'), null);
+  assert.equal(f.w.document.getElementById('记忆说明'), null);
+  assert.equal(f.w.document.getElementById('生成记忆模式'), null);
+  assert.ok(f.w.document.getElementById('记忆开关'));
+  const tip = f.w.document.getElementById('平台提示').textContent;
+  assert.doesNotMatch(tip, /官网|perchance\.org/i);
+  f.w.设平台提示('horde-real');
+  assert.match(f.w.document.getElementById('平台提示').textContent, /Horde|按所选通道/);
+  assert.doesNotMatch(f.w.document.getElementById('平台提示').textContent, /官网|perchance\.org/i);
+});
+
+test('selected Horde stays exclusive when Perch official path would otherwise jump', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.保存默认平台('horde-real', true);
+  await f.w.开始生成();
+  const img = f.w.document.querySelector('#图像输出 img');
+  assert.ok(img);
+  assert.equal(img.getAttribute('data-engine'), 'horde-real');
+  assert.equal(f.w.document.getElementById('出图引擎').value, 'horde-real');
+  assert.doesNotMatch(f.w.document.getElementById('平台提示').textContent, /Perch|官网/);
+});
