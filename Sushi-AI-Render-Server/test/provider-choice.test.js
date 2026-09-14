@@ -41,13 +41,12 @@ test('unsupported reference image remains on selected provider',async()=>{
  const ctx={hasSmartModifier:()=>false,minimalOutboundPrompt:p=>p,ensureNoTextOnImage:p=>p,forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:p=>p,stripInjectedFemaleDefaults:(p)=>p,applyMaleGenderLocks:(p)=>p,applyCoreFidelityLead:(p)=>p,withAdultDirective:p=>p,applyLocalEditOutbound:p=>p,engineFamily:()=>'real',value:()=>''};vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
  await assert.rejects(ctx.generateOne({engine:'sana',payload:{sourceImage:'image'}},'landscape',0),/未切换平台/);
 });
-test('workshop and home submit selected chat model',async()=>{
+test('workshop submits selected chat model',async()=>{
  let used;const ctx={setTimeout,clearTimeout,规范化对话通道:x=>x,问花粉:async(q,m)=>{used=m;return '回答'}};
  vm.createContext(ctx);vm.runInContext(extract(workshop,'问免费模型'),ctx);
  assert.equal(await ctx.问免费模型('你好','deepseek'),'回答');assert.equal(used,'deepseek');
- const h={setTimeout,clearTimeout,normalizeChatChannel:x=>x,askOneChat:async(q,m)=>{used=m;return 'answer'}};
- vm.createContext(h);vm.runInContext(extract(home,'raceChat',4),h);
- await h.raceChat('hello','gemini');assert.equal(used,'gemini');
+ assert.doesNotMatch(home,/function raceChat/);
+ assert.doesNotMatch(home,/id="chatChannel"/);
 });
 test('UTF-8 workshop and scripts remain valid after production read patches',()=>{
  require('../lib/runtime-patch');require('../lib/image-lock-patch');require('../lib/feature-patch');

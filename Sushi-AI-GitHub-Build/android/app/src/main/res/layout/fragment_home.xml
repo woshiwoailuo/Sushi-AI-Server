@@ -27,7 +27,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="创作、AI、工具和小游戏都放在一个应用里"
+            android:text="角色馆 · 正经娱乐，工坊创作优先"
             android:textColor="@color/muted"
             android:textSize="14sp"
             android:lineSpacingExtra="3dp" />
@@ -97,53 +97,16 @@
             android:textColor="@color/text"
             android:textSize="14sp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="26dp"
-            android:text="AI"
-            android:textColor="@color/text"
-            android:textSize="17sp"
-            android:textStyle="bold" />
-
-        <TextView
+        <Button
+            android:id="@+id/aiImageQuick"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="AI 对话单独使用；需要图片时可直接在软件内生成并显示"
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="54dp"
             android:layout_marginTop="10dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/chatQuick"
-                android:layout_width="0dp"
-                android:layout_height="58dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_card"
-                android:text="AI 对话"
-                android:textAllCaps="false"
-                android:textColor="@color/text"
-                android:textSize="14sp" />
-
-            <Space android:layout_width="10dp" android:layout_height="1dp" />
-
-            <Button
-                android:id="@+id/aiImageQuick"
-                android:layout_width="0dp"
-                android:layout_height="58dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_card"
-                android:text="AI 生图"
-                android:textAllCaps="false"
-                android:textColor="@color/text"
-                android:textSize="14sp" />
-        </LinearLayout>
+            android:background="@drawable/bg_card"
+            android:text="快捷生图"
+            android:textAllCaps="false"
+            android:textColor="@color/text"
+            android:textSize="14sp" />
 
         <TextView
             android:layout_width="wrap_content"

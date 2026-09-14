@@ -17,11 +17,8 @@
       --danger: #E11D48;
       --line: rgba(27,31,42,.08);
       --radius: 12px;
-      --nls: #2458ed;
       --safe-t: env(safe-area-inset-top);
       --safe-b: env(safe-area-inset-bottom);
-      --user-bg: #3B6FF5;
-      --bot-bg: #EEF2FF;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
@@ -29,7 +26,6 @@
     button, input, textarea, select { font: inherit; color: inherit; }
     input, textarea, select { background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; width: 100%; outline: none; }
     input:focus, textarea:focus, select:focus { border-color: rgba(59,111,245,.55); box-shadow: 0 0 0 3px rgba(59,111,245,.12); }
-    textarea { resize: none; }
     .screen { position: absolute; inset: 0; display: none; flex-direction: column; }
     .screen.on { display: flex; }
     .splash { align-items: center; justify-content: center; background: var(--bg); }
@@ -54,7 +50,7 @@
     .muted { color: var(--muted); font-size: 13px; }
     .content { flex: 1; overflow: auto; padding: 8px 16px 110px; }
     .card { background: var(--card); border-radius: var(--radius); padding: 16px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(27,31,42,.04); }
-    .nav { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); height: 64px; background: #FFFFFF; border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; box-shadow: 0 8px 24px rgba(27,31,42,.08); }
+    .nav { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); height: 64px; background: #FFFFFF; border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr; box-shadow: 0 8px 24px rgba(27,31,42,.08); }
     .nav button { background: none; border: 0; color: var(--muted); font-size: 12px; }
     .nav button.active { color: var(--accent); font-weight: 640; }
     .gen-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -64,43 +60,7 @@
     .hidden { display: none !important; }
     .profile dt { color: var(--muted); font-size: 12px; margin-top: 14px; }
     .profile dd { margin-top: 4px; font-size: 16px; }
-    .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-    .chip.on { background: rgba(59,111,245,.1); color: var(--accent); border-color: rgba(59,111,245,.35); }
-    .mem-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-    .chat-shell { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0 12px 96px; }
-    .chat-list { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 10px; padding: 8px 4px 12px; }
-    .bubble { max-width: 92%; padding: 12px 14px; border-radius: 16px; line-height: 1.55; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
-    .bubble.user { align-self: flex-end; background: var(--user-bg); color: #fff; border-bottom-right-radius: 6px; }
-    .bubble.bot { align-self: flex-start; background: var(--bot-bg); color: var(--text); border-bottom-left-radius: 6px; }
-    .bubble.wait { opacity: .72; font-style: italic; }
-    .bubble .meta { display: block; margin-top: 6px; font-size: 11px; opacity: .75; }
-    .chat-empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.7; padding: 24px 12px; }
-    .composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 10px; }
-    .composer textarea { border: 0; box-shadow: none; padding: 8px; min-height: 48px; max-height: 120px; }
-    .composer .send { width: auto; min-width: 76px; padding: 12px 16px; }
-    .home-tools { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-    .home-tools .btn { width: auto; padding: 10px 14px; font-size: 13px; }
-    .chat-channel-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-    .chat-channel-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
-    .chat-channel-row select { width: auto; min-width: 160px; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-    .bubble img.chat-img { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 12px; margin: 4px 0 8px; background: #fff; cursor: pointer; }
-    .bubble.bot img.chat-img { box-shadow: 0 8px 24px rgba(27,31,42,.08); }
-    .图片预览层 { position: fixed; inset: 0; z-index: 10050; display: grid; place-items: center; padding: max(20px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px)); background: rgba(5,7,8,.92); overflow: auto; -webkit-overflow-scrolling: touch; }
-    .图片预览层[hidden] { display: none; }
-    .图片预览关闭 { position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 10060; width: 48px; height: 48px; border: 1px solid rgba(255,255,255,.4); border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; font-size: 30px; line-height: 1; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
-    .图片预览层 img { max-width: min(96vw, 100%); max-height: min(90vh, calc(100dvh - 72px)); width: auto; height: auto; object-fit: contain; border-radius: 12px; background: #111; cursor: zoom-in; }
-    .图片预览层.放大 { place-items: start center; align-content: start; padding-top: max(64px, calc(env(safe-area-inset-top, 0px) + 52px)); }
-    .图片预览层.放大 img { max-width: none; max-height: none; width: min(180vw, 2400px); height: auto; cursor: zoom-out; }
-    .图片预览状态 { margin-top: 12px; color: #e5e7eb; font-size: 14px; text-align: center; }
-    .图片预览提示 { margin-top: 8px; color: rgba(229,231,235,.78); font-size: 12px; text-align: center; }
-    .图片预览重试 { margin-top: 12px; }
-    .limit-note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 8px; }
-    .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-    .tpl-btn { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 10px; width: 100%; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text); }
-    .core { color: var(--muted); font-size: 13px; line-height: 1.5; }
     @media (min-width: 901px) {
-      .chat-shell { max-width: 920px; margin: 0 auto; width: 100%; padding: 0 20px 96px; }
-      .bubble { max-width: 78%; font-size: 16px; padding: 14px 16px; }
       .gen-wrap { padding: 0 8px 96px; }
       .gen-wrap iframe { min-height: calc(100dvh - 140px); }
       .content.gen-wrap { max-width: none; }
@@ -111,14 +71,14 @@
   <section id="splash" class="screen splash on">
     <div class="mark">苏</div>
     <h1>苏轼AI</h1>
-    <p>正经娱乐 · AI 对话与创作</p>
+    <p>正经娱乐 · 角色馆与创作</p>
   </section>
 
   <section id="auth" class="screen auth">
     <div class="brand">
       <div class="kicker">苏轼AI</div>
       <h2 id="authTitle">登录</h2>
-      <p class="sub">正经娱乐 · 对话优先，工坊随时可进</p>
+      <p class="sub">正经娱乐 · 工坊随时可进</p>
     </div>
     <form id="authForm">
       <div class="field" id="nameField" style="display:none">
@@ -160,44 +120,6 @@
     </form>
   </section>
 
-  <section id="home" class="screen app">
-    <div class="top">
-      <div>
-        <div class="hello">AI 对话</div>
-        <div class="core" id="coreDesc">默认长记忆 · 本机保存历史</div>
-      </div>
-      <button type="button" class="chip" id="openWorkshopBtn">去工坊</button>
-    </div>
-    <div style="padding: 0 16px 8px;">
-      <div class="mem-row" id="memRow" role="group" aria-label="记忆模式">
-        <button type="button" class="chip" data-mem="long">长记忆 · 大数据</button>
-        <button type="button" class="chip" data-mem="short">短记忆</button>
-        <button type="button" class="chip" data-mem="off">关闭记忆</button>
-      </div>
-      <p class="limit-note">长记忆把大量对话与摘要保存在本机 localStorage（单域约数 MB）。Vercel 上 SQLite 会重置，故跨设备不以服务端为准；本页会调用已有对话接口。</p>
-      <div class="chat-channel-row">
-        <label for="chatChannel">回答通道</label>
-        <select id="chatChannel"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">使用所选对话通道，失败时不会自动更换。</p>
-      </div>
-    </div>
-    <div class="chat-shell">
-      <div class="chat-list" id="chatList" aria-live="polite"></div>
-      <div class="composer">
-        <textarea id="chatInput" rows="2" placeholder="说点什么…（正经娱乐向）"></textarea>
-        <button class="btn btn-lime send" type="button" id="chatSend">发送</button>
-      </div>
-      <div class="home-tools">
-        <button class="btn btn-ghost" type="button" id="clearChatBtn" style="margin:0;background:var(--card);border:1px solid var(--line);color:var(--text)">清空对话</button>
-        <button class="btn btn-ghost" type="button" id="toImageTools" style="margin:0;background:var(--card);border:1px solid var(--line);color:var(--text)">图生图 / 换背景</button>
-      </div>
-      <details style="margin-top:12px">
-        <summary class="muted" style="cursor:pointer">文生图快捷模板（点一下直接出图）</summary>
-        <div class="tpl-grid" id="tplGrid"></div>
-      </details>
-    </div>
-  </section>
-
   <section id="gen" class="screen app">
     <div class="top">
       <div class="hello">创作工坊</div>
@@ -206,15 +128,6 @@
       <div class="card paywall" id="genGate">
         <h3>正在打开工坊…</h3>
       </div>
-    </div>
-  </section>
-
-  <section id="nls" class="screen app">
-    <div class="top">
-      <div class="hello">脑力十题</div>
-    </div>
-    <div class="content gen-wrap" id="nlsBody" style="padding-bottom: 96px;">
-      <div class="card paywall"><h3>正在打开脑力十题…</h3></div>
     </div>
   </section>
 
@@ -232,11 +145,6 @@
         <dt>今日剩余</dt><dd id="meRemain">—</dd>
         <dt>版本</dt><dd id="meVer">1.1.21</dd>
       </div>
-      <div class="card" style="margin-top:12px">
-        <dt>脑力十题</dt>
-        <dd class="muted" style="margin-bottom:10px">106 道题，邮箱登录后成绩记入本账号。</dd>
-        <button class="btn btn-lime" type="button" id="openNlsBtn">开始答题</button>
-      </div>
       <button class="btn btn-ghost" type="button" id="checkUpdateBtn" style="margin-top:16px;background:var(--card);border:1px solid var(--line);color:var(--text)">检查更新</button>
       <button class="btn btn-ghost" type="button" id="downloadApkBtn" style="margin-top:10px;background:var(--card);border:1px solid var(--line);color:var(--text)">下载安装包</button>
       <button class="btn btn-lime" type="button" id="logoutBtn" style="margin-top:16px;background:#FFF1F2;color:var(--danger)">退出登录</button>
@@ -244,9 +152,7 @@
   </section>
 
   <nav class="nav hidden" id="tabbar">
-    <button data-tab="home" class="active">对话</button>
-    <button data-tab="gen">工坊</button>
-    <button data-tab="nls">脑力</button>
+    <button data-tab="gen" class="active">工坊</button>
     <button data-tab="me">我的</button>
   </nav>
 
@@ -257,11 +163,7 @@
     let mode = 'login';
     let me = null;
     let genLoaded = false;
-    let nlsLoaded = false;
     let pendingEmail = '';
-    let chatBusy = false;
-    let chatHistory = [];
-    let memorySummary = '';
 
     function token() { return localStorage.getItem('sushi_jwt') || ''; }
     function setToken(t) {
@@ -314,12 +216,6 @@
       } catch (e) { me = null; }
       return me;
     }
-    function emailKey() {
-      try { return (me && me.email) || localStorage.getItem('sushi_email') || ''; } catch (e) { return ''; }
-    }
-    function chatStoreKey() { return '苏轼AI_首页对话_' + (emailKey() || 'guest'); }
-    function memModeKey() { return '苏轼AI_首页记忆模式_' + (emailKey() || 'guest'); }
-    function memSumKey() { return '苏轼AI_首页记忆摘要_' + (emailKey() || 'guest'); }
     function workshopUrl(ticket, key, iv) {
       const hash = (key && iv) ? ('#' + key + '.' + iv) : '';
       return '/workshop?k=' + encodeURIComponent(ticket) + hash;
@@ -348,13 +244,9 @@
     function show(id) {
       document.querySelectorAll('.screen').forEach((el) => el.classList.remove('on'));
       $(id).classList.add('on');
-      const app = ['home','gen','me','nls'].includes(id);
+      const app = ['gen','me'].includes(id);
       $('tabbar').classList.toggle('hidden', !app);
       document.querySelectorAll('.nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
-      if (id === 'home') {
-        loadChat();
-        renderMemChips();
-      }
     }
 
     function renderMe() {
@@ -374,660 +266,10 @@
       return q;
     }
 
-    function memMode() {
-      try {
-        var v = localStorage.getItem(memModeKey()) || 'long';
-        return v === 'short' || v === 'off' || v === 'long' ? v : 'long';
-      } catch (e) { return 'long'; }
-    }
-    function setMemMode(v) {
-      v = v === 'short' || v === 'off' ? v : 'long';
-      try { localStorage.setItem(memModeKey(), v); } catch (e) {}
-      renderMemChips();
-      var desc = $('coreDesc');
-      if (desc) {
-        desc.textContent = v === 'long' ? '默认长记忆 · 本机大数据历史'
-          : (v === 'short' ? '短记忆 · 仅近轮对话' : '记忆已关闭');
-      }
-    }
-    function renderMemChips() {
-      var cur = memMode();
-      document.querySelectorAll('#memRow [data-mem]').forEach(function (b) {
-        b.classList.toggle('on', b.getAttribute('data-mem') === cur);
-      });
-    }
-    function chatCap() {
-      var m = memMode();
-      if (m === 'off') return 6;
-      if (m === 'short') return 24;
-      return 200;
-    }
-    function summaryCap() {
-      var m = memMode();
-      if (m === 'off') return 0;
-      if (m === 'short') return 1200;
-      return 12000;
-    }
-    function loadChat() {
-      chatHistory = [];
-      memorySummary = '';
-      try {
-        var raw = localStorage.getItem(chatStoreKey());
-        var list = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(list)) chatHistory = list.slice(-chatCap());
-      } catch (e) { chatHistory = []; }
-      try { memorySummary = String(localStorage.getItem(memSumKey()) || ''); } catch (e) { memorySummary = ''; }
-      renderChat();
-    }
-    function saveChat() {
-      try {
-        chatHistory = chatHistory.slice(-chatCap());
-        localStorage.setItem(chatStoreKey(), JSON.stringify(chatHistory));
-        if (summaryCap()) localStorage.setItem(memSumKey(), String(memorySummary || '').slice(-summaryCap()));
-        else localStorage.removeItem(memSumKey());
-      } catch (e) {}
-    }
-    function escapeHtml(s) {
-      return String(s || '').replace(/[&<>"']/g, function (c) {
-        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
-      });
-    }
-    function renderChat() {
-      var box = $('chatList');
-      if (!box) return;
-      if (!chatHistory.length) {
-        box.innerHTML = '<div class="chat-empty">先聊起来。<br>默认「长记忆 · 大数据」会记住设定与前情（保存在本机）。<br>可说「画一张… / 生成图片…」直接出图；精细图生图、换背景仍可去工坊。</div>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < chatHistory.length; i++) {
-        var item = chatHistory[i] || {};
-        var cls = item.role === 'user' ? 'user' : 'bot';
-        var meta = item.channel ? '<span class="meta">' + escapeHtml(item.channel) + '</span>' : '';
-        var img = item.image
-          ? '<img class="chat-img" alt="生成图片" data-full-url="' + escapeHtml(item.image) + '" src="' + escapeHtml(item.image) + '" />'
-          : '';
-        html += '<div class="bubble ' + cls + '">' + img + escapeHtml(item.role === 'assistant' ? collapseRepeatedText(item.text) : item.text) + meta + '</div>';
-      }
-      box.innerHTML = html;
-      box.scrollTop = box.scrollHeight;
-      bindChatImagePreview();
-    }
-    function ensureHomePreviewLayer() {
-      var layer = $('图片预览层');
-      if (layer) return layer;
-      layer = document.createElement('div');
-      layer.id = '图片预览层';
-      layer.className = '图片预览层';
-      layer.hidden = true;
-      layer.innerHTML = '<button type="button" class="图片预览关闭" aria-label="关闭预览" title="关闭">×</button>'
-        + '<figure class="图片预览框"><img alt="预览大图" referrerpolicy="no-referrer">'
-        + '<figcaption class="图片预览状态"></figcaption>'
-        + '<p class="图片预览提示">点击图片再放大 · 右上角关闭</p>'
-        + '<button type="button" class="btn btn-ghost 图片预览重试" hidden>重新加载图片</button></figure>';
-      document.body.appendChild(layer);
-      layer.addEventListener('click', function (e) {
-        if (e.target === layer || (e.target.classList && e.target.classList.contains('图片预览关闭'))) {
-          layer.hidden = true;
-          layer.classList.remove('放大');
-        }
-      });
-      var previewImg = layer.querySelector('img');
-      previewImg.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (previewImg.hidden) return;
-        layer.classList.toggle('放大');
-        var tip = layer.querySelector('.图片预览提示');
-        if (tip) tip.textContent = layer.classList.contains('放大') ? '点击缩小 · 右上角关闭' : '点击图片再放大 · 右上角关闭';
-      });
-      layer.querySelector('.图片预览重试').addEventListener('click', function (e) {
-        e.stopPropagation();
-        var url = layer.getAttribute('data-full-url');
-        var id = layer.getAttribute('data-thumb-id');
-        openHomePreview(url, id ? document.getElementById(id) : null);
-      });
-      document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-          var ly = $('图片预览层');
-          if (ly) { ly.hidden = true; ly.classList.remove('放大'); }
-        }
-      });
-      return layer;
-    }
-    function openHomePreview(url, thumb) {
-      if (!url) return;
-      var layer = ensureHomePreviewLayer();
-      layer.hidden = false;
-      layer.classList.remove('放大');
-      var tip0 = layer.querySelector('.图片预览提示');
-      if (tip0) tip0.textContent = '点击图片再放大 · 右上角关闭';
-      layer.setAttribute('data-full-url', url);
-      if (thumb) {
-        if (!thumb.id) thumb.id = 'chat_img_' + Date.now();
-        layer.setAttribute('data-thumb-id', thumb.id);
-      }
-      var img = layer.querySelector('img');
-      var note = layer.querySelector('.图片预览状态');
-      var retry = layer.querySelector('.图片预览重试');
-      note.textContent = '正在加载大图…';
-      retry.hidden = true;
-      img.hidden = true;
-      img.onload = function () {
-        img.onload = null; img.onerror = null;
-        if (!img.naturalWidth) { img.dispatchEvent(new Event('error')); return; }
-        img.hidden = false;
-        note.textContent = '';
-        if (thumb && (thumb.getAttribute('src') || '') !== url) thumb.src = url;
-      };
-      img.onerror = function () {
-        img.onload = null; img.onerror = null;
-        img.hidden = true;
-        note.textContent = '图片已生成，但下载失败。';
-        retry.hidden = false;
-      };
-      img.removeAttribute('src');
-      img.src = url;
-    }
-    function bindChatImagePreview() {
-      var box = $('chatList');
-      if (!box || box.getAttribute('data-preview') === '1') return;
-      box.setAttribute('data-preview', '1');
-      box.addEventListener('click', function (e) {
-        var img = e.target.closest && e.target.closest('img.chat-img');
-        if (!img) return;
-        var url = img.getAttribute('data-full-url') || img.src || '';
-        if (!url) return;
-        e.preventDefault();
-        openHomePreview(url, img);
-      });
-    }
-    function appendTemp(text) {
-      var box = $('chatList');
-      if (!box) return null;
-      var empty = box.querySelector('.chat-empty');
-      if (empty) empty.remove();
-      var el = document.createElement('div');
-      el.className = 'bubble bot wait';
-      el.textContent = text || '思考中…';
-      box.appendChild(el);
-      box.scrollTop = box.scrollHeight;
-      return el;
-    }
-    function rollMemory(userText, botText) {
-      if (memMode() === 'off') return;
-      var long = memMode() === 'long';
-      var piece = '';
-      if (userText) piece += '用户：' + String(userText).slice(0, long ? 400 : 120) + '。';
-      if (botText) piece += '助手：' + String(botText).slice(0, long ? 600 : 160) + '。';
-      memorySummary = String((memorySummary || '') + piece).slice(-summaryCap());
-    }
-    function buildMessages(question) {
-      var msgs = [];
-      var m = memMode();
-      if (m !== 'off' && memorySummary) {
-        msgs.push({
-          role: 'system',
-          content: '用简体中文回复，风格正经娱乐、不涉低俗夜场措辞。延续记忆：' + String(memorySummary).slice(-(m === 'long' ? 6000 : 800))
-        });
-      } else {
-        msgs.push({ role: 'system', content: '用简体中文回复，风格正经娱乐、不涉低俗夜场措辞。' });
-      }
-      if (m !== 'off') {
-        var keep = m === 'long' ? 80 : 12;
-        var start = Math.max(0, chatHistory.length - keep);
-        for (var i = start; i < chatHistory.length; i++) {
-          var item = chatHistory[i];
-          if (!item || !item.text) continue;
-          msgs.push({
-            role: item.role === 'user' ? 'user' : 'assistant',
-            content: String(item.text).slice(0, m === 'long' ? 900 : 520)
-          });
-        }
-      }
-      msgs.push({ role: 'user', content: String(question || '').slice(0, 800) });
-      return msgs;
-    }
-    function collapseRepeatedText(raw) {
-      var s = String(raw == null ? '' : raw).replace(/\r\n/g, '\n').trim();
-      if (!s) return s;
-      var guard = 0;
-      for (guard = 0; guard < 6; guard++) {
-        var changed = false;
-        if (s.length >= 12) {
-          var half = Math.floor(s.length / 2);
-          var a = s.slice(0, half).trim();
-          var b = s.slice(half).trim();
-          if (a.length >= 6 && a === b) { s = a; changed = true; }
-        }
-        if (!changed && s.length >= 18) {
-          var third = Math.floor(s.length / 3);
-          var a2 = s.slice(0, third).trim();
-          var b2 = s.slice(third, third * 2).trim();
-          var c2 = s.slice(third * 2).trim();
-          if (a2.length >= 6 && a2 === b2 && b2 === c2) { s = a2; changed = true; }
-        }
-        if (!changed) break;
-      }
-      var lines = s.split('\n');
-      var lineOut = [];
-      var prevLineKey = null;
-      var i = 0;
-      for (i = 0; i < lines.length; i++) {
-        var line = lines[i];
-        var key = line.trim().toLowerCase().replace(/\s+/g, ' ');
-        if (!key) { lineOut.push(line); continue; }
-        if (key === prevLineKey) continue;
-        lineOut.push(line);
-        prevLineKey = key;
-      }
-      s = lineOut.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-      var pieces = s.match(/[^。！？.!?]+[。！？.!?]*|\n+/g);
-      if (!pieces) return s;
-      var out = [];
-      var prevKey = null;
-      for (i = 0; i < pieces.length; i++) {
-        var piece = pieces[i];
-        if (/^\n+$/.test(piece)) { out.push(piece); continue; }
-        var k = piece.trim().toLowerCase().replace(/\s+/g, ' ');
-        if (!k) { out.push(piece); continue; }
-        if (k === prevKey) continue;
-        out.push(piece);
-        prevKey = k;
-      }
-      return out.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-    }
-    async function askModel(model, messages) {
-      // Align with workshop (#14): 20s / Horde 38s; short replies length>=1 OK.
-      var timeoutMs = model === 'horde' ? 38000 : 20000;
-      try {
-        var data = await api('/api/workshop/chat', {
-          method: 'POST',
-          body: JSON.stringify({ model: model, messages: messages }),
-          timeoutMs: timeoutMs
-        });
-      } catch (err) {
-        var msg = (err && err.message) || '通道失败';
-        if (err && err.status === 402) msg = '快速对话通道暂时不可用（需付费额度）';
-        else if (err && err.status === 503 && /Groq/i.test(msg)) msg = 'Groq 未配置：请在 Vercel 环境变量填写 GROQ_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
-        else if (err && err.status === 503 && /Grok/i.test(msg)) msg = 'Grok 未配置：请在 Vercel 环境变量填写 XAI_API_KEY（或 GROK_API_KEY）后重新部署；也可改用 Groq / Horde';
-        else if (err && err.status === 503 && /Gemini/i.test(msg)) msg = 'Gemini 未配置：请在 Vercel 环境变量填写 GEMINI_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
-        else if (err && err.status === 503 && /OpenRouter/i.test(msg)) msg = 'OpenRouter 未配置：请在 Vercel 环境变量填写 OPENROUTER_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
-        else if (err && err.status === 503 && /DeepSeek/i.test(msg)) msg = 'DeepSeek 未配置：请在 Vercel 环境变量填写 DEEPSEEK_API_KEY 后重新部署；也可改用 Horde 或自动抢答';
-        else if (err && err.status === 503 && /GLM/i.test(msg)) msg = 'GLM 未配置：请在 Vercel 环境变量填写 GLM_API_KEY（或 ZHIPUAI_API_KEY / ZAI_API_KEY）后重新部署；也可改用 Horde 或自动抢答';
-        else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
-        throw new Error(msg);
-      }
-      // Server already normalizeChatPayload; client still collapses repeats for cached / edge paths.
-      var content = data && data.choices && data.choices[0] && data.choices[0].message
-        ? data.choices[0].message.content : '';
-      content = collapseRepeatedText(content);
-      if (content.length < 1) throw new Error('空回复');
-      if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
-      return content;
-    }
-    var CHAT_LABELS = { groq: 'Groq', gemini: 'Gemini', openrouter: 'OpenRouter', grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', glm: 'GLM', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
-    function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
-    function normalizeChatChannel(raw) {
-      return ['glm','deepseek','groq','gemini','openrouter','grok','horde','openai','openai-fast'].includes(raw) ? raw : 'glm';
-    }
-    function loadChatChannel() {
-      var selected = 'glm';
-      try { selected = normalizeChatChannel(localStorage.getItem(chatChannelKey())); } catch (e) {}
-      var box = $('chatChannel');
-      if (box) { box.value = selected; box.disabled = false; }
-      return selected;
-    }
-    function saveChatChannel() {
-      var selected = selectedChatChannel();
-      try { localStorage.setItem(chatChannelKey(), selected); } catch (e) {}
-      return selected;
-    }
-    function selectedChatChannel() {
-      return normalizeChatChannel($('chatChannel').value);
-    }
-    var chatReady = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
-    var CHAT_PICKER = [
-      { id: 'glm', label: 'GLM · 智谱' },
-      { id: 'deepseek', label: 'DeepSeek' },
-      { id: 'groq', label: 'Groq · 免费额度' },
-      { id: 'gemini', label: 'Gemini · 免费层' },
-      { id: 'openrouter', label: 'OpenRouter · 免费模型' },
-      { id: 'grok', label: 'Grok · xAI' }
-    ];
-    function syncChatPicker() {
-      var box = $('chatChannel');
-      if (box) box.disabled = false;
-    }
-    function autoRaceList() {
-      return ['glm'];
-    }
-    function updateChatHint() {
-      var el = $('grokSetupHint');
-      if (el) el.textContent = '使用所选对话通道，失败时不会自动更换。';
-    }
-    async function loadChatReady() {
-      try {
-        var h = await api('/api/health', { timeoutMs: 4000 });
-        if (h && h.chat) {
-          chatReady.groq = !!h.chat.groq;
-          chatReady.gemini = !!h.chat.gemini;
-          chatReady.openrouter = !!h.chat.openrouter;
-          chatReady.deepseek = !!h.chat.deepseek;
-          chatReady.glm = !!h.chat.glm;
-          chatReady.grok = !!h.chat.grok;
-          chatReady.horde = true;
-        }
-      } catch (e) {}
-      syncChatPicker();
-      updateChatHint();
-      return chatReady;
-    }
-    function wantsImageGen(text) {
-      return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|画一个|给我.*(图|照片)|再画|再来一[张幅]|根据.*生成图|生成角色|出一[张幅]|设计.*角色|角色设定|txt2img|text.?to.?image|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)/i.test(String(text || ''));
-    }
-    function isImageFollowUp(text) {
-      return /再[来画出]|换[一]?[张个]|改成|换成|背景|姿势|发型|衣服|裙子|更[美帅好看]|另一[张个]|继续画|重新画|换个/i.test(String(text || ''));
-    }
-    function conversationWantsImage(text) {
-      if (wantsImageGen(text)) return true;
-      var lastBot = null;
-      for (var i = chatHistory.length - 1; i >= 0; i--) {
-        if (chatHistory[i] && chatHistory[i].role === 'assistant') { lastBot = chatHistory[i]; break; }
-      }
-      if (lastBot && lastBot.image && isImageFollowUp(text)) return true;
-      var recent = chatHistory.slice(-6);
-      for (var j = 0; j < recent.length; j++) {
-        if (recent[j] && recent[j].role === 'user' && wantsImageGen(recent[j].text) && String(text || '').length > 8) return true;
-      }
-      return false;
-    }
-    function hasExplicitArtStyle(text) {
-      return /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i.test(String(text || ''));
-    }
-    function photorealHomePrompt(text) {
-      var t = String(text || '').trim();
-      // Strip only the intent prefix; keep the user's core description for the generator.
-      t = t.replace(/^(请)?(帮我)?(生成|画|做)(一)?[张幅]?(图|图片|照片)?[：:\s]*/i, '').trim() || t;
-      t = t.replace(/\b(anime|manga|cartoon|chibi|illustration|cel[\s-]?shading|pixar|disney|comic(?:\s|-)?style|2d\s*art)\b/gi, ' ');
-      t = t.replace(/二次元|动漫风格|动漫|卡通|漫画|插画|手绘|赛璐璐|视觉小说/g, ' ').replace(/\s{2,}/g, ' ').trim() || t;
-      var lead = 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture';
-      if (!/photoreal|写实|摄影|RAW photo|DSLR|cinematic still/i.test(t)) {
-        t = lead + ', ' + t + ', natural light, cinematic still, shallow depth of field, sharp focus, real human, fictional adult 18+, not anime, not manga, not cartoon, not illustration';
-      } else {
-        if (!/^\s*photoreal/i.test(t)) t = 'photorealistic photograph of ' + t;
-        if (!/not anime|no anime/i.test(t)) t += ', not anime, not manga, not cartoon, not illustration';
-      }
-      if (!/fictional adult|18\+|no minors|虚构成年/i.test(t)) t += ', fictional adult 18+ only, no minors';
-      if (!/半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|portrait|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上/i.test(t)) {
-        if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe/i.test(t)) {
-          t += ', full-body framing, full figure visible head to toe';
-        }
-        if (!/侧脸|侧面|侧身|背面|背影|后视|微仰|俯拍|仰拍|three[\s-]?quarter|profile|from behind|back view|side view|rear view|over[\s-]?shoulder|low angle|high angle/i.test(t)) {
-          if (!/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(t)) {
-            t += ', front view, eye-level, facing camera, looking at camera';
-          }
-        }
-      }
-      return t.slice(0, 1400);
-    }
-    function homeImageError(err) {
-      var status = err && err.status;
-      var msg = (err && err.message) || '';
-      if (status === 401 || /未登录|401/.test(msg)) return '请先登录后再出图';
-      if (status === 402 || /额度|用尽/.test(msg)) return '今日出图额度已用尽，请明天再试或升级会员';
-      if (status === 429 || /繁忙|频繁|rate/i.test(msg)) return '生图通道繁忙，请稍后再试';
-      if (status === 403 || /封禁/.test(msg)) return '账号不可用，无法出图';
-      if (err && err.name === 'AbortError') return '出图超时，请稍后重试';
-      return msg || '出图失败，请换描述再试';
-    }
-        var HOME_HORDE_REAL = [
-          "ICBINP - I Can't Believe It's Not Photography",
-          'AbsoluteReality', 'Realistic Vision', 'Photon', 'ICBINP XL', 'Edge Of Realism', 'majicMIX realistic'
-        ];
-        var HOME_HORDE_ANIME = [
-          'Counterfeit', 'Anima-Turbo-v1.1', 'Anything v5', 'Flat-2D Animerge', 'Rev Animated', 'WAI-NSFW-illustrious-SDXL'
-        ];
-        async function translateHomePrompt(text) {
-      var src = String(text || '').trim();
-      if (!src || !/[\u4e00-\u9fff]/.test(src)) return src;
-      try {
-        var g = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=' + encodeURIComponent(src.slice(0, 400)));
-        var data = await g.json();
-        var out = (data[0] || []).map(function (row) { return row[0] || ''; }).join('').trim();
-        if (out && !/[\u4e00-\u9fff]/.test(out)) return out;
-      } catch (e) {}
-      return src;
-    }
-        async function generateHomeImage(promptText) {
-      // Home image requests honor the saved provider and never fall back to another service.
-      // Chat bubble text stays as typed; only the generator prompt is enriched.
-      // Platform-direct: browser talks to Horde and displays the image URL.
-      try {
-        promptText = await translateHomePrompt(promptText);
-        var engine = localStorage.getItem('角色生成器_默认平台') || 'perchance';
-        if (engine === '官方' || engine === 'perch') engine = 'perchance';
-        if (engine === 'sana' || engine === 'auto-anime') {
-          throw new Error('当前选择 ' + engine + '，请在工坊使用该通道；未自动更换平台。');
-        }
-        if (engine === 'perchance') {
-          var perchTimer = 0;
-          try {
-            var perchCtrl = new AbortController();
-            // 选定 Perch 时给足时间；失败只报错，绝不落到 Horde
-            perchTimer = setTimeout(function () { try { perchCtrl.abort(); } catch (e) {} }, 60000);
-            var perchPrompt = photorealHomePrompt(promptText);
-          var perchNeg = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
-          var key = '';
-          try {
-            var vRes = await fetch('https://image-generation.perchance.org/api/verifyUser?thread=0&__cacheBust=' + Math.random(), { cache: 'no-store', signal: perchCtrl.signal });
-            var vText = await vRes.text();
-            if (vText && vText.trim().charAt(0) !== '<') {
-              var vJson = JSON.parse(vText);
-              key = (vJson && vJson.userKey) || '';
-            }
-          } catch (e) {}
-          var q = new URLSearchParams({
-            prompt: perchPrompt + ' ### ' + perchNeg,
-            negativePrompt: perchNeg,
-            userKey: key,
-            seed: '-1',
-            resolution: '512x512',
-            guidanceScale: '7',
-            channel: 'ai-text-to-image-generator',
-            subChannel: 'public',
-            requestId: String(Math.random()),
-            __cache_bust: String(Math.random())
-          });
-          var gRes = await fetch('https://image-generation.perchance.org/api/generate?' + q.toString(), { cache: 'no-store', signal: perchCtrl.signal });
-          var gText = await gRes.text();
-          if (!gText || gText.trim().charAt(0) === '<') throw new Error('Perchance 出图接口被拦截，未更换平台');
-          var gJson = JSON.parse(gText);
-          if (!gJson || !gJson.imageId) throw new Error((gJson && (gJson.message || gJson.status)) || 'Perchance 没有返回图片，未更换平台');
-          var dRes = await fetch('https://image-generation.perchance.org/api/downloadTemporaryImage?imageId=' + encodeURIComponent(gJson.imageId), { cache: 'no-store', signal: perchCtrl.signal });
-          if (!dRes.ok) throw new Error('Perchance 图片下载失败，未更换平台');
-          var dBlob = await dRes.blob();
-          var dUrl = await new Promise(function (resolve, reject) {
-            var reader = new FileReader();
-            reader.onload = function () { resolve(reader.result); };
-            reader.onerror = function () { reject(new Error('Perchance 图片读取失败，未更换平台')); };
-            reader.readAsDataURL(dBlob);
-          });
-          if (perchTimer) clearTimeout(perchTimer);
-          return { url: dUrl, channel: 'Perchance' };
-          } catch (perchErr) {
-            if (perchTimer) clearTimeout(perchTimer);
-            throw perchErr && perchErr.message
-              ? perchErr
-              : new Error('Perchance 出图失败，未更换平台');
-          }
-        }
-        if (engine === 'perchance') {
-          throw new Error('Perchance 出图失败，未更换平台');
-        }
-        var isAnime = engine === 'horde-anime';
-        var prompt = isAnime ? promptText : photorealHomePrompt(promptText);
-        var negative = isAnime ? 'lowres, blurry, watermark, text' : 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
-        var lastErr = null;
-        var channelLabel = engine === 'perchance' ? 'Perchance' : (isAnime ? 'AI Horde · 动漫' : 'AI Horde · 写实');
-        var body = {
-          prompt: prompt + ' ### ' + negative,
-          params: { n: 1, width: 768, height: 768, steps: 16, cfg_scale: 7 },
-          r2: true, nsfw: true, censor_nsfw: false, slow_workers: true,
-          models: isAnime ? HOME_HORDE_ANIME.slice() : HOME_HORDE_REAL.slice()
-        };
-        for (var attempt = 0; attempt < 10; attempt += 1) {
-          try {
-            var createdRes = await fetch('https://aihorde.net/api/v2/generate/async', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', apikey: '0000000000', 'Client-Agent': 'sushi-club:1.1.45:https://aihorde.net' },
-              body: JSON.stringify(body)
-            });
-            var created = await createdRes.json().catch(function () { return {}; });
-            if (!createdRes.ok) {
-              var err = new Error(created.message || created.error || '出图失败');
-              err.status = createdRes.status;
-              throw err;
-            }
-            if (!created || !created.id) throw new Error('工坊未受理出图，请稍后重试');
-            var deadline = Date.now() + 180000;
-            var firstPoll = true;
-            while (Date.now() < deadline) {
-              var stRes = await fetch('https://aihorde.net/api/v2/generate/check/' + encodeURIComponent(created.id), {
-                headers: { apikey: '0000000000', 'Client-Agent': 'sushi-club:1.1.45:https://aihorde.net' }
-              });
-              var st = await stRes.json().catch(function () { return {}; });
-              if (st && st.faulted) throw new Error('出图失败');
-              if (st && st.done) {
-                var fullRes = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(created.id), {
-                  headers: { apikey: '0000000000', 'Client-Agent': 'sushi-club:1.1.45:https://aihorde.net' }
-                });
-                var full = await fullRes.json().catch(function () { return {}; });
-                var gens = (full && full.generations) || [];
-                var hit = gens.find(function (g) { return g && g.img && !g.censored; });
-                if (hit && hit.img) return { url: hit.img, channel: channelLabel };
-                throw new Error('出图失败');
-              }
-              await new Promise(function (r) { setTimeout(r, firstPoll ? 400 : 800); });
-              firstPoll = false;
-            }
-            throw new Error('出图超时，请稍后重试');
-          } catch (err) {
-            lastErr = err;
-            var status = err && err.status;
-            if (status === 429 || status === 409 || status === 503) {
-              await new Promise(function (r) { setTimeout(r, Math.min(2000 + attempt * 2200, 14000)); });
-              continue;
-            }
-            throw err;
-          }
-        }
-        throw lastErr || new Error('出图失败，请稍后重试');
-      } catch (err) {
-        throw new Error(homeImageError(err));
-      }
-    }
-    async function askOneChat(question, model) {
-      var messages = buildMessages(question);
-      var text = await askModel(model, messages);
-      return { text: text, channel: CHAT_LABELS[model] || model };
-    }
-    async function raceChat(question, channel) {
-      var model = normalizeChatChannel(channel);
-      return await new Promise(function (resolve, reject) {
-        var settled = false;
-        var raceTimer = setTimeout(function () {
-          if (settled) return;
-          settled = true;
-          reject(new Error('抢答超时'));
-        }, 30000);
-        askOneChat(question, model).then(function (result) {
-          if (settled) return;
-          settled = true;
-          clearTimeout(raceTimer);
-          resolve(result);
-        }).catch(function (err) {
-          if (settled) return;
-          settled = true;
-          clearTimeout(raceTimer);
-          reject(err);
-        });
-      });
-    }
-    async function sendChat() {
-      if (chatBusy) return;
-      var input = $('chatInput');
-      var text = input ? String(input.value || '').trim() : '';
-      if (!text) { if (input) input.focus(); return; }
-      chatBusy = true;
-      $('chatSend').disabled = true;
-      if (input) input.value = '';
-      var channel = selectedChatChannel();
-      chatHistory.push({ role: 'user', text: text, at: Date.now() });
-      saveChat();
-      renderChat();
-      var waiting = appendTemp(conversationWantsImage(text) ? '正在出图…' : '思考中…');
-      try {
-        if (conversationWantsImage(text)) {
-          var imgResult = null;
-          var imgErr = null;
-          var imgPromise = generateHomeImage(text).then(function (r) { imgResult = r; }).catch(function (e) { imgErr = e; });
-          await imgPromise;
-          if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
-          if (imgResult && imgResult.url) {
-            var last = chatHistory[chatHistory.length - 1];
-            if (last && last.role === 'assistant') {
-              last.image = imgResult.url;
-              if (!last.channel) last.channel = imgResult.channel;
-            } else {
-              chatHistory.push({
-                role: 'assistant',
-                text: '已按你的描述生成图片。',
-                image: imgResult.url,
-                channel: imgResult.channel,
-                at: Date.now()
-              });
-            }
-            saveChat();
-            renderChat();
-            return;
-          }
-          throw imgErr || new Error('出图失败，请稍后重试');
-        }
-        var result = await raceChat(text, channel);
-        if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
-        chatHistory.push({ role: 'assistant', text: result.text, channel: result.channel, at: Date.now() });
-        rollMemory(text, result.text);
-        saveChat();
-        renderChat();
-      } catch (err) {
-        if (waiting) {
-          waiting.classList.remove('wait');
-          waiting.textContent = (err && err.message) || '发送失败';
-        }
-      } finally {
-        chatBusy = false;
-        $('chatSend').disabled = false;
-      }
-    }
-
-    async function enterHome() {
-      show('home');
-      loadChat();
-      loadChatChannel();
-      setMemMode(memMode());
-      loadChatReady().catch(function () {});
-      try {
-        const data = await api('/api/me');
-        cacheMe(data.user);
-        renderMe();
-        refreshQuota().catch(function () {});
-      } catch (e) {}
-    }
-
-    async function bootSession() {
+    async function enterApp() {
       restoreMe();
       if (me) renderMe();
-      await enterHome();
+      await enterGen();
     }
 
     $('authSwitch').onclick = () => {
@@ -1065,7 +307,7 @@
         cacheMe(data.user);
         renderMe();
         refreshQuota().catch(function () {});
-        await enterHome();
+        await enterApp();
       } catch (err) {
         if (err.data && err.data.need_verify) {
           showVerify($('email').value.trim().toLowerCase());
@@ -1087,7 +329,7 @@
         cacheMe(data.user);
         renderMe();
         refreshQuota().catch(function () {});
-        await enterHome();
+        await enterApp();
       } catch (err) {
         $('verifyErr').textContent = err.message;
       }
@@ -1110,64 +352,7 @@
       }
     };
 
-    const TPLS = [
-      ['古风书生月下', '虚构成年书生立于庭院月下，青衫长袍，手持卷轴，月光清冷，写实摄影与电影剧照质感，全身构图，皮肤与布料纹理清晰，非动漫'],
-      ['赛博夜市', '虚构成年旅人走在霓虹夜市雨后街道，全息招牌与蒸汽小吃摊，潮湿地面反光，电影广角，未来市集氛围'],
-      ['写实肖像', '虚构成年角色半身写实肖像，伦勃朗式侧光，自然皮肤质感，古典画室背景，神情平静，摄影棚光影，非卡通'],
-      ['雨巷旗袍', '虚构成年女子撑油纸伞走在江南雨巷，旗袍剪裁端庄，青石板湿润反光，电影胶片色，全身中景'],
-      ['山巅旅人', '虚构成年旅人立于云海孤峰，写实摄影，广袖风衣，远山薄雾，清冷空气感，全身构图，非动漫'],
-      ['室内光影', '虚构成年角色坐在落地窗前阅读，午后阳光切进室内，体积光与柔和阴影，写实摄影，安静生活感'],
-      ['电影分镜', '虚构成年角色在列车车厢靠窗，过道景深虚化，电影分镜中景，自然光，纪实与剧情片质感'],
-      ['角色三视图', '虚构成年角色设定三视图，正面侧面背面并列，干净白底，服装结构清晰，概念设定图风格'],
-      ['图书馆午后', '虚构成年学者坐在木质图书馆长桌，阳光透过高窗，书堆与尘埃光柱，安静氛围，写实光影'],
-      ['雪原旅人', '虚构成年旅人立于雪原与松林之间，厚实冬装，远山淡蓝，清冷空气感，全身远中景'],
-      ['工坊静物', '虚构角色工作室一角，画架颜料与台灯暖光，静物构图，细节丰富，室内写实'],
-      ['星空屋顶', '虚构成年角色坐在老城区屋顶看星空，城市灯火在脚下，仰角构图，安静夜色，电影感']
-    ];
-    (function fillTpl() {
-      var g = $('tplGrid');
-      if (!g) return;
-      TPLS.forEach(function (item) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'tpl-btn';
-        b.textContent = item[0];
-        b.onclick = function () {
-          var input = $('chatInput');
-          if (input) input.value = '画一张：' + item[1];
-          sendChat();
-        };
-        g.appendChild(b);
-      });
-    })();
-
-    document.querySelectorAll('#memRow [data-mem]').forEach(function (btn) {
-      btn.onclick = function () { setMemMode(btn.getAttribute('data-mem')); };
-    });
-    if ($('chatChannel')) {
-      loadChatChannel();
-      $('chatChannel').onchange = function () { saveChatChannel(); };
-    }
-    $('chatSend').onclick = sendChat;
-    $('chatInput').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendChat();
-      }
-    });
-    $('clearChatBtn').onclick = function () {
-      if (!confirm('清空后本页不再记得这次对话。确定？')) return;
-      chatHistory = [];
-      memorySummary = '';
-      saveChat();
-      renderChat();
-    };
-    function goWorkshop() { document.querySelector('[data-tab="gen"]').click(); }
-    $('openWorkshopBtn').onclick = goWorkshop;
-    $('toImageTools').onclick = goWorkshop;
-    $('logoutBtn').onclick = () => { setToken(''); me = null; genLoaded = false; nlsLoaded = false; show('auth'); };
-    var nlsOpen = $('openNlsBtn');
-    if (nlsOpen) nlsOpen.onclick = function () { document.querySelector('[data-tab="nls"]').click(); };
+    $('logoutBtn').onclick = () => { setToken(''); me = null; genLoaded = false; show('auth'); };
     var chk = $('checkUpdateBtn');
     if (chk) chk.onclick = async function () {
       try {
@@ -1183,41 +368,9 @@
       btn.onclick = async () => {
         const tab = btn.dataset.tab;
         if (tab === 'gen') await enterGen();
-        else if (tab === 'nls') enterNls();
-        else if (tab === 'home') await enterHome();
         else show(tab);
       };
     });
-
-    function enterNls() {
-      show('nls');
-      const body = $('nlsBody');
-      if (nlsLoaded && body.querySelector('iframe')) {
-        try {
-          var frame = body.querySelector('iframe');
-          var tok = token();
-          if (tok && frame && frame.contentWindow) {
-            frame.contentWindow.postMessage({ type: 'sushi_auth', token: tok }, location.origin);
-          }
-        } catch (e) {}
-        return;
-      }
-      body.innerHTML = '';
-      const iframe = document.createElement('iframe');
-      iframe.src = '/nls/';
-      iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
-      iframe.style.borderRadius = '12px';
-      iframe.addEventListener('load', function () {
-        try {
-          var tok = token();
-          if (tok && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ type: 'sushi_auth', token: tok }, location.origin);
-          }
-        } catch (e2) {}
-      });
-      body.appendChild(iframe);
-      nlsLoaded = true;
-    }
 
     async function enterGen() {
       show('gen');
@@ -1317,16 +470,22 @@
       }
     }
 
+    async function bootSession() {
+      restoreMe();
+      if (me) renderMe();
+      await enterGen();
+    }
+
     setTimeout(async () => {
       if (!token()) { show('auth'); return; }
       restoreMe();
       if (me) renderMe();
       if (sessionFresh()) {
-        await enterHome();
+        await enterGen();
         bootSession().catch(function () {});
         return;
       }
-      try { await bootSession(); } catch { await enterHome(); }
+      try { await bootSession(); } catch { await enterGen(); }
     }, 200);
   </script>
 </body>

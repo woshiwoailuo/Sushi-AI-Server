@@ -13,8 +13,6 @@ const multer = require('multer');
 const { ImageError, createImageService, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('./lib/image-service');
 const workshopLoaderHtml = require('./lib/workshop-loader');
 const { openPostgres, migratePostgres, persistenceFromMode } = require('./lib/db-postgres');
-const { migrateNls } = require('./lib/nls-schema');
-const { registerNls } = require('./lib/nls-api');
 const { normalizeChatPayload, collapseRepeatedText, normalizeChatModel, missingChatApiKeyMessage, configuredChatChannels, chatChannelLabel, buildKeyedChatRequest } = require('./lib/chat-response');
 const { categorizeImageFailure, recordImageFailure, snapshotImageFailures } = require('./lib/image-failure-stats');
 const { fetchReuse, fetchLimitedRetry, imageUpstreamQueue } = require('./lib/http-client');
@@ -196,7 +194,6 @@ async function exec(sql) {
 async function migrate() {
   if (dbMode === 'postgres') {
     await migratePostgres(db);
-    await migrateNls(db);
     return;
   }
   await exec(`
@@ -286,7 +283,6 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS idx_workshop_tickets_exp ON workshop_tickets(exp_ms);
   `);
-  await migrateNls(db);
 }
 
 function clientIp(req) {
@@ -617,11 +613,6 @@ app.get('/api/me', authMiddleware, async (req, res) => {
   res.json({ user: publicUser(req.user), remaining: await remainingQuota(req.user) });
 });
 
-registerNls(app, {
-  get db() { return db; },
-  authMiddleware,
-  persistSqlJs,
-});
 
 app.post('/api/me/password', authMiddleware, async (req, res) => {
   const current = String((req.body && req.body.current_password) || '');
@@ -1987,8 +1978,6 @@ app.post('/api/workshop/img2img', async (req, res) => {
 app.get('/workshop', sendWorkshopLoader);
 app.get('/workshop/', sendWorkshopLoader);
 app.get('/workshop.html', sendWorkshopLoader);
-
-app.use('/nls', express.static(path.join(PUBLIC_DIR, 'app', 'nls')));
 
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'admin', 'index.html'));
