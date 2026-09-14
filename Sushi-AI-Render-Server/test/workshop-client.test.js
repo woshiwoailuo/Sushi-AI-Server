@@ -552,39 +552,43 @@ test('auto-race loss must not hang Perchance and cool-down remains cancelled', a
   assert.doesNotMatch(src, /PERCHANCE_COOLDOWN_MS = 30000/);
 });
 
-test('智能修饰 writes visible core modifiers and generation uses that text', async t => {
+test('智能修饰 does not rewrite core; outbound uses English modifiers', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.ok(f.w.document.getElementById('智能修饰按钮'), '智能修饰 button present');
   assert.equal(typeof f.w.智能修饰, 'function');
   f.w.document.getElementById('出图引擎').value = 'horde-real';
-  f.w.document.getElementById('角色描述').value = '窗边看书的成年人';
-  f.w.document.getElementById('中文译文').value = '窗边看书的成年人';
+  const core = '窗边看书的成年人';
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.document.getElementById('中文译文').value = core;
   f.w.document.getElementById('英文描述').value = 'an adult reading by the window';
   f.w.智能修饰();
-  const afterFirst = f.w.document.getElementById('角色描述').value;
-  assert.match(afterFirst, /^窗边看书的成年人/);
-  assert.match(afterFirst, /写实摄影|单反|皮肤|非动漫/);
-  assert.ok(afterFirst.length > '窗边看书的成年人'.length);
+  assert.equal(f.w.document.getElementById('角色描述').value, core, '核心描述 must stay untouched');
+  const mod1 = f.w.读取智能修饰后缀();
+  assert.match(mod1, /photorealistic|DSLR|full-body|not anime/i);
+  assert.doesNotMatch(mod1, /[一-鿿]/);
   f.w.智能修饰();
-  const afterSecond = f.w.document.getElementById('角色描述').value;
-  assert.match(afterSecond, /^窗边看书的成年人/);
-  assert.notEqual(afterSecond, afterFirst);
-  assert.ok(afterSecond.indexOf(afterFirst) === -1, 'must not stack previous full enriched text');
+  assert.equal(f.w.document.getElementById('角色描述').value, core);
+  const mod2 = f.w.读取智能修饰后缀();
+  assert.notEqual(mod2, mod1);
+  assert.match(mod2, /photoreal|portrait|photography|not anime/i);
   f.w.document.getElementById('角色描述').value = '动漫风格的窗边成年人';
   f.w.智能修饰();
-  const animeCore = f.w.document.getElementById('角色描述').value;
-  assert.match(animeCore, /二次元|动漫|插画|赛璐璐|线稿/);
-  assert.doesNotMatch(animeCore, /写实摄影|非动漫非卡通/);
-  f.w.document.getElementById('角色描述').value = afterFirst;
-  f.w.document.getElementById('角色描述').dispatchEvent(new f.w.Event('input', { bubbles: true }));
+  assert.equal(f.w.document.getElementById('角色描述').value, '动漫风格的窗边成年人');
+  const animeMod = f.w.读取智能修饰后缀();
+  assert.match(animeMod, /anime|illustration|lineart|cel/i);
+  assert.doesNotMatch(animeMod, /photorealistic photography style|not anime, not manga/i);
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.智能修饰(); // reset cycle on new base → first photoreal mod
+  assert.equal(f.w.document.getElementById('角色描述').value, core);
   await f.w.开始生成();
   const payload = imagePayload(f.calls);
-  assert.equal(f.w.document.getElementById('角色描述').value, afterFirst);
+  assert.equal(f.w.document.getElementById('角色描述').value, core, 'generate must not rewrite core');
   assert.ok(payload.prompt && payload.prompt.length > 8);
   assert.match(payload.prompt, /photorealistic/i);
+  assert.doesNotMatch(payload.prompt, /勿覆盖|用简体中文回复|请只输出/);
 });
 
-test('智能修饰 cycles prepared pool then asks AI without stacking', async t => {
+test('智能修饰 cycles prepared pool then asks AI without stacking or rewriting core', async t => {
   let chatBodies = [];
   const f = await setup(t, (url, options) => {
     const href = String(url || '');
@@ -594,33 +598,31 @@ test('智能修饰 cycles prepared pool then asks AI without stacking', async t 
       return {
         ok: true,
         status: 200,
-        json: async () => ({ choices: [{ message: { content: '，AI生成的官方写实修饰，全身正面，自然光，非动漫，虚构成年人，18+' } }] }),
-        text: async () => JSON.stringify({ choices: [{ message: { content: '，AI生成的官方写实修饰，全身正面，自然光，非动漫，虚构成年人，18+' } }] })
+        json: async () => ({ choices: [{ message: { content: ', AI official photoreal modifier, full-body front, natural light, not anime, fictional adult 18+' } }] }),
+        text: async () => JSON.stringify({ choices: [{ message: { content: ', AI official photoreal modifier, full-body front, natural light, not anime, fictional adult 18+' } }] })
       };
     }
     return response(method === 'POST' ? job() : job('done'));
   });
   const box = f.w.document.getElementById('角色描述');
-  box.value = '窗边看书的成年人';
+  const core = '窗边看书的成年人';
+  box.value = core;
   const seen = [];
-  const pool = f.w._智能修饰候选 ? f.w._智能修饰候选('窗边看书的成年人') : null;
-  // Prefer calling through public API; probe pool size via repeated replace.
   await f.w.智能修饰();
-  seen.push(box.value);
-  assert.match(seen[0], /^窗边看书的成年人，/);
-  assert.match(seen[0], /写实摄影|全身正面|非动漫/);
-  // Exhaust prepared pool by repeated replace clicks.
+  assert.equal(box.value, core);
+  seen.push(f.w.读取智能修饰后缀());
+  assert.match(seen[0], /photorealistic|full-body|not anime/i);
   for (let i = 0; i < 12; i++) {
     await f.w.智能修饰();
-    const cur = box.value;
-    assert.match(cur, /^窗边看书的成年人/);
-    assert.ok(seen.every(prev => cur.indexOf(prev) === -1), 'must replace previous suffix, not stack');
+    assert.equal(box.value, core, 'core must never change while cycling modifiers');
+    const cur = f.w.读取智能修饰后缀();
+    assert.ok(seen.every(prev => prev !== cur), 'must replace previous suffix, not stack');
     seen.push(cur);
     if (chatBodies.length) break;
   }
   assert.ok(chatBodies.length >= 1, 'after pool exhausted should call workshop chat AI');
-  assert.match(box.value, /AI生成的官方写实修饰|写实摄影|全身正面/);
-  assert.ok(box.value.indexOf('窗边看书的成年人') === 0);
+  assert.equal(box.value, core);
+  assert.match(f.w.读取智能修饰后缀(), /AI official photoreal modifier|photorealistic|full-body/i);
 });
 
 test('platform picker shows full names without Perch abbreviation', async t => {
@@ -826,6 +828,7 @@ test('memory mode checkmark defaults on; rewritten core description overrides ol
   const blended = f.w.组装出图描述含记忆();
   assert.match(blended, /银发法师在雪原施法/);
   assert.doesNotMatch(blended, /^stale english/);
+  assert.doesNotMatch(blended, /勿覆盖|延续记忆补充|用简体中文回复|请只输出/);
   f.w.document.getElementById('出图引擎').value = 'horde-real';
   await f.w.开始生成();
   assert.equal(f.w.document.getElementById('英文描述').value, '');
@@ -988,6 +991,44 @@ test('photoreal default prefers full-body front view unless user asks half-body'
   const side = f.w.forcePhotorealPrompt('fictional adult man side view profile');
   assert.match(side, /side view|profile/i);
   assert.doesNotMatch(side, /front view facing camera/i);
+});
+
+
+test('migrate-on-load replaces cached Chinese negative with English default', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const box = f.w.document.getElementById('负面提示');
+  const oldCn = '低清晰度，模糊，失焦，错误解剖，多头，身体融合，多余手臂，畸形手部，未成年人，水印, anime, manga';
+  box.value = oldCn;
+  assert.equal(f.w.migrateNegativePromptBox(), true);
+  assert.equal(box.value, f.w.DEFAULT_EN_NEGATIVE);
+  assert.match(box.value, /lowres|bad anatomy|malformed hands/i);
+  assert.doesNotMatch(box.value, /[\u4e00-\u9fff]/);
+  // English-only should not be overwritten
+  box.value = 'lowres, blurry, custom token xyz';
+  assert.equal(f.w.migrateNegativePromptBox(), false);
+  assert.equal(box.value, 'lowres, blurry, custom token xyz');
+});
+
+test('generate converts CJK negative phrases; Horde ### has no CJK', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('负面提示').value = '低清晰度，错误解剖，畸形手部，extra limbs, watermark';
+  f.w.document.getElementById('角色描述').value = 'a fictional adult woman in a park';
+  f.w.document.getElementById('英文描述').value = 'a fictional adult woman in a park';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  const converted = f.w.englishizeNegativePrompt(f.w.document.getElementById('负面提示').value);
+  assert.match(converted, /lowres|bad anatomy|malformed hands|extra limbs|watermark/i);
+  assert.doesNotMatch(converted, /[\u4e00-\u9fff]/);
+  await f.w.开始生成();
+  const posts = f.calls.filter(isImageSubmit);
+  assert.ok(posts.length >= 1);
+  const body = JSON.parse(posts[0].body);
+  const prompt = String(body.prompt || '');
+  assert.match(prompt, /###/);
+  const negPart = prompt.split(' ### ')[1] || '';
+  assert.doesNotMatch(negPart, /[\u4e00-\u9fff]/);
+  assert.match(negPart, /lowres|bad anatomy|anime|extra limbs/i);
+  // Textarea should be migrated to English after generate
+  assert.doesNotMatch(f.w.document.getElementById('负面提示').value, /[\u4e00-\u9fff]/);
 });
 
 test('workshop negative default is English; adult directive is stronger NSFW scale', async t => {
