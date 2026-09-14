@@ -81,13 +81,14 @@ test('img2img local-edit detection and keep-rest outbound', () => {
   const out = applyLocalEditOutbound('raise the left hand', '图中人物抬起左手', { img2img: true });
   assert.match(out, /CRITICAL EDIT \(must be clearly visible\).*left hand raised/i);
   assert.match(out, /keep the same person identity|same clothing|background/i);
-  assert.match(out, /stated local change must stay clearly visible|do NOT redraw the whole scene/i);
+  assert.match(out, /allow pose\/gesture\/limbs to change|stated local change must stay clearly visible|do NOT invent a new person/i);
   assert.match(out, /raise the left hand/i);
+  assert.doesNotMatch(out, /camera angle, crop, and framing/i);
   const again = applyLocalEditOutbound(out, '图中人物抬起左手', { img2img: true });
   assert.equal(again, out);
 
   const h = heuristicStructureFromText('图中人物抬起左手', { img2img: true });
-  assert.match(h.promptEn, /left hand raised|CRITICAL EDIT|same clothing as the reference|stated local change must stay clearly visible/i);
+  assert.match(h.promptEn, /left hand raised|CRITICAL EDIT|same clothing as the reference|allow pose\/gesture\/limbs|stated local change must stay clearly visible/i);
   assert.match(h.fields.pose, /left hand raised|抬起左手|CRITICAL EDIT/i);
   const eastFull = heuristicStructureFromText('一位东亚中国女性全身站立在雨夜街头');
   assert.match(eastFull.fields.appearance, /East Asian/i);
@@ -101,12 +102,12 @@ test('img2img local-edit detection and keep-rest outbound', () => {
   assert.equal(isPoseGestureEdit('微笑'), false);
   assert.match(localEditChangeDirective('抬起左手'), /left hand raised high|raised left hand clearly visible/i);
   const poseStr = preferLocalEditStrength(0.52, '图中人物抬起左手');
-  assert.ok(poseStr >= 0.35 && poseStr <= 0.45, 'pose strength mid-band, got ' + poseStr);
-  assert.equal(preferLocalEditStrength(0.68, '图中人物抬起左手'), 0.45);
-  assert.equal(preferLocalEditStrength(0.2, '抬起左手'), 0.35);
+  assert.ok(poseStr >= 0.45 && poseStr <= 0.55, 'pose strength harder band, got ' + poseStr);
+  assert.equal(preferLocalEditStrength(0.68, '图中人物抬起左手'), 0.55);
+  assert.equal(preferLocalEditStrength(0.2, '抬起左手'), 0.45);
   const longPose = preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景');
-  assert.ok(longPose >= 0.35 && longPose <= 0.45, 'pose cue in long edit uses mid-band, got ' + longPose);
-  assert.equal(preferLocalEditStrength(0.18, '抬手'), 0.35);
+  assert.ok(longPose >= 0.45 && longPose <= 0.55, 'pose cue in long edit uses harder band, got ' + longPose);
+  assert.equal(preferLocalEditStrength(0.18, '抬手'), 0.45);
   const mild = preferLocalEditStrength(0.52, '微笑');
   assert.ok(mild >= 0.2 && mild <= 0.28, 'mild expression stays low, got ' + mild);
   const hair = preferLocalEditStrength(0.52, 'change hair color slightly');

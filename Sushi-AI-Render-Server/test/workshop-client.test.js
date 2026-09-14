@@ -1205,7 +1205,7 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   assert.equal(f.w.isLocalEditCore('背景换成宁静雪山与晨雾，人物保持原样'), false);
   assert.ok(f.w.isPoseGestureEdit('图中人物抬起左手'));
   const poseBand = f.w.preferLocalEditStrength(0.52, '图中人物抬起左手');
-  assert.ok(poseBand >= 0.35 && poseBand <= 0.45, 'pose strength mid-band, got ' + poseBand);
+  assert.ok(poseBand >= 0.45 && poseBand <= 0.55, 'pose strength harder band, got ' + poseBand);
 
   const core = '图中人物抬起左手';
   f.w.document.getElementById('角色描述').value = core;
@@ -1221,12 +1221,13 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   const pos = prompt.split(' ### ')[0];
   const neg = prompt.includes(' ### ') ? prompt.split(' ### ')[1] : String(payload.negativePrompt || '');
   assert.match(pos, /CRITICAL EDIT \(must be clearly visible\).*left hand raised|raised left hand clearly visible/i);
-  assert.match(pos, /keep the (?:EXACT )?same person identity|stated local change must stay clearly visible/i);
-  assert.match(pos, /do NOT redraw|do not redraw|whole scene|invent a new background/i);
+  assert.match(pos, /keep the (?:EXACT )?same person identity|allow pose\/gesture\/limbs to change/i);
+  assert.match(pos, /do NOT invent a new person|invent a new background|allow pose\/gesture\/limbs/i);
+  assert.doesNotMatch(pos, /camera angle, crop, and framing/i);
   assert.doesNotMatch(pos, /change only the background/i);
   assert.ok(payload.source_image);
   const strength = (payload.params && payload.params.denoising_strength);
-  assert.ok(Number(strength) >= 0.35 && Number(strength) <= 0.45, 'pose local edit mid-band strength, got ' + strength);
+  assert.ok(Number(strength) >= 0.45 && Number(strength) <= 0.55, 'pose local edit harder strength, got ' + strength);
   assert.match(neg, /different person|identity change|full scene redraw/i);
 });
 
@@ -1239,7 +1240,7 @@ test('img2img local smile/hair still keep rest; t2i 全身+东亚 unchanged', as
   f.w.document.getElementById('出图引擎').value = 'horde-real';
   await f.w.开始生成();
   const smile = String(imagePayload(f.calls).prompt || '').split(' ### ')[0];
-  assert.match(smile, /CRITICAL EDIT|keep the same person identity|stated local change must stay clearly visible/i);
+  assert.match(smile, /CRITICAL EDIT|keep the same person identity|stated local change must stay clearly visible|do NOT invent a new person/i);
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物微笑');
 
   f.w.document.getElementById('参考图地址').value = '';
@@ -1479,15 +1480,16 @@ test('memory route list shows each generation description; per-step clear', asyn
   assert.match(f.w.document.getElementById('记忆生成线路').textContent, /\d+ 步/);
 });
 
-test('pose local-edit mid strength; mild color lower; seed lock; raised-hand prompt', async t => {
+test('pose local-edit harder strength; mild color lower; pose omits seed lock; raised-hand prompt', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const pose = f.w.preferLocalEditStrength(0.52, '抬起左手');
-  assert.ok(pose >= 0.35 && pose <= 0.45, 'pose mid-band, got ' + pose);
+  assert.ok(pose >= 0.45 && pose <= 0.55, 'pose harder band, got ' + pose);
   assert.match(f.w.localEditChangeDirective('抬起左手'), /left hand raised high|raised left hand clearly visible/i);
   const mild = f.w.preferLocalEditStrength(0.52, 'change hair color slightly');
   assert.ok(mild >= 0.2 && mild <= 0.28, 'mild color low band, got ' + mild);
   const longPose = f.w.preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景');
-  assert.ok(longPose >= 0.35 && longPose <= 0.45, 'long text with 站姿 uses pose band, got ' + longPose);
+  assert.ok(longPose >= 0.45 && longPose <= 0.55, 'long text with 站姿 uses pose band, got ' + longPose);
+  assert.equal(f.w.resolveLocalEditSeed('424242', '抬起左手'), '', 'pose omits identical seed lock');
   f.w.切换记忆(true);
   f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
   f.w.document.getElementById('参考图地址').value = PNG;
@@ -1501,12 +1503,14 @@ test('pose local-edit mid strength; mild color lower; seed lock; raised-hand pro
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   const strength = body.params && body.params.denoising_strength;
-  assert.ok(Number(strength) >= 0.35 && Number(strength) <= 0.45, 'pose local edit strength, got ' + strength);
+  assert.ok(Number(strength) >= 0.45 && Number(strength) <= 0.55, 'pose local edit strength, got ' + strength);
   assert.ok(body.source_image, '改动必须带 source_image');
   assert.equal(body.source_processing, 'img2img');
-  assert.equal(String(body.params.seed), '424242');
+  assert.ok(body.params.seed === undefined || body.params.seed === '' || body.params.seed == null, 'pose should omit seed lock, got ' + body.params.seed);
   assert.match(String(body.prompt || ''), /CRITICAL EDIT.*left hand raised|raised left hand clearly visible/i);
-  assert.match(String(body.prompt || ''), /same person identity|stated local change must stay clearly visible/i);
+  assert.match(String(body.prompt || ''), /same person identity|allow pose\/gesture\/limbs to change/i);
+  assert.doesNotMatch(String(body.prompt || ''), /camera angle, crop, and framing/i);
+  assert.doesNotMatch(String(body.prompt || '') + ' ### ' + String(body.params && ''), /camera move, new composition/);
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手');
 });
 
@@ -1550,8 +1554,9 @@ test('改动 payload includes source_image from memory step image', async t => {
   const body = imagePayload(f.calls);
   assert.ok(body.source_image, '改动必须带 source_image');
   assert.equal(body.source_processing, 'img2img');
-  assert.ok(Number(body.params.denoising_strength) >= 0.35 && Number(body.params.denoising_strength) <= 0.45, 'pose band, got ' + body.params.denoising_strength);
+  assert.ok(Number(body.params.denoising_strength) >= 0.45 && Number(body.params.denoising_strength) <= 0.55, 'pose band, got ' + body.params.denoising_strength);
   assert.match(String(body.prompt || ''), /left hand raised|raised left hand clearly visible/i);
+  assert.ok(body.params.seed === undefined || body.params.seed === '' || body.params.seed == null, 'pose omits seed');
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手');
 });
 

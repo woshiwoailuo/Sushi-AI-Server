@@ -326,7 +326,10 @@
   }
 
   var LOCAL_EDIT_KEEP_REST =
-    'IMG2IMG local edit of the REFERENCE IMAGE only: Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, and framing as the reference image; do NOT redraw the whole scene, restyle, or invent a new background; the stated local change must stay clearly visible while preserving likeness';
+    'IMG2IMG local edit of the REFERENCE IMAGE only: Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, and lighting as the reference image; do NOT invent a new person or background; the stated local change must stay clearly visible while preserving likeness';
+
+  var LOCAL_EDIT_KEEP_REST_POSE =
+    'IMG2IMG local edit of the REFERENCE IMAGE only: Keep the same person identity, face, hairstyle, clothing, and background as the reference; allow pose/gesture/limbs to change as stated; do not invent a new person or background';
 
   var POSE_GESTURE_RE =
     /抬起|举起|放下|伸手|举手|挥手|叉腰|转头|回头|侧头|低头|抬头|扭头|侧过脸|抬手|站姿|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|lower(?:s|ed|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|turn(?:s|ed|ing)?\s+(?:(?:the)\s+)?head|look(?:s|ing)?\s+(?:left|right|away)|wave(?:s|d|ing)?\b|hands?\s+on\s+(?:hips|waist)|arms?\s+(?:crossed|raised|up|out)/i;
@@ -381,7 +384,8 @@
     var t = String(promptEn || '').replace(/\s+/g, ' ').trim();
     if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(t)) return t;
     var change = localEditChangeDirective(core || t);
-    return (change + (t ? ', ' + t : '') + ', ' + LOCAL_EDIT_KEEP_REST).replace(/\s{2,}/g, ' ').trim();
+    var keep = isPoseGestureEdit(core || t) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST;
+    return (change + (t ? ', ' + t : '') + ', ' + keep).replace(/\s{2,}/g, ' ').trim();
   }
 
   function preferLocalEditStrength(current, core) {
@@ -389,9 +393,9 @@
     var base = isFinite(n) && n > 0 ? n : 0.45;
     var coreText = String(core || '').replace(/\s+/g, ' ').trim();
     if (isPoseGestureEdit(coreText)) {
-      // Mid band so limbs/pose actually move (0.15 was too weak for 抬起左手).
-      var poseFloor = 0.35;
-      var poseCap = 0.45;
+      // Harder band: 0.35–0.45 still often froze under keep-rest + identical seed.
+      var poseFloor = 0.45;
+      var poseCap = 0.55;
       if (base > poseCap) return poseCap;
       if (base < poseFloor) return poseFloor;
       return base;
@@ -405,7 +409,9 @@
     return base;
   }
 
-  function resolveLocalEditSeed(fallback) {
+  function resolveLocalEditSeed(fallback, core) {
+    // Pose/gesture: identical seed freezes composition/limbs — omit lock so Horde can vary.
+    if (isPoseGestureEdit(core)) return '';
     var locked = Number(($('参考图种子') && $('参考图种子').value) || '');
     if (isFinite(locked) && locked > 0) return String(Math.floor(locked));
     var box = $('随机种子');
@@ -1333,12 +1339,21 @@
       models: models
     };
     var source = run.payload && run.payload.sourceImage;
+    if (run.localEdit && !source) {
+      try { console.warn('[改动] localEdit 无 source_image，无法走 Horde img2img'); } catch (eAssert) {}
+    }
     if (source) {
       var text = String(source);
       var comma = text.indexOf(',');
       body.source_image = comma >= 0 ? text.slice(comma + 1) : text;
       body.source_processing = 'img2img';
-      params.denoising_strength = Number((run.payload && run.payload.strength) || 0.45);
+      var ds = Number((run.payload && run.payload.strength) || 0.45);
+      if (!isFinite(ds) || ds <= 0) ds = 0.45;
+      if (run.localEdit && isPoseGestureEdit(run.coreSource || (run.payload && run.payload.prompt) || '')) {
+        if (ds < 0.45) ds = 0.45;
+        if (ds > 0.55) ds = 0.55;
+      }
+      params.denoising_strength = ds;
     }
     return body;
   }
@@ -2087,7 +2102,11 @@
       }
     }
     if (run.localEdit && !/different person|identity change|full scene redraw/i.test(negative)) {
-      negative += ', different person, different face, different clothes, new background, full scene redraw, identity change, full recompose, restyle, camera move, new composition';
+      if (isPoseGestureEdit(run.coreSource || description)) {
+        negative += ', different person, different face, different clothes, new background, full scene redraw, identity change, restyle';
+      } else {
+        negative += ', different person, different face, different clothes, new background, full scene redraw, identity change, full recompose, restyle, camera move, new composition';
+      }
     }
     if (!/pinyin|romanization|letters on image/i.test(negative)) {
       negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
@@ -2097,11 +2116,16 @@
       sourceForRun = value('参考图地址') || memSrc || '';
     }
     if (run.localEdit && !sourceForRun) {
+      try { console.warn('[改动] 勾选改动但无 source_image/参考图，回退全文生图'); } catch (eNoSrc) {}
+      try { status('改动需要参考图', '未找到源图，本轮将改走全文生图。请点记忆路线某步或插入参考图后再改动。', false); } catch (eSt) {}
       run.localEdit = false;
       useRef = false;
     } else if (run.localEdit) {
       useRef = true;
       run.engine = resolveImg2imgEngine(value('图生图平台'));
+    }
+    if (genMode === '改动' && !sourceForRun) {
+      try { console.warn('[改动] genMode=改动 仍无 source_image'); } catch (eMode) {}
     }
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
@@ -2109,16 +2133,28 @@
       sourceImage: (useRef || run.localEdit) ? sourceForRun : '', strength: Number(value('图生图强度')) || 0.45
     };
     if (run.localEdit) {
+      var poseEdit = isPoseGestureEdit(run.coreSource || description);
       run.payload.strength = preferLocalEditStrength(run.payload.strength, run.coreSource || description);
-      run.payload.seed = resolveLocalEditSeed(run.payload.seed);
+      run.payload.seed = resolveLocalEditSeed(run.payload.seed, run.coreSource || description);
       try {
         var seedBox = $('参考图种子');
-        if (seedBox && run.payload.seed !== '' && run.payload.seed != null) seedBox.value = String(run.payload.seed);
+        // Pose: do not re-lock seed into 参考图种子 (omit seed so composition can move).
+        if (!poseEdit && seedBox && run.payload.seed !== '' && run.payload.seed != null) seedBox.value = String(run.payload.seed);
       } catch (eLock) {}
-      if (!/recompose|restyle|invent a new scene|leave every other region unchanged/i.test(negative)) {
+      if (poseEdit) {
+        // Soften: "new composition / camera move / full recompose" fight raised-hand limb edits.
+        if (!/different person|identity change|new background|restyle/i.test(negative)) {
+          negative += ', different person, different face, different clothes, new background, identity change, restyle';
+          run.payload.negativePrompt = negative;
+        }
+      } else if (!/recompose|restyle|invent a new scene|leave every other region unchanged/i.test(negative)) {
         negative += ', full recompose, restyle, new scene, different composition, camera move, identity change';
         run.payload.negativePrompt = negative;
       }
+      try {
+        if (!run.payload.sourceImage) console.warn('[改动] payload 缺 source_image');
+        else console.info('[改动] img2img', { strength: run.payload.strength, seed: run.payload.seed || '(omit)', engine: run.engine, pose: poseEdit });
+      } catch (eLog) {}
     } else if (run.payload && run.payload.seed !== '' && run.payload.seed != null && String(run.payload.seed) !== '-1') {
       try {
         var seedKeep = $('参考图种子');
