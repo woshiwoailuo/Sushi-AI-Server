@@ -14,24 +14,18 @@ const STRUCTURE_FIELDS = [
 ];
 
 const STRUCTURE_SYSTEM = [
-  'You convert a user scene description into a compact STRUCTURED image prompt.',
+  'You convert a user scene description into a compact, detailed STRUCTURED image prompt.',
   'Reply with ONLY one JSON object (no markdown fences) using these English keys:',
   '{"subject":"","pose":"","clothing":"","appearance":"","scene":"","camera":"","lighting":"","style":"","extras":""}',
-  'Rules: FAITHFUL TO CORE — translate and slot ONLY facts present in the core; ACTION-FIRST order: put concrete verbs/actions and key props in pose/subject before filler style; include every explicitly described clothing, prop, pose, scene, action, lighting, and count — omit none (e.g. 翻炒→stir-frying/tossing food in wok mid-motion; 蒸汽升腾→visible rising steam/vapor; 不锈钢锅→stainless steel wok with specular highlights; 围裙/食材→apron + ingredients clearly visible); when core says 纪实/写实/抓拍 amplify documentary candid photojournalistic photoreal language; prefer completeness of core facts over filler style words; do NOT invent clothing, props, pose, identity, gender, background, or setting absent from the core; empty string if unknown;',
-  'fictional consenting adults 18+ only; no minors; keep adult/NSFW details if the user asked; do NOT invent nudity, undressing, revealing outfits, lingerie, underwear, bra, panties, cleavage, skimpy clothes, seductive posing, crop top, bare midriff, or remove clothing unless the core explicitly describes nude/naked/unclothed/lingerie/underwear/内衣/全裸/裸体/暴露/性感/露脐/露腰/crop top/midriff;',
-  'do NOT invent woman, female, girl, beautiful woman, breasts, feminine body, or gendered identity unless the core explicitly states female gender (女人/女性/woman/female/girl); if the core explicitly states male gender (男人/男性/男主/帅哥/大叔/男孩/male/man/him/he as person), subject MUST lead with adult man and MUST NOT be woman/girl/female/she/her/breasts; if gender is unspecified use gender-neutral subject (person/adult/figure) with NO woman/sexy female default; do NOT invent revealing outfits, lingerie, underwear, bra, panties, cleavage, nude, crop top, bare midriff, or extra people unless explicitly in the core (露脐/露腰/crop top/midriff allowed when written); if clothing is omitted leave clothing empty (outbound adds soft everyday clothes) — never invent lingerie;',
-  'prefer photoreal photography wording unless the user explicitly asked for anime/manga/illustration;',
-  'PRESERVE ethnicity/race/nationality from the core literally in appearance (e.g. East Asian, Chinese, Korean, Japanese, East Asian facial features);',
-  'NEVER invent blonde, caucasian, european, blue eyes, or Western/European beauty defaults unless the user asked;',
-  'if core asks full body / 全身 / head-to-toe / feet in frame, put soft full-body framing in pose (head-to-toe, feet in frame) — never invent full-body or facing-camera when core omits them;',
-  'if core states count (两名/两个/二人/two adults/couple) or mutual gaze (对视/looking at each other), subject/pose MUST include two adults + looking at each other/eye contact and scene/lighting must keep warm interior when 暖光/室内 present; never collapse to a single solo portrait;',
-  'keep each value short (under 40 words); empty string if unknown; do not invent a celebrity.',
-  'if img2img LOCAL EDIT (short pose/hand/expression/clothing tweak on a reference image), fill pose with only that change; extras must keep identity/background/composition/clothing unchanged; do not invent a new scene.',
+  'The core description is the source of truth: translate every stated fact faithfully and do not remove, replace, reinterpret, or contradict it.',
+  'Analyze the stated scene carefully. Add only compatible visual detail that makes stated actions, materials, lighting, composition, and atmosphere more legible; do not add a new person, identity, ethnicity, gender, clothing, exposure level, prop, action, setting, camera angle, or style constraint.',
+  'Place concrete stated actions and key props before generic rendering detail. Keep each value short (under 40 words); leave a field empty when the core gives no basis for it.',
+  'For img2img local edits, describe the requested change and respect the supplied reference image; do not create unrelated changes.'
 ].join(' ');
 
 /** Outbound lead: models must prioritize core facts over style/filler packs. Visible 核心描述 is never rewritten. */
 const CORE_FIDELITY_LEAD =
-  'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; lead with described actions then subject props lighting camera before generic fillers; do not invent clothing, props, pose, identity, gender, revealing outfits, lingerie, underwear, cleavage, extra people, or setting not in the core; when gender is unspecified stay gender-neutral without inventing a gendered subject; lead with core facts';
+  'Core-grounded detailed visualization: retain every explicit core fact; add only compatible rendering detail; do not replace or contradict the core';
 
 function applyCoreFidelityLead(prompt) {
   let text = String(prompt || '').replace(/\s+/g, ' ').trim();
@@ -258,7 +252,7 @@ function buildStructureMessages(core, options = {}) {
     : '';
   return [
     { role: 'system', content: STRUCTURE_SYSTEM + ' ' + styleHint + localHint },
-    { role: 'user', content: 'Core description (source of truth; translate faithfully; include ALL explicitly described clothing, props, pose, scene, actions, counts — omit none; do not invent gender/woman/female/revealing/lingerie/cleavage unless stated; if core is male lead with adult man and never woman; if gender omitted stay gender-neutral with no sexy female default; do not invent or contradict):\n' + coreText },
+    { role: 'user', content: 'Core description (source of truth. Translate it faithfully, retain every explicit fact, and add only compatible visual detail for a clearer image. Do not replace or contradict any core fact):\n' + coreText },
   ];
 }
 
