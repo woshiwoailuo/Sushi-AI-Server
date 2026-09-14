@@ -19,6 +19,7 @@ const STRUCTURE_SYSTEM = [
   '{"subject":"","pose":"","clothing":"","appearance":"","scene":"","camera":"","lighting":"","style":"","extras":""}',
   'The core description is the source of truth: translate every stated fact faithfully and do not remove, replace, reinterpret, or contradict it.',
   'Analyze the stated scene carefully. Add only compatible visual detail that makes stated actions, materials, lighting, composition, and atmosphere more legible; do not add a new person, identity, ethnicity, gender, clothing, exposure level, prop, action, setting, camera angle, or style constraint.',
+  'When the core depicts a person, enhance presentation with natural refined facial detail, expressive realistic eyes, individualized features, healthy natural skin texture, and polished high-end photorealism. Preserve every stated identity, age, ethnicity, expression, clothing, pose, and style fact.',
   'Place concrete stated actions and key props before generic rendering detail. Keep each value short (under 40 words); leave a field empty when the core gives no basis for it.',
   'For img2img local edits, describe the requested change and respect the supplied reference image; do not create unrelated changes.'
 ].join(' ');
@@ -183,6 +184,7 @@ function heuristicStructureFromText(text, options = {}) {
   if (!cleaned) return { fields: {}, promptEn: '' };
   const wantAnime = options.anime === true
     || /anime|manga|cartoon|二次元|动漫|卡通|漫画|插画/i.test(cleaned);
+  const personCue = /人|人物|角色|模特|女人|女性|男人|男性|女孩|男孩|adult|person|people|woman|man|girl|boy|model|character/i.test(cleaned);
   const wantFull = /full[\s-]?body|全身|head to toe|feet in (?:the )?frame|从头到脚/i.test(cleaned);
   const localEdit = options.img2img === true && isLocalEditCore(cleaned);
   const cookAction = /翻炒|颠勺|炒菜|stir[\s-]?fry|wok[\s-]?toss/i.test(cleaned);
@@ -219,7 +221,9 @@ function heuristicStructureFromText(text, options = {}) {
   else if (/顶灯|窗光|overhead|window light/i.test(cleaned) && cookKitchen) lightBits.push('mixed overhead and window light');
   const fields = {
     subject,
-    appearance: localEdit ? 'same face, same hair, same identity as the reference image' : '',
+    appearance: localEdit
+      ? 'same face, same hair, same identity as the reference image'
+      : (personCue ? 'natural refined facial detail, expressive realistic eyes, individualized features, healthy natural skin texture' : ''),
     clothing: localEdit ? 'same clothing as the reference image' : clothingBits.join(', '),
     pose: localEdit
       ? (isPoseGestureEdit(cleaned) ? localEditChangeDirective(cleaned) : cleaned.slice(0, 220))
@@ -229,7 +233,7 @@ function heuristicStructureFromText(text, options = {}) {
       ? 'same camera angle and crop as the reference image'
       : (wantAnime ? '' : (wantFull ? '28mm wide FOV' : '')),
     lighting: wantAnime ? '' : lightBits.join(', '),
-    style: wantAnime ? 'anime illustration' : (docuCue ? 'documentary candid photorealistic' : ''),
+    style: wantAnime ? 'anime illustration' : (personCue ? 'high-end photorealistic portrait photography, natural skin texture' : (docuCue ? 'documentary candid photorealistic' : '')),
     extras: localEdit ? (isPoseGestureEdit(cleaned) ? LOCAL_EDIT_KEEP_REST_POSE : LOCAL_EDIT_KEEP_REST) : '',
   };
   const promptEn = applyCoreFidelityLead(assembleStructuredPrompt(fields));
