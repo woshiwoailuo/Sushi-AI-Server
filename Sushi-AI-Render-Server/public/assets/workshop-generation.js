@@ -1888,11 +1888,6 @@
     if (run.localEdit && isPoseGestureEdit(run.coreSource || (run.payload && run.payload.prompt) || '')) {
       if (!(Number(params.cfg_scale) > 7)) params.cfg_scale = 8;
     }
-    // Gender/clothing locks need slightly stronger CFG so model priors cannot override leading tokens
-    var lockCore = String(run.coreSource || '');
-    if (isMaleOnlyCore(lockCore) || (!hasNudeIntent(lockCore) && !hasExposureIntent(lockCore))) {
-      if (!(Number(params.cfg_scale) >= 8)) params.cfg_scale = Math.max(Number(params.cfg_scale) || 7, 8);
-    }
     var seed = run.payload && run.payload.seed;
     if (seed !== '' && seed != null) {
       if (run.localEdit) params.seed = String(Number(seed));
