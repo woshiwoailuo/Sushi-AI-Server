@@ -697,6 +697,20 @@ test('memory mode checkmark defaults on; rewritten core description overrides ol
   const chat = f.w.document.getElementById('问答区');
   assert.ok(chat);
   assert.equal(chat.open, false);
+  // 记忆对勾必须在折叠的 AI 对话外，否则用户「打不开/勾不上」
+  assert.equal(chat.contains(row), false);
+  assert.equal(chat.contains(mem), false);
+  // 关→开 可再次启用
+  mem.checked = false;
+  f.w.切换记忆(false);
+  assert.equal(f.w.记忆已开(), false);
+  assert.equal(mem.checked, false);
+  assert.equal(f.w.document.getElementById('记忆模式').value, 'off');
+  mem.checked = true;
+  f.w.切换记忆(true);
+  assert.equal(f.w.记忆已开(), true);
+  assert.equal(mem.checked, true);
+  assert.notEqual(f.w.document.getElementById('记忆模式').value, 'off');
   assert.equal(f.w.document.getElementById('工具区'), null);
   assert.equal(typeof f.w.生成随机种子, 'undefined');
   assert.equal(typeof f.w.复制当前提示, 'undefined');
@@ -731,6 +745,36 @@ test('memory mode checkmark defaults on; rewritten core description overrides ol
   assert.doesNotMatch(prompt, /stale english about red-haired/);
 });
 
+
+test('adult on: outbound prompts keep NSFW tokens and append 成人功能状态 after photoreal enrich', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(f.w.成人主题已开启, true);
+  assert.equal(typeof f.w.withAdultDirective, 'function');
+  const adultField = f.w.document.getElementById('成人功能状态').value;
+  assert.match(adultField, /do not add clothes if described as nude/i);
+  const nude = 'nude fictional adult woman standing by a rainy window, explicit adult scene';
+  const enriched = f.w.forcePhotorealPrompt(nude);
+  assert.match(enriched, /nude fictional adult woman/i);
+  assert.doesNotMatch(enriched, /realistic fabric texture/i);
+  const outbound = f.w.withAdultDirective(enriched);
+  assert.match(outbound, /nude fictional adult woman/i);
+  assert.match(outbound, /adult mode enabled/i);
+  assert.match(outbound, /do not add clothes if described as nude/i);
+  f.w.切换成人对勾(false);
+  assert.equal(f.w.withAdultDirective(enriched), enriched);
+  f.w.切换成人对勾(true);
+  f.w.document.getElementById('角色描述').value = nude;
+  f.w.document.getElementById('英文描述').value = nude;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const posts = f.calls.filter(isImageSubmit);
+  assert.ok(posts.length >= 1, 'expected image submit');
+  const prompt = String(JSON.parse(posts[0].body).prompt || '');
+  assert.match(prompt, /nude fictional adult woman/i);
+  assert.match(prompt, /adult mode enabled/i);
+  assert.match(prompt, /NSFW allowed/i);
+  assert.doesNotMatch(prompt.split(' ### ')[0], /realistic fabric texture/i);
+});
 
 test('adult on: censored Horde generations retry then succeed with NSFW-preferred models', async t => {
   let hordeSubmits = 0;

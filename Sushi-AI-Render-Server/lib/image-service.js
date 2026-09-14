@@ -78,15 +78,35 @@ function stripArtStyleWords(text) {
 function sanitizeRealPrompt(prompt) {
   let text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
   if (!text) text = 'a fictional adult, natural light, DSLR';
+  const bare = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(text);
   if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
-    text = 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture, ' + text;
+    const lead = bare
+      ? 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, '
+      : 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture, ';
+    text = lead + text;
   } else if (!/^\s*photoreal/i.test(text)) {
     text = 'photorealistic photograph of ' + text;
+  }
+  if (bare) {
+    text = text.replace(/,?\s*realistic fabric texture/gi, '').replace(/\s{2,}/g, ' ').trim();
   }
   if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(text)) {
     text += ', not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading';
   }
   return text.replace(/\s{2,}/g, ' ').trim();
+}
+
+/** Keep adult/NSFW directive when truncating long prompts (do not cut trailing adult instructions). */
+function clipPromptPreserveAdult(prompt, maxLen) {
+  const text = String(prompt || '');
+  if (text.length <= maxLen) return text;
+  const marker = 'adult mode enabled';
+  const idx = text.toLowerCase().lastIndexOf(marker);
+  if (idx < 0) return text.slice(0, maxLen);
+  const tail = text.slice(idx).trim();
+  if (tail.length >= maxLen) return tail.slice(0, maxLen);
+  const headBudget = maxLen - tail.length - 1;
+  return text.slice(0, Math.max(0, headBudget)).trim() + ' ' + tail;
 }
 
 function hordeModelsFor(input = {}, model = '') {
@@ -117,7 +137,7 @@ function generationPayload(input = {}, model = '') {
   const style = String((input && input.style) || '').trim().toLowerCase();
   const isReal = style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance';
   let prompt = isReal ? sanitizeRealPrompt(promptRaw) : promptRaw;
-  if (prompt.length > 2000) prompt = prompt.slice(0, 2000);
+  if (prompt.length > 2000) prompt = clipPromptPreserveAdult(prompt, 2000);
   let negative = negativeRaw;
   if (isReal) {
     negative = negative ? (negative + ', ' + REAL_NEGATIVE) : REAL_NEGATIVE;
@@ -437,4 +457,4 @@ function createImageService(options = {}) {
   return { create, get, cancel, current, sweep };
 }
 
-module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, hordeModelsFor, sanitizeRealPrompt, preferNsfwModels };
+module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, hordeModelsFor, sanitizeRealPrompt, preferNsfwModels, clipPromptPreserveAdult };

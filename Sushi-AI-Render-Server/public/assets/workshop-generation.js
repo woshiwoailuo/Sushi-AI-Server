@@ -207,7 +207,10 @@
   function forcePhotorealPrompt(prompt) {
     var text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
     if (!text) text = 'a fictional adult, natural light, DSLR';
-    var lead = 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture';
+    var bare = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(text);
+    var lead = bare
+      ? 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores'
+      : 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture';
     if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
       text = lead + ', ' + text;
     } else if (!/^\s*photoreal/i.test(text)) {
@@ -244,6 +247,32 @@
       text += ', fictional adult 18+ only, no minors';
     }
     return text.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  function adultDirectiveText() {
+    if (typeof window.成人主题已开启 !== 'undefined' && !window.成人主题已开启) return '';
+    var el = $('成人功能状态');
+    var text = el && el.value ? String(el.value).trim() : '';
+    if (!text) {
+      text = 'adult mode enabled; NSFW allowed; nudity and adult sexual content allowed; follow the core description literally; do not add clothes if described as nude; fictional consenting adults 18+';
+    }
+    return text;
+  }
+
+  function withAdultDirective(prompt) {
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    var dir = adultDirectiveText();
+    if (!dir) return text;
+    if (text && text.toLowerCase().indexOf('adult mode enabled') >= 0) return text;
+    if (/nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露/i.test(text)) {
+      text = text
+        .replace(/,?\s*realistic fabric texture/gi, '')
+        .replace(/,?\s*clear clothing and skin texture/gi, ', natural skin texture')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/^[,\s]+|[,\s]+$/g, '')
+        .trim();
+    }
+    return (text ? text + ', ' : '') + dir;
   }
 
   function hideStatusPanel() {
@@ -1184,6 +1213,8 @@
     var engine = run.engine;
     if (run.payload.sourceImage && engine === 'sana') throw new Error('Sana 当前未接入图生图，未切换平台。');
     prompt = engineFamily(engine) === 'anime' ? prompt : forcePhotorealPrompt(prompt);
+    // Adult/NSFW instructions from core + hidden 成人功能状态 must survive photoreal enrich.
+    prompt = withAdultDirective(prompt);
     run.payload.prompt = prompt;
     return runWithProviderBudget(run, engine, function (signal) {
       if (engine === 'perchance') return generatePerchance(run, prompt, index, signal);
@@ -1369,6 +1400,8 @@
   window.photorealPrompt = photorealPrompt;
   window.forcePhotorealPrompt = forcePhotorealPrompt;
   window.animePrompt = animePrompt;
+  window.withAdultDirective = withAdultDirective;
+  window.adultDirectiveText = adultDirectiveText;
   window.hasExplicitArtStyle = hasExplicitArtStyle;
   window.engineFamily = engineFamily;
   window.设平台提示 = function (engine) {

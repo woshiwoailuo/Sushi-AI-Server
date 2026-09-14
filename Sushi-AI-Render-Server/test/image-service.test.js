@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createImageService, imageSource, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS } = require('../lib/image-service');
+const { createImageService, imageSource, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, sanitizeRealPrompt, clipPromptPreserveAdult } = require('../lib/image-service');
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6JkAAAAASUVORK5CYII=';
 const response = (data, status = 200) => new Response(JSON.stringify(data), { status });
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
@@ -34,6 +34,29 @@ test('validates input, preserves the prompt and sends reference images and guida
   for (const input of [null, [], {}, { prompt: 'x', width: 513 }, { prompt: 'x', width: 0 }, { prompt: 'x', cfgScale: 40 }, { prompt: 'x', seed: '-1' }, { prompt: 'x', sourceImage: 'https://example.com/photo.jpg' }]) {
     assert.throws(() => generationPayload(input), e => e.status === 400);
   }
+});
+
+
+test('sanitizeRealPrompt keeps nude tokens and skips fabric bias; clip preserves adult directive', () => {
+  const nude = sanitizeRealPrompt('nude fictional adult woman, explicit adult scene by a window');
+  assert.match(nude, /nude fictional adult woman/i);
+  assert.doesNotMatch(nude, /realistic fabric texture/i);
+  const clothed = sanitizeRealPrompt('a fictional adult in a red coat by a window');
+  assert.match(clothed, /realistic fabric texture/i);
+  const longHead = 'x'.repeat(1900);
+  const adult = 'adult mode enabled; NSFW allowed; do not add clothes if described as nude; fictional consenting adults 18+';
+  const clipped = clipPromptPreserveAdult(longHead + ' ' + adult, 2000);
+  assert.ok(clipped.length <= 2000);
+  assert.match(clipped, /adult mode enabled/i);
+  assert.match(clipped, /do not add clothes if described as nude/i);
+  const payload = generationPayload({
+    prompt: 'nude fictional adult woman standing indoors, ' + adult,
+    style: 'real',
+    width: 512,
+    height: 512,
+  });
+  assert.match(payload.prompt, /nude fictional adult woman/i);
+  assert.match(payload.prompt, /adult mode enabled/i);
 });
 
 test('style pins Horde models for 写实 vs 动漫 without changing prompt text', () => {
