@@ -51,7 +51,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.68/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.69/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
@@ -134,13 +134,16 @@ test('force local-edit outbound even when core is not heuristic local-edit', () 
 
 test('core fidelity lead and heuristic do not invent clothing', () => {
   assert.match(CORE_FIDELITY_LEAD, /Faithful to core description|do not invent clothing/i);
+  assert.match(CORE_FIDELITY_LEAD, /include every explicitly described element|omit none/i);
+  assert.match(CORE_FIDELITY_LEAD, /gender-neutral|gender/i);
   const led = applyCoreFidelityLead('a woman in a red dress on a rainy street');
   assert.match(led, /Faithful to core description/i);
   assert.match(led, /red dress|rainy street/i);
   assert.equal(applyCoreFidelityLead(led), led);
   const msgs = buildStructureMessages('穿红毛衣的东亚女性侧身站在图书馆窗边', { anime: false });
   assert.match(msgs[0].content, /FAITHFUL TO CORE|do NOT invent clothing, props/i);
-  assert.match(msgs[1].content, /translate faithfully|do not invent or contradict/i);
+  assert.match(msgs[0].content, /do NOT invent woman|gender-neutral|omit none/i);
+  assert.match(msgs[1].content, /translate faithfully|include ALL explicitly described|do not invent gender/i);
   assert.match(msgs[1].content, /红毛衣|图书馆/);
   const h = heuristicStructureFromText('穿红毛衣的东亚女性侧身站在图书馆窗边');
   assert.match(h.promptEn, /Faithful to core description/i);
