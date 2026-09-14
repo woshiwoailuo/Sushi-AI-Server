@@ -30,10 +30,6 @@ class HomeFragment : Fragment() {
             Session.setPendingPrompt("上传人物原图或参考图后，描述希望更换或生成的背景。")
             (activity as? MainActivity)?.openGen()
         }
-        view.findViewById<Button>(R.id.chatQuick).setOnClickListener {
-            Session.setPendingPrompt("进入 AI 对话，可直接提问。")
-            (activity as? MainActivity)?.openGen()
-        }
         view.findViewById<Button>(R.id.aiImageQuick).setOnClickListener {
             Session.setPendingPrompt("请描述希望 AI 直接生成并在软件内显示的图片。")
             (activity as? MainActivity)?.openGen()

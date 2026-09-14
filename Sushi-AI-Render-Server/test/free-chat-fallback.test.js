@@ -132,22 +132,11 @@ test('buildKeyedChatRequest: Gemini header auth, OpenRouter free router', () => 
   assert.equal(ds.body.thinking.type, 'disabled');
 });
 
-test('homepage and workshop preserve manual model selection', () => {
-  assert.match(home, /function autoRaceList/);
-  assert.match(home, /function loadChatReady/);
-  assert.match(home, /chatReady\.groq/);
-  assert.match(home, /var model = normalizeChatChannel\(channel\)/);
-  assert.match(home, /Gemini 未配置：请在 Vercel 环境变量填写 GEMINI_API_KEY/);
-  assert.match(home, /OpenRouter 未配置：请在 Vercel 环境变量填写 OPENROUTER_API_KEY/);
-  assert.match(home, /function syncChatPicker/);
-  assert.match(home, /id: 'gemini'/);
-  assert.match(home, /id: 'openrouter'/);
-  assert.match(home, /id: 'deepseek'/);
-  assert.match(home, /id: 'glm'/);
-  assert.match(home, /DeepSeek 未配置：请在 Vercel 环境变量填写 DEEPSEEK_API_KEY/);
-  assert.match(home, /GLM 未配置：请在 Vercel 环境变量填写 GLM_API_KEY/);
-  assert.match(home, /\/api\/health/);
-  assert.match(home, /return \['glm'\]/);
+test('workshop preserves manual model selection; homepage chat removed', () => {
+  assert.doesNotMatch(home, /function autoRaceList/);
+  assert.doesNotMatch(home, /function loadChatReady/);
+  assert.doesNotMatch(home, /chatReady\.groq/);
+  assert.doesNotMatch(home, /id="chatChannel"/);
   assert.match(workshop, /var 已配置通道/);
   assert.match(workshop, /function 载入已配置通道/);
   assert.match(workshop, /function 同步对话通道选项/);

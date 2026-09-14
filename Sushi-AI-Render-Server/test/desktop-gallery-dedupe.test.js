@@ -30,10 +30,9 @@ test('desktop gallery stacks full images downward; no oversized empty vh box', (
 
 test('client and server expose reply dedupe helpers', () => {
   assert.match(chatLib, /function collapseRepeatedText/);
-  assert.match(home, /function collapseRepeatedText/);
+  assert.doesNotMatch(home, /function collapseRepeatedText/);
   assert.match(workshop, /function 折叠重复回复/);
   assert.match(workshop, /return 折叠重复回复\(文\)/);
-  assert.match(home, /collapseRepeatedText\(content\)/);
 });
 
 test('lightbox close + history fit + two-step zoom CSS present', () => {

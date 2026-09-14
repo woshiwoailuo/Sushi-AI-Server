@@ -32,7 +32,7 @@
     <string name="check_update">检查更新</string>
     <string name="download_update">下载更新</string>
     <string name="already_latest">已是最新版本</string>
-    <string name="home_core">角色馆 · 正经娱乐，文生图+对话</string>
+    <string name="home_core">角色馆 · 正经娱乐，文生图创作</string>
     <string name="enter_workshop">进去</string>
     <string name="img_templates">文生图模板</string>
 </resources>
