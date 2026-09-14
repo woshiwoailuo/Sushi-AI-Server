@@ -872,14 +872,23 @@
   }
 
   // Revealing / sexy bias — only keep when core explicitly asks; otherwise strip invented exposure.
-  var EXPOSURE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|lingerie|underwear|undergarment|\bbra\b|panties|panty|thong|cleavage|skimpy|seductive|sexy|revealing|see[\s-]?through|microbikini|bikini|underwear only|crop[\s-]?top|bare midriff|无衣|裸体|裸身|全裸|裸露|暴露|性感|低胸|情趣|脱光|赤裸|比基尼|内衣|胸罩|内裤|丁字裤|内衣外穿|开胸|深V|透视|半裸/i;
+  // Lingerie/sexy/nude intent — midriff/露脐 is separate (user may ask midriff without lingerie).
+  var EXPOSURE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|lingerie|underwear|undergarment|\bbra\b|panties|panty|thong|cleavage|skimpy|seductive|sexy|revealing|see[\s-]?through|microbikini|bikini|underwear only|无衣|裸体|裸身|全裸|裸露|暴露|性感|低胸|情趣|脱光|赤裸|比基尼|内衣|胸罩|内裤|丁字裤|内衣外穿|开胸|深V|透视|半裸/i;
+  // Midriff-only intent: allow when core asks; do NOT hard-negative; still strip if hallucinated.
+  var MIDRIFF_INTENT_RE = /露脐|露腰|露肚|露小腹|crop[\s-]?top|cropped top|bare midriff|exposed (?:midriff|navel|stomach|belly)|midriff|navel|belly button/i;
   var EXPOSURE_BIAS_TOKEN_RE = /\b(nude|naked|nudity|unclothed|topless|bottomless|lingerie|underwear(?:\s+only)?|undergarments?|bras?(?:\s+visible)?|panties|panty|thong|cleavage(?:\s+focus)?|skimpy|seductive(?:\s+pose)?|sexy|revealing(?:\s+(?:outfit|clothes|clothing|dress|top|blouse))?|see[\s-]?through|sheer(?:\s+(?:blouse|top|dress|clothing|fabric))?|microbikini|micro[\s-]?bikini|bikini|no pants|no bra|shirtless|pantsless|bare (?:chest|breasts|midriff|navel|stomach)|crop(?:ped)?[\s-]?top|exposed (?:midriff|navel|stomach|bra)|deep cleavage|plunging neckline|lace lingerie|underwear as outerwear)\b/gi;
+  var MIDRIFF_BIAS_TOKEN_RE = /\b(bare (?:midriff|navel|stomach)|crop(?:ped)?[\s-]?top|exposed (?:midriff|navel|stomach|belly)|midriff|navel|belly button)\b/gi;
 
   function hasExposureIntent(text) {
     return EXPOSURE_INTENT_RE.test(String(text || ''));
   }
 
-  /** Strip invented revealing/sexy tokens when core did not ask for exposure. */
+  function hasMidriffIntent(text) {
+    return MIDRIFF_INTENT_RE.test(String(text || ''));
+  }
+
+  /** Strip invented revealing/sexy tokens when core did not ask for exposure.
+   * Midriff/露脐: keep when core asks; strip when hallucinated. Never mutate visible 核心. */
   function stripExposureBiasDefaults(text, core) {
     var src = String(core || '');
     if (hasNudeIntent(src) || hasExposureIntent(src)) return String(text || '');
@@ -895,6 +904,14 @@
       shields.push(m);
       return '__ADULT_DIR_' + (shields.length - 1) + '__';
     });
+    // Soft: if core asks 露脐/midriff, shield those tokens while still stripping lingerie/bra defaults
+    var midriffShields = [];
+    if (hasMidriffIntent(src)) {
+      t = t.replace(MIDRIFF_BIAS_TOKEN_RE, function (m) {
+        midriffShields.push(m);
+        return '__MIDRIFF_KEEP_' + (midriffShields.length - 1) + '__';
+      });
+    }
     t = t
       .replace(EXPOSURE_BIAS_TOKEN_RE, ' ')
       .replace(/,\s*explicit adult nudity[^,]*/gi, '')
@@ -907,6 +924,9 @@
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
       .trim();
+    for (var mi = 0; mi < midriffShields.length; mi += 1) {
+      t = t.replace('__MIDRIFF_KEEP_' + mi + '__', midriffShields[mi]);
+    }
     for (var si = 0; si < shields.length; si += 1) {
       t = t.replace('__ADULT_DIR_' + si + '__', shields[si]);
     }
@@ -914,8 +934,9 @@
   }
 
   // Strong anti-lingerie negatives (outbound only; never mutate visible 核心描述).
+  // Soft: no hard midriff/露脐/crop-top negatives — user puts those in 核心 when wanted.
   var ANTI_LINGERIE_NEG =
-    'lingerie, underwear as outerwear, bra visible, panties, cleavage focus, bare midriff, crop top, sheer blouse, seductive pose, revealing outfit, underwear only, skimpy outfit, bikini, sheer clothing, nude, naked, nudity, topless, bottomless';
+    'lingerie, underwear as outerwear, bra visible, panties, cleavage focus, sheer blouse, seductive pose, revealing outfit, underwear only, skimpy outfit, bikini, sheer clothing, nude, naked, nudity, topless, bottomless';
 
   // Positive clothing leads when core does NOT ask for revealing/nude.
   // Soft: match described outfit; if core omits outfit, everyday clothes (counters female lingerie model prior).
@@ -1029,13 +1050,15 @@
     return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
   }
 
-  /** Clothing fidelity lock FIRST when core has no revealing/nude intent. */
+  /** Clothing fidelity lock FIRST when core has no revealing/nude intent.
+   * Midriff/露脐 in core: strip lingerie hallucinations but do not force everyday fully clothed. */
   function applyClothingFidelityLocks(text, core) {
     var src = String(core || '');
     var t = String(text || '');
     if (!t) return t;
     if (hasNudeIntent(src) || hasExposureIntent(src)) return t;
     t = stripExposureBiasDefaults(t, src);
+    if (hasMidriffIntent(src)) return t;
     var lead = clothingLeadForCore(src);
     var hasLead = /clothing matching the core|fully clothed as described|wearing ordinary everyday clothing/i.test(t);
     if (!hasLead) {
@@ -2666,9 +2689,9 @@
     if (!/pinyin|romanization|letters on image/i.test(negative)) {
       negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
     }
-    // 核心未写裸露/性感时，负面强压内衣/暴露默认（含女体模型先验）
+    // 核心未写裸露/性感时，负面强压内衣默认（含女体模型先验）；不钉死露脐/midriff
     if (!hasNudeIntent(ethSrc) && !hasExposureIntent(ethSrc) && !hasNudeIntent(description) && !hasExposureIntent(description)) {
-      if (!/lingerie|underwear as outerwear|bra visible|panties|cleavage focus|bare midriff|crop top|sheer blouse/i.test(negative)) {
+      if (!/lingerie|underwear as outerwear|bra visible|panties|cleavage focus|sheer blouse/i.test(negative)) {
         negative += ', ' + ANTI_LINGERIE_NEG;
       }
     }
@@ -2683,12 +2706,6 @@
     if (corePersonCount(personSrc) >= 2) {
       if (!/single person|solo portrait|one woman only|only one person/i.test(negative)) {
         negative += ', ' + MULTI_PERSON_NEG;
-      }
-      // Soft: extra midriff pressure when multi-person core omits outfit
-      if (!hasExposureIntent(personSrc) && !hasClothingCue(personSrc)) {
-        if (!/exposed navel|exposed stomach/i.test(negative)) {
-          negative += ', exposed navel, exposed stomach';
-        }
       }
     }
     // 核心男性时负面强压女人/女性身体漂移
@@ -2857,6 +2874,7 @@
   window.adultDirectiveText = adultDirectiveText;
   window.hasNudeIntent = hasNudeIntent;
   window.hasExposureIntent = hasExposureIntent;
+  window.hasMidriffIntent = hasMidriffIntent;
   window.stripExposureBiasDefaults = stripExposureBiasDefaults;
   window.hasFemaleIntent = hasFemaleIntent;
   window.stripInjectedFemaleDefaults = stripInjectedFemaleDefaults;

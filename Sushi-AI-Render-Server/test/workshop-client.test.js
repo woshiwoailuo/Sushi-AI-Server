@@ -1842,7 +1842,8 @@ test('no exposure tokens without core; realism default lock; smart-mod off skips
   const sceneOnly = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
   assert.doesNotMatch(sceneOnly, /\bnude\b|\bnaked\b|\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy/i);
   assert.doesNotMatch(pos, /photorealistic photography style, shot on DSLR, 35mm lens, natural skin texture and fabric detail/i);
-  assert.match(neg, /lingerie|cleavage|skimpy|nude|naked|revealing (?:clothes|outfit)|bikini|sheer|bra visible|panties|crop top/i);
+  assert.match(neg, /lingerie|cleavage|skimpy|nude|naked|revealing (?:clothes|outfit)|bikini|sheer|bra visible|panties/i);
+  assert.doesNotMatch(neg, /bare midriff|crop top|exposed navel|exposed stomach/i);
   assert.equal(f.w.document.getElementById('角色描述').value, core);
 });
 
@@ -2043,7 +2044,8 @@ test('two-person 对视 core: count+eye-contact+warm light covered; solo negativ
   assert.match(pos, /looking at each other|eye\s*contact/i);
   assert.match(pos, /warm/i);
   assert.match(neg, /single person|solo portrait|alone|one woman only|only one person/i);
-  assert.match(neg, /crop top|bare midriff|revealing outfit/i);
+  assert.match(neg, /revealing outfit|lingerie|skimpy|bra visible|panties/i);
+  assert.doesNotMatch(neg, /bare midriff|crop top|exposed navel|exposed stomach/i);
   assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心不改写');
 });
 
@@ -2097,7 +2099,8 @@ test('female core without lingerie: strip underwear positives, everyday/clothed 
   assert.match(pos, /ordinary everyday clothing|fully clothed/i);
   assert.match(neg, /lingerie/);
   assert.match(neg, /underwear as outerwear|bra visible|panties/);
-  assert.match(neg, /cleavage focus|bare midriff|crop top|sheer blouse|seductive pose|revealing outfit/);
+  assert.match(neg, /cleavage focus|sheer blouse|seductive pose|revealing outfit/);
+  assert.doesNotMatch(neg, /bare midriff|crop top|exposed navel|exposed stomach/);
   assert.equal(f.w.document.getElementById('角色描述').value, womanNoOutfit, '可见核心不改写');
 
   const neutral = '一位虚构成年人站在雨夜街头';
@@ -2105,6 +2108,45 @@ test('female core without lingerie: strip underwear positives, everyday/clothed 
   assert.match(neutOut, /ordinary everyday clothing|fully clothed/i);
   const neutScene = neutOut.replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '').replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
   assert.doesNotMatch(neutScene, /\blingerie\b|\bcleavage\b/i);
+});
+
+test('midriff/露脐: no hard negatives; allow when core asks; strip when hallucinated; lingerie still anti', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.hasMidriffIntent, 'function');
+  assert.equal(f.w.hasMidriffIntent('一位露脐的虚构成年女人站在窗边'), true);
+  assert.equal(f.w.hasMidriffIntent('woman in crop top, bare midriff'), true);
+  assert.equal(f.w.hasMidriffIntent('一位虚构成年女人站在窗边'), false);
+  assert.equal(f.w.hasExposureIntent('一位露脐的虚构成年女人站在窗边'), false, '露脐 alone is not lingerie exposure');
+
+  const noMidriffCore = '一位虚构成年女人站在窗边';
+  const drifted = 'beautiful woman, crop top, bare midriff, exposed navel, lingerie, bra visible, standing by a window';
+  const stripped = f.w.stripExposureBiasDefaults(drifted, noMidriffCore);
+  assert.doesNotMatch(stripped, /\bcrop top\b|\bbare midriff\b|\bexposed navel\b|\blingerie\b|\bbra\b/i);
+  assert.match(f.w.ANTI_LINGERIE_NEG, /lingerie|bra visible|panties/);
+  assert.doesNotMatch(f.w.ANTI_LINGERIE_NEG, /bare midriff|crop top|exposed navel/i);
+
+  const midriffCore = '一位穿露脐短上衣的虚构成年女人站在窗边';
+  assert.equal(f.w.hasMidriffIntent(midriffCore), true);
+  const kept = f.w.stripExposureBiasDefaults('woman in crop top, bare midriff, lingerie, bra visible, by a window', midriffCore);
+  assert.match(kept, /crop top|bare midriff/i);
+  assert.doesNotMatch(kept, /\blingerie\b|\bbra\b/i);
+  const midLock = f.w.applyClothingFidelityLocks('woman in crop top, bare midriff, lingerie', midriffCore);
+  assert.match(midLock, /crop top|bare midriff/i);
+  assert.doesNotMatch(midLock, /ordinary everyday clothing|fully clothed as described/i);
+  assert.doesNotMatch(midLock, /\blingerie\b/i);
+
+  f.w.document.getElementById('角色描述').value = midriffCore;
+  f.w.document.getElementById('英文描述').value = 'a fictional adult woman in a crop top with bare midriff standing by a window';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  try { if (typeof f.w.清除智能修饰 === 'function') f.w.清除智能修饰(); } catch (e) {}
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  const neg = String(payload.prompt || '').split(' ### ')[1] || String(payload.negativePrompt || '');
+  assert.match(pos, /crop top|bare midriff|midriff|露脐/i);
+  assert.match(neg, /lingerie|bra visible|panties|underwear as outerwear/i);
+  assert.doesNotMatch(neg, /bare midriff|crop top|exposed navel|exposed stomach/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, midriffCore, '可见核心不改写');
 });
 
 test('soft-adopted ref cleared on next full gen; history max 6 untouched; memory can save', async t => {
