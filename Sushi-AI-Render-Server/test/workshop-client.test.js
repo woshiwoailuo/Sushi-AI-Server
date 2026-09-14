@@ -1106,8 +1106,8 @@ test('全身 / full body wins over portrait modifier tokens and half-body defaul
   );
   assert.match(withPortraitMod, /full body head-to-toe visible/i);
   assert.match(withPortraitMod, /feet in frame/i);
-  assert.match(withPortraitMod, /not a half-body portrait|wide full-body shot|complete figure from head to feet/i);
-  assert.match(withPortraitMod, /35mm/i);
+  assert.match(withPortraitMod, /not a half-body portrait|wide FOV full-body shot|complete figure from crown to shoes|head and feet both visible/i);
+  assert.match(withPortraitMod, /28mm/i);
   const half = f.w.forcePhotorealPrompt('半身肖像 fictional adult woman close-up portrait');
   assert.doesNotMatch(half, /full body head-to-toe visible|feet in frame/i);
 });
@@ -1127,4 +1127,53 @@ test('Horde outbound keeps East Asian from core and full-body when 全身 presen
   assert.match(pos, /East Asian/i);
   assert.match(pos, /full body|feet in frame/i);
   assert.match(neg, /caucasian|blonde|european/i);
+});
+
+test('全身 square aspect nudges outbound to portrait 2:3', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.preferPortraitAspectForFullBody, 'function');
+  const square = f.w.preferPortraitAspectForFullBody(512, 512, '虚构成年女人全身站立');
+  assert.equal(square.width, 512);
+  assert.equal(square.height, 768);
+  assert.equal(square.nudged, true);
+  const landscape = f.w.preferPortraitAspectForFullBody(768, 512, '虚构成年女人全身站立');
+  assert.equal(landscape.nudged, false);
+  assert.equal(landscape.width, 768);
+  assert.equal(landscape.height, 512);
+  const noFull = f.w.preferPortraitAspectForFullBody(512, 512, '虚构成年女人半身肖像');
+  assert.equal(noFull.nudged, false);
+  f.w.document.getElementById('角色描述').value = '一位东亚中国女性全身站立在公园里';
+  f.w.document.getElementById('英文描述').value = 'a woman standing in a park';
+  f.w.document.getElementById('图像比例').value = '512x512';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const body = JSON.parse(f.calls.filter(isImageSubmit)[0].body);
+  const w = (body.params && body.params.width) || body.width;
+  const h = (body.params && body.params.height) || body.height;
+  assert.equal(w, 512);
+  assert.equal(h, 768);
+  const prompt = String(body.prompt || '');
+  const neg = prompt.includes(' ### ') ? prompt.split(' ### ')[1] : String(body.negativePrompt || '');
+  assert.match(neg, /cropped at waist|cut off feet|half-body shot/i);
+});
+
+test('lightbox shows top-right close and click-to-zoom further', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  await f.w.开始生成();
+  f.w.document.querySelector('.生图卡片').click();
+  await until(() => f.w.document.querySelector('#图片预览层') && !f.w.document.querySelector('#图片预览层').hasAttribute('hidden'), 'preview overlay');
+  const layer = f.w.document.querySelector('#图片预览层');
+  const closeBtn = layer.querySelector('.图片预览关闭');
+  assert.ok(closeBtn, 'close button present');
+  assert.match(closeBtn.getAttribute('aria-label') || '', /关闭/);
+  const img = layer.querySelector('img');
+  assert.ok(img);
+  // Simulate loaded preview then second click zooms
+  img.hidden = false;
+  img.dispatchEvent(new f.w.Event('click', { bubbles: true }));
+  assert.ok(layer.classList.contains('放大'), 'second click toggles zoom class');
+  img.dispatchEvent(new f.w.Event('click', { bubbles: true }));
+  assert.equal(layer.classList.contains('放大'), false);
+  closeBtn.click();
+  assert.ok(layer.hasAttribute('hidden'));
 });

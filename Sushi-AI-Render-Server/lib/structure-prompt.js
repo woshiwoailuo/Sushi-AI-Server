@@ -21,7 +21,7 @@ const STRUCTURE_SYSTEM = [
   'prefer photoreal photography wording unless the user explicitly asked for anime/manga/illustration;',
   'PRESERVE ethnicity/race/nationality from the core literally in appearance (e.g. East Asian, Chinese, Korean, Japanese, East Asian facial features);',
   'NEVER invent blonde, caucasian, european, blue eyes, or Western/European beauty defaults unless the user asked;',
-  'if core asks full body / 全身 / head-to-toe / feet in frame, put full-body framing in pose and use wide/35mm camera — never half-body or close-up portrait crop;',
+  'if core asks full body / 全身 / head-to-toe / feet in frame, put full-body framing in pose (head and feet both visible, uncropped standing full figure, space above head and below feet) and use wide/28mm FOV camera — never half-body, waist crop, or close-up portrait crop;',
   'keep each value short (under 40 words); empty string if unknown; do not invent a celebrity.',
 ].join(' ');
 
@@ -72,10 +72,10 @@ function heuristicStructureFromText(text, options = {}) {
       : '',
     clothing: '',
     pose: wantFull
-      ? (wantAnime ? 'full body standing, entire figure visible' : 'full body front view, head-to-toe, feet in frame, not cropped')
+      ? (wantAnime ? 'full body standing, entire figure visible, head and feet in frame' : 'full body front view, head-to-toe, feet in frame, head and feet both visible, uncropped standing full figure, not cropped')
       : '',
     scene: '',
-    camera: wantAnime ? '' : (wantFull ? 'eye-level, 35mm wide full-body framing' : 'eye-level, 50mm'),
+    camera: wantAnime ? '' : (wantFull ? 'eye-level, 28mm wide FOV full-body framing, vertical portrait composition' : 'eye-level, 50mm'),
     lighting: wantAnime ? '' : 'natural light',
     style: wantAnime
       ? 'anime illustration'

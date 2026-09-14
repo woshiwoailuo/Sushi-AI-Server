@@ -1911,11 +1911,12 @@
     if (!要半身) {
       var 全身片 = [];
       if (要全身) {
-        全身片.push("full body head-to-toe visible", "feet in frame", "standing full figure", "entire body in frame", "wide full-body shot", "complete figure from head to feet", "not cropped at waist or chest", "not a close-up", "not a half-body portrait");
+        全身片.push("full body head-to-toe visible", "feet in frame", "head and feet both visible", "standing full figure", "entire body in frame", "wide FOV full-body shot", "wide enough field of view", "complete figure from crown to shoes", "uncropped standing full figure", "space above head and below feet", "subject fills vertical frame from head to toe", "not cropped at waist or chest", "not a close-up", "not a half-body portrait", "no waist crop");
       } else if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in frame/i.test(文)) {
-        全身片.push("full body head-to-toe visible", "feet in frame", "standing full figure", "entire body in frame", "not cropped at waist or chest");
+        全身片.push("full body head-to-toe visible", "feet in frame", "head and feet both visible", "standing full figure", "entire body in frame", "not cropped at waist or chest");
       } else {
         if (!/feet in frame/i.test(文)) 全身片.push("feet in frame");
+        if (!/head and feet both visible/i.test(文)) 全身片.push("head and feet both visible");
         if (!/not cropped/i.test(文)) 全身片.push("not cropped at waist or chest");
         if (!/standing full figure|entire body in frame/i.test(文)) 全身片.push("standing full figure");
       }
@@ -1924,17 +1925,18 @@
           全身片.push("front view facing camera", "eye-level", "looking at camera");
         }
       }
-      文 = 文.replace(/\bshot on DSLR,\s*85mm\b/gi, "shot on DSLR, 35mm");
+      if (要全身) 文 = 文.replace(/\bshot on DSLR,\s*(?:85|50|35)mm\b/gi, "shot on DSLR, 28mm");
+      else 文 = 文.replace(/\bshot on DSLR,\s*85mm\b/gi, "shot on DSLR, 35mm");
       if (全身片.length) {
         var 注入 = 全身片.join(", ");
-        var 头匹配 = 文.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+        var 头匹配 = 文.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:28|35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
         if (头匹配) {
           文 = 头匹配[1] + ", " + 注入 + 文.slice(头匹配[1].length);
         } else {
           文 = 注入 + ", " + 文;
         }
       }
-      if (要全身) 文 += ", full body head-to-toe visible, feet in frame";
+      if (要全身) 文 += ", full body head-to-toe visible, feet in frame, head and feet both visible";
     }
     // 东亚外貌：出图英文强化；去掉会盖过东亚的西方默认美貌词
     if (/东亚|亚洲人|中国人|韩国人|日本人|华人|east[\s-]?asian|\bchinese\b|\bkorean\b|\bjapanese\b|asian (?:woman|man|features|face)/i.test(源)) {
@@ -3556,7 +3558,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.56" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.57" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -3704,8 +3706,9 @@
 
   .历史卡片 img {
     width: 100%;
-    aspect-ratio: 1;
-    object-fit: cover;
+    max-height: min(28vh, 220px);
+    aspect-ratio: auto;
+    object-fit: contain;
     border-radius: 10px;
     background: #F5F7FA;
   }
@@ -4423,9 +4426,11 @@
     z-index: 10050;
     display: grid;
     place-items: center;
-    padding: 24px;
+    padding: max(20px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px));
     background: rgba(5, 7, 8, 0.92);
     backdrop-filter: blur(16px);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .图片预览层[hidden] {
@@ -4433,18 +4438,23 @@
   }
 
   .图片预览关闭 {
-    position: absolute;
-    top: 16px;
-    right: 18px;
-    width: 44px;
-    height: 44px;
-    border: 0;
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    z-index: 10060;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.55);
     color: #fff;
-    font-size: 28px;
+    font-size: 30px;
     line-height: 1;
     cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    -webkit-tap-highlight-color: transparent;
   }
 
   .图片预览框 {
@@ -4454,18 +4464,45 @@
   }
 
   .图片预览层 img {
-    max-width: min(96vw, 1200px);
-    max-height: 82vh;
+    max-width: min(96vw, 100%);
+    max-height: min(90vh, calc(100dvh - 72px));
+    width: auto;
+    height: auto;
     object-fit: contain;
     border-radius: 12px;
     background: #111;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    cursor: zoom-in;
+  }
+
+  .图片预览层.放大 {
+    place-items: start center;
+    align-content: start;
+    padding-top: max(64px, calc(env(safe-area-inset-top, 0px) + 52px));
+  }
+
+  .图片预览层.放大 .图片预览框 {
+    max-width: none;
+  }
+
+  .图片预览层.放大 img {
+    max-width: none;
+    max-height: none;
+    width: min(180vw, 2400px);
+    height: auto;
+    cursor: zoom-out;
   }
 
   .图片预览状态 {
     margin: 12px 0 0;
     color: #e5e7eb;
     font-size: 14px;
+  }
+
+  .图片预览提示 {
+    margin: 8px 0 0;
+    color: rgba(229, 231, 235, 0.78);
+    font-size: 12px;
   }
 
   .图片预览重试 {
