@@ -19,6 +19,9 @@ const STRUCTURE_SYSTEM = [
   '{"subject":"","appearance":"","clothing":"","pose":"","scene":"","camera":"","lighting":"","style":"","extras":""}',
   'Rules: fictional consenting adults 18+ only; no minors; keep adult/NSFW details if the user asked;',
   'prefer photoreal photography wording unless the user explicitly asked for anime/manga/illustration;',
+  'PRESERVE ethnicity/race/nationality from the core literally in appearance (e.g. East Asian, Chinese, Korean, Japanese, East Asian facial features);',
+  'NEVER invent blonde, caucasian, european, blue eyes, or Western/European beauty defaults unless the user asked;',
+  'if core asks full body / 全身 / head-to-toe / feet in frame, put full-body framing in pose and use wide/35mm camera — never half-body or close-up portrait crop;',
   'keep each value short (under 40 words); empty string if unknown; do not invent a celebrity.',
 ].join(' ');
 
@@ -60,15 +63,19 @@ function heuristicStructureFromText(text, options = {}) {
   if (!cleaned) return { fields: {}, promptEn: '' };
   const wantAnime = options.anime === true
     || /anime|manga|cartoon|二次元|动漫|卡通|漫画|插画/i.test(cleaned);
+  const eastAsian = /东亚|亚洲人|中国人|韩国人|日本人|华人|east[\s-]?asian|\bchinese\b|\bkorean\b|\bjapanese\b|asian (?:woman|man|features|face)/i.test(cleaned);
+  const wantFull = /full[\s-]?body|全身|head to toe|feet in (?:the )?frame|从头到脚/i.test(cleaned);
   const fields = {
     subject: cleaned.slice(0, 220),
-    appearance: '',
+    appearance: eastAsian
+      ? 'East Asian, East Asian facial features, distinctly East Asian appearance'
+      : '',
     clothing: '',
-    pose: /full[\s-]?body|全身|head to toe|feet in (?:the )?frame/i.test(cleaned)
-      ? (wantAnime ? 'full body standing' : 'full body front view, head-to-toe, feet in frame')
+    pose: wantFull
+      ? (wantAnime ? 'full body standing, entire figure visible' : 'full body front view, head-to-toe, feet in frame, not cropped')
       : '',
     scene: '',
-    camera: wantAnime ? '' : 'eye-level, 50mm',
+    camera: wantAnime ? '' : (wantFull ? 'eye-level, 35mm wide full-body framing' : 'eye-level, 50mm'),
     lighting: wantAnime ? '' : 'natural light',
     style: wantAnime
       ? 'anime illustration'

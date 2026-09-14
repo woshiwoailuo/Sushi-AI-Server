@@ -1080,3 +1080,51 @@ test('selected Horde stays exclusive when Perch official path would otherwise ju
   assert.equal(f.w.document.getElementById('出图引擎').value, 'horde-real');
   assert.doesNotMatch(f.w.document.getElementById('平台提示').textContent, /Perch|官网/);
 });
+
+test('East Asian cues get strong outbound ethnicity tokens; western beauty defaults stripped', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.hasEastAsianCue, 'function');
+  assert.ok(f.w.hasEastAsianCue('一位东亚女性站在街上'));
+  assert.ok(f.w.hasEastAsianCue('Korean woman in Seoul'));
+  assert.ok(!f.w.hasEastAsianCue('fictional adult woman in a park'));
+  const out = f.w.forcePhotorealPrompt('blonde caucasian blue eyes woman in a park', { core: '东亚女性，中国人' });
+  assert.match(out, /East Asian/i);
+  assert.match(out, /East Asian facial features/i);
+  assert.doesNotMatch(out, /\bblonde\b|\bcaucasian\b|blue eyes/i);
+  const en = f.w.forcePhotorealPrompt('East Asian woman standing outdoors');
+  assert.match(en, /East Asian facial features|distinctly East Asian/i);
+});
+
+test('全身 / full body wins over portrait modifier tokens and half-body defaults', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  // Bare "portrait photography" must not block full-body injection.
+  assert.equal(f.w.hasExplicitCropFraming('documentary portrait photography, natural lighting'), false);
+  assert.equal(f.w.hasExplicitCropFraming('半身肖像 close-up portrait'), true);
+  const withPortraitMod = f.w.forcePhotorealPrompt(
+    'fictional adult woman, documentary portrait photography, natural lighting',
+    { core: '虚构成年女人全身站立' }
+  );
+  assert.match(withPortraitMod, /full body head-to-toe visible/i);
+  assert.match(withPortraitMod, /feet in frame/i);
+  assert.match(withPortraitMod, /not a half-body portrait|wide full-body shot|complete figure from head to feet/i);
+  assert.match(withPortraitMod, /35mm/i);
+  const half = f.w.forcePhotorealPrompt('半身肖像 fictional adult woman close-up portrait');
+  assert.doesNotMatch(half, /full body head-to-toe visible|feet in frame/i);
+});
+
+test('Horde outbound keeps East Asian from core and full-body when 全身 present', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('角色描述').value = '一位东亚中国女性全身站立在公园里';
+  f.w.document.getElementById('英文描述').value = 'a woman standing in a park';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const posts = f.calls.filter(isImageSubmit);
+  assert.ok(posts.length >= 1);
+  const body = JSON.parse(posts[0].body);
+  const prompt = String(body.prompt || '');
+  const pos = prompt.split(' ### ')[0];
+  const neg = prompt.split(' ### ')[1] || '';
+  assert.match(pos, /East Asian/i);
+  assert.match(pos, /full body|feet in frame/i);
+  assert.match(neg, /caucasian|blonde|european/i);
+});

@@ -16,7 +16,7 @@ test('manual image choice survives both successful and failed generation',async(
  for(const engine of ['perchance','horde-real','horde-anime','sana']) for(const fail of [false,true]){
   const calls=[];const run={engine,payload:{},controller:new AbortController()};
   const dispatch=async(name)=>{calls.push(name);if(fail)throw Error('upstream unavailable');return {engine:name,url:'https://example.com/image.png'}};
-  const ctx={HORDE_BUDGET_MS:30000,engineFamily:e=>e==='horde-anime'||e==='sana'?'anime':'real',forcePhotorealPrompt:p=>p,withAdultDirective:p=>p,
+  const ctx={HORDE_BUDGET_MS:30000,engineFamily:e=>e==='horde-anime'||e==='sana'?'anime':'real',forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:(p)=>p,withAdultDirective:p=>p,value:()=>'',
    runWithProviderBudget:(r,e,task)=>task(r.controller.signal),generatePerchance:()=>dispatch('perchance'),generateHorde:(r,p,i,s,e)=>dispatch(e),generatePollinations:(r,p,i,e)=>dispatch(e)};
   vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
   if(fail)await assert.rejects(ctx.generateOne(run,'a landscape',0),/upstream unavailable/);else await ctx.generateOne(run,'a landscape',0);
