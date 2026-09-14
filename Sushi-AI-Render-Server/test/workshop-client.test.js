@@ -548,6 +548,62 @@ test('智能修饰 writes visible core modifiers and generation uses that text',
   assert.match(payload.prompt, /photorealistic/i);
 });
 
+test('智能修饰 cycles prepared pool then asks AI without stacking', async t => {
+  let chatBodies = [];
+  const f = await setup(t, (url, options) => {
+    const href = String(url || '');
+    const method = (options && options.method) || 'GET';
+    if (method === 'POST' && /\/api\/workshop\/chat/.test(href)) {
+      chatBodies.push(JSON.parse(options.body || '{}'));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: '，AI生成的官方写实修饰，全身正面，自然光，非动漫，虚构成年人，18+' } }] }),
+        text: async () => JSON.stringify({ choices: [{ message: { content: '，AI生成的官方写实修饰，全身正面，自然光，非动漫，虚构成年人，18+' } }] })
+      };
+    }
+    return response(method === 'POST' ? job() : job('done'));
+  });
+  const box = f.w.document.getElementById('角色描述');
+  box.value = '窗边看书的成年人';
+  const seen = [];
+  const pool = f.w._智能修饰候选 ? f.w._智能修饰候选('窗边看书的成年人') : null;
+  // Prefer calling through public API; probe pool size via repeated replace.
+  await f.w.智能修饰();
+  seen.push(box.value);
+  assert.match(seen[0], /^窗边看书的成年人，/);
+  assert.match(seen[0], /写实摄影|全身正面|非动漫/);
+  // Exhaust prepared pool by repeated replace clicks.
+  for (let i = 0; i < 12; i++) {
+    await f.w.智能修饰();
+    const cur = box.value;
+    assert.match(cur, /^窗边看书的成年人/);
+    assert.ok(seen.every(prev => cur.indexOf(prev) === -1), 'must replace previous suffix, not stack');
+    seen.push(cur);
+    if (chatBodies.length) break;
+  }
+  assert.ok(chatBodies.length >= 1, 'after pool exhausted should call workshop chat AI');
+  assert.match(box.value, /AI生成的官方写实修饰|写实摄影|全身正面/);
+  assert.ok(box.value.indexOf('窗边看书的成年人') === 0);
+});
+
+test('platform picker shows full names without Perch abbreviation', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const optText = (id) => Array.from(f.w.document.getElementById(id).options).map(o => o.textContent).join('|');
+  assert.match(optText('出图引擎'), /Perchance/);
+  assert.doesNotMatch(optText('出图引擎'), /(^|\|)Perch(\||$)/);
+  assert.match(optText('出图引擎'), /AI Horde · 写实/);
+  assert.match(optText('出图引擎'), /AI Horde · 动漫/);
+  assert.match(optText('图生图平台'), /Perchance/);
+  assert.match(optText('管理默认平台'), /Perchance/);
+  assert.match(optText('AI通道'), /AI Horde/);
+  f.w.设平台提示('perchance');
+  assert.match(f.w.document.getElementById('平台提示').textContent, /Perchance/);
+  assert.doesNotMatch(f.w.document.getElementById('平台提示').textContent, /官网|perchance\.org/i);
+  f.w.设平台提示('horde-real');
+  assert.match(f.w.document.getElementById('平台提示').textContent, /AI Horde/);
+});
+
 test('photorealPrompt helper still available for style-aware enrich logic', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
@@ -900,7 +956,7 @@ test('memory tip copy and perch official-site tips are removed; platform tip sta
   const tip = f.w.document.getElementById('平台提示').textContent;
   assert.doesNotMatch(tip, /官网|perchance\.org/i);
   f.w.设平台提示('horde-real');
-  assert.match(f.w.document.getElementById('平台提示').textContent, /Horde|按所选通道/);
+  assert.match(f.w.document.getElementById('平台提示').textContent, /AI Horde|Horde|按所选通道/);
   assert.doesNotMatch(f.w.document.getElementById('平台提示').textContent, /官网|perchance\.org/i);
 });
 

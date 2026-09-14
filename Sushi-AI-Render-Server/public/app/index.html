@@ -821,35 +821,35 @@
           });
           var gRes = await fetch('https://image-generation.perchance.org/api/generate?' + q.toString(), { cache: 'no-store', signal: perchCtrl.signal });
           var gText = await gRes.text();
-          if (!gText || gText.trim().charAt(0) === '<') throw new Error('Perch 出图接口被拦截，未更换平台');
+          if (!gText || gText.trim().charAt(0) === '<') throw new Error('Perchance 出图接口被拦截，未更换平台');
           var gJson = JSON.parse(gText);
-          if (!gJson || !gJson.imageId) throw new Error((gJson && (gJson.message || gJson.status)) || 'Perch 没有返回图片，未更换平台');
+          if (!gJson || !gJson.imageId) throw new Error((gJson && (gJson.message || gJson.status)) || 'Perchance 没有返回图片，未更换平台');
           var dRes = await fetch('https://image-generation.perchance.org/api/downloadTemporaryImage?imageId=' + encodeURIComponent(gJson.imageId), { cache: 'no-store', signal: perchCtrl.signal });
-          if (!dRes.ok) throw new Error('Perch 图片下载失败，未更换平台');
+          if (!dRes.ok) throw new Error('Perchance 图片下载失败，未更换平台');
           var dBlob = await dRes.blob();
           var dUrl = await new Promise(function (resolve, reject) {
             var reader = new FileReader();
             reader.onload = function () { resolve(reader.result); };
-            reader.onerror = function () { reject(new Error('Perch 图片读取失败，未更换平台')); };
+            reader.onerror = function () { reject(new Error('Perchance 图片读取失败，未更换平台')); };
             reader.readAsDataURL(dBlob);
           });
           if (perchTimer) clearTimeout(perchTimer);
-          return { url: dUrl, channel: 'Perch' };
+          return { url: dUrl, channel: 'Perchance' };
           } catch (perchErr) {
             if (perchTimer) clearTimeout(perchTimer);
             throw perchErr && perchErr.message
               ? perchErr
-              : new Error('Perch 出图失败，未更换平台');
+              : new Error('Perchance 出图失败，未更换平台');
           }
         }
         if (engine === 'perchance') {
-          throw new Error('Perch 出图失败，未更换平台');
+          throw new Error('Perchance 出图失败，未更换平台');
         }
         var isAnime = engine === 'horde-anime';
         var prompt = isAnime ? promptText : photorealHomePrompt(promptText);
         var negative = isAnime ? 'lowres, blurry, watermark, text' : 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text';
         var lastErr = null;
-        var channelLabel = engine === 'perchance' ? 'Perch' : (isAnime ? 'Horde · 动漫' : 'Horde · 写实');
+        var channelLabel = engine === 'perchance' ? 'Perchance' : (isAnime ? 'AI Horde · 动漫' : 'AI Horde · 写实');
         var body = {
           prompt: prompt + ' ### ' + negative,
           params: { n: 1, width: 768, height: 768, steps: 16, cfg_scale: 7 },
