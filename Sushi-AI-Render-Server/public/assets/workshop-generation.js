@@ -215,13 +215,27 @@
   function applyRealisticFrontFullBody(text) {
     var t = String(text || '');
     if (hasExplicitCropFraming(t)) return t;
-    if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe/i.test(t)) {
-      t += ', full-body framing, full figure visible head to toe';
+    var bits = [];
+    if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in frame/i.test(t)) {
+      bits.push('full body head-to-toe visible', 'feet in frame', 'standing full figure', 'entire body in frame', 'not cropped at waist or chest');
+    } else {
+      if (!/feet in frame/i.test(t)) bits.push('feet in frame');
+      if (!/not cropped/i.test(t)) bits.push('not cropped at waist or chest');
+      if (!/standing full figure|entire body in frame/i.test(t)) bits.push('standing full figure');
     }
     if (!hasExplicitCameraAngle(t) && !/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(t)) {
-      t += ', front view, eye-level, facing camera, looking at camera';
+      bits.push('front view facing camera', 'eye-level', 'looking at camera');
     }
-    return t;
+    if (!bits.length) return t;
+    var inject = bits.join(', ');
+    // Higher priority: place framing right after the photoreal camera lead, before scene text.
+    var m = t.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*85mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+    if (m) {
+      t = m[1] + ', ' + inject + t.slice(m[1].length);
+    } else {
+      t = inject + ', ' + t;
+    }
+    return t.replace(/\s{2,}/g, ' ').trim();
   }
 
   function forcePhotorealPrompt(prompt) {
@@ -275,7 +289,7 @@
     var el = $('成人功能状态');
     var text = el && el.value ? String(el.value).trim() : '';
     if (!text) {
-      text = 'adult mode enabled; NSFW allowed; nudity and adult sexual content allowed; follow the core description literally; do not add clothes if described as nude; fictional consenting adults 18+';
+      text = 'adult mode enabled; NSFW fully allowed; explicit nudity and adult sexual content are permitted and preferred when described; follow the core description literally and completely; if nude or undressed do not add clothes, fabric coverage, or modest outfits; keep requested nudity and sexual details visible; fictional consenting adults 18+ only; no minors';
     }
     return text;
   }
@@ -289,11 +303,16 @@
       text = text
         .replace(/,?\s*realistic fabric texture/gi, '')
         .replace(/,?\s*clear clothing and skin texture/gi, ', natural skin texture')
+        .replace(/,?\s*readable fabric and environment materials/gi, ', natural skin and environment materials')
+        .replace(/,?\s*clear skin and clothing materials/gi, ', natural skin texture')
+        .replace(/,?\s*visible knitwear texture/gi, '')
+        .replace(/,?\s*fabric weave/gi, '')
         .replace(/\s{2,}/g, ' ')
         .replace(/^[,\s]+|[,\s]+$/g, '')
         .trim();
     }
-    return (text ? text + ', ' : '') + dir;
+    // Prepend adult directive so NSFW scale is not diluted by trailing photoreal material words.
+    return (dir ? dir + ', ' : '') + text;
   }
 
   function hideStatusPanel() {
@@ -732,7 +751,7 @@
     'Rev Animated',
     'WAI-NSFW-illustrious-SDXL'
   ];
-  var HORDE_REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render';
+  var HORDE_REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render, lowres, blurry, bad anatomy, extra limbs, child, minor, underage, watermark, text';
 
   function hordeHeaders() {
     return {
@@ -1199,7 +1218,7 @@
   }
 
   async function generatePerchance(run, prompt, index, providerSignal) {
-    // Do not embed perchance.org. Do not window.open.
+    // Do not embed perchance.org. Do not window.open. Opening official site limits first usually does NOT unlock in-app embed (session/cookies do not transfer into iframe).
     // Try official generate first; if the official host blocks this origin, in-app photoreal still displays.
     if (typeof window.update === 'function' && !(run.payload && run.payload.sourceImage)) {
       try {
@@ -1347,8 +1366,8 @@
     var styleAware = family === 'anime';
     if (!negative) {
       negative = styleAware
-        ? 'lowres, blurry, bad anatomy, extra limbs, child, minor, watermark, text'
-        : 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, watermark, text, lowres, blurry, extra limbs';
+        ? 'lowres, blurry, out of focus, bad anatomy, extra limbs, malformed hands, child, minor, underage, watermark, text'
+        : 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, child, minor, underage, watermark, text, lowres, blurry, out of focus, bad anatomy, extra limbs, malformed hands';
     } else if (styleAware) {
       // User asked for anime/illustration — strip style bans from the default negative box.
       negative = negative

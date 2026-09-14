@@ -295,7 +295,7 @@
               id="负面提示"
               name="负面提示"
               rows="4"
-            >低清晰度，模糊，失焦，错误解剖，多头，双头，三头，身体融合，多余手臂，多余腿，缺失手臂，缺失腿，手脚数量不对，三只手，三只腿，多余手指，缺失手指，畸形手部，重复肢体，扭曲五官，模糊脸，变形脸，五官错位，塑料皮肤，蜡像感，卡通，动漫，插画，数字绘画，二次元，漫画，儿童，未成年人，真实名人，电脑界面，文字，水印, anime, manga, cartoon, illustration, cel shading</textarea>
+            >lowres, blurry, out of focus, bad anatomy, multiple heads, fused bodies, extra arms, extra legs, missing arms, missing legs, wrong number of limbs, extra fingers, missing fingers, malformed hands, duplicated limbs, distorted face, blurry face, deformed face, misplaced facial features, plastic skin, wax figure, cartoon, anime, illustration, digital painting, manga, child, minor, underage, real celebrity, UI, text, watermark, anime, manga, cartoon, illustration, cel shading</textarea>
           </label>
 
         </div>
@@ -306,7 +306,7 @@
         id="成人功能状态"
         name="成人功能状态"
         type="hidden"
-        value="adult mode enabled; NSFW allowed; nudity and adult sexual content allowed; follow the core description literally; do not add clothes if described as nude; fictional consenting adults 18+"
+        value="adult mode enabled; NSFW fully allowed; explicit nudity and adult sexual content are permitted and preferred when described; follow the core description literally and completely; if nude or undressed do not add clothes, fabric coverage, or modest outfits; keep requested nudity and sexual details visible; fictional consenting adults 18+ only; no minors"
       >
 
       <details id="图生图区" class="分区">
@@ -818,7 +818,7 @@
 
       if (后台状态) {
         后台状态.value =
-          "adult mode enabled; NSFW allowed; nudity and adult sexual content allowed; follow the core description literally; do not add clothes if described as nude; fictional consenting adults 18+";
+          "adult mode enabled; NSFW fully allowed; explicit nudity and adult sexual content are permitted and preferred when described; follow the core description literally and completely; if nude or undressed do not add clothes, fabric coverage, or modest outfits; keep requested nudity and sexual details visible; fictional consenting adults 18+ only; no minors";
       }
     } else {
       if (标签) {
@@ -1911,14 +1911,28 @@
     if (!/fictional adult|18\+|no minors/i.test(文)) {
       文 += ", fictional adult 18+ only, no minors";
     }
-    // 写实默认全身正面；用户写半身/特写/侧脸等则尊重原文
+    // 写实默认全身正面（强优先靠前）；用户写半身/特写/侧脸等则尊重原文
     if (!/半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|portrait|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上/i.test(文)) {
-      if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe/i.test(文)) {
-        文 += ", full-body framing, full figure visible head to toe";
+      var 全身片 = [];
+      if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in frame/i.test(文)) {
+        全身片.push("full body head-to-toe visible", "feet in frame", "standing full figure", "entire body in frame", "not cropped at waist or chest");
+      } else {
+        if (!/feet in frame/i.test(文)) 全身片.push("feet in frame");
+        if (!/not cropped/i.test(文)) 全身片.push("not cropped at waist or chest");
+        if (!/standing full figure|entire body in frame/i.test(文)) 全身片.push("standing full figure");
       }
       if (!/侧脸|侧面|侧身|背面|背影|后视|微仰|俯拍|仰拍|three[\s-]?quarter|profile|from behind|back view|side view|rear view|over[\s-]?shoulder|low angle|high angle/i.test(文)) {
         if (!/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(文)) {
-          文 += ", front view, eye-level, facing camera, looking at camera";
+          全身片.push("front view facing camera", "eye-level", "looking at camera");
+        }
+      }
+      if (全身片.length) {
+        var 注入 = 全身片.join(", ");
+        var 头匹配 = 文.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*85mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+        if (头匹配) {
+          文 = 头匹配[1] + ", " + 注入 + 文.slice(头匹配[1].length);
+        } else {
+          文 = 注入 + ", " + 文;
         }
       }
     }
@@ -3328,7 +3342,7 @@
   }
 
   function 用官方插件出图(竞速) {
-    // 不嵌入官网。有官方组件则用；否则走官方出图接口，绝不转接其他平台、绝不 window.open。
+    // 不嵌入官网。先在官网开限制通常也无法解锁应用内嵌（会话/Cookie 不进 iframe）。有官方组件则用；否则走官方出图接口，绝不转接其他平台、绝不 window.open。
     if (typeof update !== "function") {
       设平台提示("perchance");
       if (typeof window.开始生成 === "function") window.开始生成();
