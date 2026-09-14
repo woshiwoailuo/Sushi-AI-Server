@@ -296,3 +296,27 @@ test('transient poll errors can be retried without resubmission or an early refu
   assert.deepEqual(f.refunded, []);
   await f.service.cancel(1, job.id);
 });
+
+test('sanitizeRealPrompt enrich:false skips photoreal stack but bans on-image text/pinyin', () => {
+  const plain = sanitizeRealPrompt('a fictional adult standing in a park', { enrich: false });
+  assert.match(plain, /a fictional adult standing in a park/i);
+  assert.doesNotMatch(plain, /photorealistic RAW photo|natural skin pores|cinematic still/i);
+  assert.match(plain, /no text in image|no pinyin|no watermark/i);
+  const enriched = sanitizeRealPrompt('a fictional adult standing in a park', { enrich: true });
+  assert.match(enriched, /photorealistic RAW photo/i);
+  assert.match(enriched, /no text in image|no pinyin/i);
+});
+
+test('generationPayload enrich:false keeps translate-only prompt and expands text/pinyin negatives', () => {
+  const built = generationPayload({
+    prompt: 'a fictional adult by a window',
+    width: 512,
+    height: 768,
+    style: 'real',
+    enrich: false,
+  });
+  assert.match(built.prompt, /a fictional adult by a window/i);
+  assert.doesNotMatch(built.prompt.split(' ### ')[0], /photorealistic RAW photo/i);
+  assert.match(built.prompt, /###/);
+  assert.match(built.prompt, /pinyin|romanization|watermark|text/i);
+});

@@ -88,19 +88,14 @@
         <div id="记忆线路区" class="记忆线路区">
           <p id="记忆生成线路" class="记忆生成线路" role="status">记忆线路：加载中…</p>
           <div class="记忆线路操作" role="group" aria-label="生图方式与清除记忆">
-            <div class="生图方式行" role="radiogroup" aria-label="改动或重新生成">
+            <div class="生图方式行" role="group" aria-label="改动或全文生图">
               <label class="换背景行 对勾行 生图方式项" id="生图方式改动行">
-                <input type="radio" name="生图方式" id="生图方式改动" value="改动" onchange="切换生图方式('改动')">
+                <input type="checkbox" id="生图方式改动" value="改动" onchange="切换生图方式(this.checked ? '改动' : '重新生成')">
                 <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
-                <span class="生图方式文案"><b>改动</b><small>参考图局部改</small></span>
-              </label>
-              <label class="换背景行 对勾行 生图方式项" id="生图方式重新生成行">
-                <input type="radio" name="生图方式" id="生图方式重新生成" value="重新生成" onchange="切换生图方式('重新生成')">
-                <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
-                <span class="生图方式文案"><b>重新生成</b><small>全新文生图</small></span>
+                <span class="生图方式文案"><b>改动</b><small>勾选=参考图局部改；不勾=全文生图</small></span>
               </label>
             </div>
-            <button type="button" class="次按钮 清除本记忆钮" id="清除本记忆按钮" onclick="清除本记忆()">清除本记忆</button>
+            <button type="button" class="次按钮 清除本记忆钮" id="清除记忆线路按钮" onclick="清除记忆线路()">清除记忆线路</button>
           </div>
         </div>
         <div class="核心操作">
@@ -313,7 +308,7 @@
               id="负面提示"
               name="负面提示"
               rows="4"
-            >lowres, blurry, out of focus, bad anatomy, multiple heads, fused bodies, extra arms, extra legs, missing arms, missing legs, wrong number of limbs, extra fingers, missing fingers, malformed hands, duplicated limbs, distorted face, blurry face, deformed face, misplaced facial features, plastic skin, wax figure, cartoon, anime, illustration, digital painting, manga, child, minor, underage, real celebrity, UI, text, watermark, anime, manga, cartoon, illustration, cel shading</textarea>
+            >lowres, blurry, out of focus, bad anatomy, multiple heads, fused bodies, extra arms, extra legs, missing arms, missing legs, wrong number of limbs, extra fingers, missing fingers, malformed hands, duplicated limbs, distorted face, blurry face, deformed face, misplaced facial features, plastic skin, wax figure, cartoon, anime, illustration, digital painting, manga, child, minor, underage, real celebrity, UI, text, watermark, pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature, anime, manga, cartoon, illustration, cel shading</textarea>
           </label>
 
         </div>
@@ -664,6 +659,17 @@
     }
   }
 
+  function 像拼音串(文) {
+    var t = String(文 || "").replace(/\s+/g, " ").trim();
+    if (!t || /[\u4e00-\u9fff]/.test(t)) return false;
+    // 无实义英文词、多为音节空格串时视为拼音误显（如 yi wei dong ya nv xing）
+    if (!/\b(the|a|an|of|in|on|with|and|photo|woman|man|girl|boy|adult|standing|sitting|full|body|street|park|window)\b/i.test(t)) {
+      var parts = t.toLowerCase().split(/[^a-zA-Z]+/).filter(Boolean);
+      if (parts.length >= 3 && parts.every(function (p) { return p.length <= 6; })) return true;
+    }
+    if (/[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜü]/i.test(t)) return true;
+    return false;
+  }
   function 刷新画面说明() {
     var 标题 = document.getElementById("说明标题");
     var 中文区 = document.getElementById("说明中文");
@@ -675,6 +681,8 @@
     var 展示中文 = 去重描述(含中文(中文) ? 中文 : (含中文(核心) ? 核心 : ""));
     if (!英文 && 核心 && !含中文(核心)) 英文 = 核心;
     英文 = 只留英文(去掉方括号(英文));
+    // 有中文核心时，勿把拼音误当成英文说明展示
+    if (展示中文 && 像拼音串(英文)) 英文 = "";
     if (标题) 标题.textContent = 展示中文 || "当前画面";
     if (中文区) {
       中文区.textContent = "";
@@ -1298,20 +1306,16 @@
     return 有参考图() ? "改动" : "重新生成";
   }
   function 读取生图方式() {
-    // 用户未自选时，始终按「有参考图→改动 / 否则重新生成」即时默认，避免只改参考图字段却仍停在旧单选。
+    // 用户未自选时，始终按「有参考图→改动 / 否则全文生图」即时默认。
+    // 改动为对勾：勾选=局部改；不勾选=全文生图（原「重新生成」语义）。
     if (!生图方式用户自选) return 默认生图方式();
     var 改 = document.getElementById("生图方式改动");
-    var 重 = document.getElementById("生图方式重新生成");
     if (改 && 改.checked) return "改动";
-    if (重 && 重.checked) return "重新生成";
-    return 默认生图方式();
+    return "重新生成";
   }
   function 写入生图方式单选(值) {
     var 改 = document.getElementById("生图方式改动");
-    var 重 = document.getElementById("生图方式重新生成");
-    var v = 值 === "改动" ? "改动" : "重新生成";
-    if (改) 改.checked = v === "改动";
-    if (重) 重.checked = v === "重新生成";
+    if (改) 改.checked = 值 === "改动";
   }
   function 同步生图方式默认(强制) {
     if (!强制 && 生图方式用户自选) {
@@ -1363,8 +1367,8 @@
     var 参考 = 有参考图() ? (本轮使用参考图() ? "带参考图" : "有参考图·本轮忽略") : "无参考图";
     行.textContent = "记忆线路：" + 记忆段 + " · " + 平台 + " · " + 参考 + " · " + 方式;
   }
-  function 清除本记忆() {
-    if (!window.confirm("清除本角色当前记忆（对话与摘要）？不影响记忆开关与其它数据。")) return;
+  function 清除记忆线路() {
+    if (!window.confirm("清除本角色当前记忆线路（对话与摘要）？不影响记忆开关与其它数据。")) return;
     对话历史 = [];
     try { 对话抢出通道 = ""; } catch (e0) {}
     写记忆摘要("");
@@ -1372,12 +1376,14 @@
     try { 渲染对话(); } catch (e1) {}
     刷新记忆生成线路();
   }
+  function 清除本记忆() { return 清除记忆线路(); }
   window.读取生图方式 = 读取生图方式;
   window.切换生图方式 = 切换生图方式;
   window.同步生图方式默认 = 同步生图方式默认;
   window.本轮使用参考图 = 本轮使用参考图;
   window.应用局部改图 = 应用局部改图;
   window.刷新记忆生成线路 = 刷新记忆生成线路;
+  window.清除记忆线路 = 清除记忆线路;
   window.清除本记忆 = 清除本记忆;
   function 记忆模式值() {
     try {
@@ -3708,7 +3714,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.61" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.62" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4569,14 +4575,15 @@
   }
 
   .画廊 {
-    max-height: 90vh;
+    max-height: 92vh;
     overflow: auto;
     display: grid;
     grid-template-columns:
-      repeat(auto-fit, minmax(260px, 1fr));
-    gap: 16px;
+      repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
     flex: 1;
     align-content: start;
+    min-height: 42vh;
   }
 
   .画廊 img,
@@ -5010,14 +5017,16 @@
     }
 
     .画廊 {
-    max-height: 90vh;
+    max-height: 92vh;
     overflow: auto;
       grid-template-columns: 1fr;
+      min-height: 48vh;
     }
 
     .画廊 img,
     .画廊 iframe {
       border-radius: 12px;
+      min-height: min(52vh, 420px);
     }
 
     .画面说明 {
@@ -5092,15 +5101,15 @@
     }
 
     .画廊 {
-      min-height: 64vh;
-      gap: 22px;
-      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      min-height: 72vh;
+      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
       flex: 1 1 auto;
     }
 
     .画廊 img,
     .画廊 iframe {
-      min-height: 520px;
+      min-height: 600px;
       object-fit: contain;
       background: #FFFFFF;
     }

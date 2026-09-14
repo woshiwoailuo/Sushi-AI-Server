@@ -147,6 +147,9 @@ test('structure-prompt success feeds compact English without overwriting 核心�
   });
   const coreBefore = '一位虚构成年女性穿红裙站在雨夜街头';
   f.w.document.getElementById('角色描述').value = coreBefore;
+  // 结构化扩写仅在智能修饰开启后走；未修饰时只译核心
+  await f.w.智能修饰();
+  assert.equal(f.w.hasSmartModifier(), true);
   await f.w.开始生成();
   assert.equal(f.w.document.getElementById('角色描述').value, coreBefore, '核心描述 stays source of truth');
   const payload = imagePayload(f.calls);
@@ -221,8 +224,9 @@ test('the current Chinese prompt is translated before submission, never replaced
   await f.w.开始生成();
   const payload = imagePayload(f.calls);
   assert.match(payload.prompt, /A small cat by the window/);
-  // Visible core is source of truth — no silent photoreal rewrite on generate.
-  assert.match(payload.prompt, /photorealistic/i);
+  // 未智能修饰：只译核心，不堆写实修饰词库
+  assert.doesNotMatch(payload.prompt.split(' ### ')[0], /photorealistic RAW photo/i);
+  assert.match(payload.prompt, /no text in image|no pinyin/i);
   assert.doesNotMatch(payload.prompt, /A stale unrelated scene/);
 });
 
@@ -378,7 +382,10 @@ test('Perch without official plugin uses official generate in-app', async t => {
   assert.equal(f.calls.filter(isImageSubmit).length, 0, 'must not relay Horde');
   assert.ok(f.calls.some(isPerchOfficial), 'in-app Perch uses official generate');
   const gen = f.calls.find(isPerchOfficial);
-  assert.match(decodeURIComponent(String(gen.url).replace(/\+/g, '%20')), /photorealistic RAW photo/i);
+  const perchPrompt = decodeURIComponent(String(gen.url).replace(/\+/g, '%20'));
+  assert.match(perchPrompt, /small cat|sunny window/i);
+  assert.doesNotMatch(perchPrompt, /photorealistic RAW photo/i);
+  assert.match(perchPrompt, /no text in image|no pinyin|no watermark/i);
   assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
@@ -470,12 +477,12 @@ test('photorealPrompt enriches by default but style-keyword bypass keeps anime/�
   assert.doesNotMatch(cn, /not anime|photorealistic RAW photo/i);
 });
 
-test('写实 channel strips anime keywords and always sends photoreal negatives', async t => {
+test('写实 channel without smart-mod stays translate-only but still bans text/pinyin in negatives', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('出图引擎').value = 'horde-real';
-  f.w.document.getElementById('角色描述').value = 'anime style fictional adult in neon alley';
-  f.w.document.getElementById('中文译文').value = '霓虹巷弄里的动漫成年角色';
-  f.w.document.getElementById('英文描述').value = 'anime style fictional adult in neon alley';
+  f.w.document.getElementById('角色描述').value = 'fictional adult in neon alley';
+  f.w.document.getElementById('中文译文').value = '霓虹巷弄里的成年角色';
+  f.w.document.getElementById('英文描述').value = 'fictional adult in neon alley';
   if (typeof f.w.刷新画面说明 === 'function') f.w.刷新画面说明();
   const beforeZh = f.w.document.getElementById('中文译文').value;
   const beforeEn = f.w.document.getElementById('英文描述').value;
@@ -483,10 +490,10 @@ test('写实 channel strips anime keywords and always sends photoreal negatives'
   const beforeCap = f.w.document.getElementById('说明英文').textContent;
   await f.w.开始生成();
   const payload = imagePayload(f.calls);
-  assert.match(payload.prompt, /photorealistic RAW photo/i);
-  assert.match(payload.prompt, /not anime|not manga/i);
+  assert.match(payload.prompt, /fictional adult in neon alley/i);
+  assert.doesNotMatch(payload.prompt, /photorealistic RAW photo/i);
   assert.match(payload.prompt, /###/);
-  assert.match(payload.prompt, /anime|manga|cartoon|illustration/i);
+  assert.match(payload.prompt, /pinyin|romanization|watermark|text/i);
   assert.ok(isRealHorde(payload));
   assert.equal(f.w.document.getElementById('中文译文').value, beforeZh);
   assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
@@ -494,7 +501,7 @@ test('写实 channel strips anime keywords and always sends photoreal negatives'
   assert.equal(f.w.document.getElementById('说明英文').textContent, beforeCap);
 });
 
-test('default generation keeps visible core unchanged while enriching the private prompt', async t => {
+test('default generation keeps visible core unchanged; no smart-mod means translate-only outbound', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('角色描述').value = 'A fictional adult reading by a library window';
   f.w.document.getElementById('中文译文').value = '图书馆窗边的成年人';
@@ -504,12 +511,13 @@ test('default generation keeps visible core unchanged while enriching the privat
   const beforeZh = f.w.document.getElementById('中文译文').value;
   const beforeEn = f.w.document.getElementById('英文描述').value;
   const beforeCap = f.w.document.getElementById('说明英文').textContent;
+  assert.equal(f.w.hasSmartModifier(), false);
   await f.w.开始生成();
   const payload = imagePayload(f.calls);
   assert.match(payload.prompt, /A fictional adult reading by a library window/i);
-  assert.match(payload.prompt, /photorealistic RAW photo/i);
+  assert.doesNotMatch(payload.prompt, /photorealistic RAW photo|natural skin pores|cinematic still/i);
   assert.match(payload.prompt, /adult mode enabled/i);
-  assert.match(payload.prompt, /not anime, not manga, not cartoon/i);
+  assert.match(payload.prompt, /no text in image|no pinyin|no watermark/i);
   assert.equal(f.w.document.getElementById('角色描述').value, beforeCore, '核心描述 must stay user text');
   assert.equal(f.w.document.getElementById('中文译文').value, beforeZh);
   assert.equal(f.w.document.getElementById('英文描述').value, beforeEn);
@@ -1245,18 +1253,18 @@ test('img2img local smile/hair still keep rest; t2i 全身+东亚 unchanged', as
   assert.doesNotMatch(pos, /apply ONLY the stated local change/i);
 });
 
-test('memory route line and clear-this-memory; 改动 vs 重新生成 defaults', async t => {
+test('memory route line and clear-memory-path button; 改动 checkbox vs full regen', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const line = f.w.document.getElementById('记忆生成线路');
-  const clearBtn = f.w.document.getElementById('清除本记忆按钮');
+  const clearBtn = f.w.document.getElementById('清除记忆线路按钮');
   const edit = f.w.document.getElementById('生图方式改动');
-  const regen = f.w.document.getElementById('生图方式重新生成');
   assert.ok(line);
   assert.ok(clearBtn);
   assert.ok(edit);
-  assert.ok(regen);
+  assert.equal(edit.type, 'checkbox');
+  assert.equal(f.w.document.getElementById('生图方式重新生成'), null);
   assert.ok(f.w.document.getElementById('生图方式改动行')?.querySelector('.对勾盒'));
-  assert.ok(f.w.document.getElementById('生图方式重新生成行')?.querySelector('.对勾盒'));
+  assert.match(clearBtn.textContent, /清除记忆线路/);
   const row = f.w.document.getElementById('记忆模式对勾行');
   const zone = f.w.document.getElementById('记忆线路区');
   assert.ok(zone);
@@ -1264,7 +1272,7 @@ test('memory route line and clear-this-memory; 改动 vs 重新生成 defaults',
   assert.equal(f.w.document.getElementById('问答区').contains(row), false);
   f.w.同步生图方式默认(true);
   assert.equal(f.w.读取生图方式(), '重新生成');
-  assert.equal(regen.checked, true);
+  assert.equal(edit.checked, false);
   assert.match(line.textContent, /记忆续生/);
   assert.match(line.textContent, /无参考图/);
   assert.match(line.textContent, /重新生成/);
@@ -1277,9 +1285,14 @@ test('memory route line and clear-this-memory; 改动 vs 重新生成 defaults',
   assert.match(line.textContent, /带参考图/);
   assert.match(line.textContent, /改动/);
   f.w.切换生图方式('重新生成');
+  assert.equal(edit.checked, false);
   assert.equal(f.w.本轮使用参考图(), false);
   assert.equal(f.w.应用局部改图(), false);
   assert.match(f.w.document.getElementById('记忆生成线路').textContent, /有参考图·本轮忽略|重新生成/);
+  // 生完图后仍可开记忆模式
+  f.w.切换记忆(false);
+  f.w.切换记忆(true);
+  assert.equal(f.w.记忆已开(), true);
   f.w.document.getElementById('角色描述').value = '核心保持原样';
   f.w.写记忆摘要('用户：旧设定甲。助手：旧回复乙。');
   f.w.对话历史 = [{ role: 'user', text: '你好' }, { role: 'assistant', text: '在的' }];
@@ -1288,7 +1301,7 @@ test('memory route line and clear-this-memory; 改动 vs 重新生成 defaults',
   const origConfirm = f.w.confirm;
   let confirms = 0;
   f.w.confirm = () => { confirms += 1; return true; };
-  f.w.清除本记忆();
+  f.w.清除记忆线路();
   assert.equal(confirms, 1);
   assert.equal(String(f.w.记忆摘要 || ''), '');
   assert.equal((f.w.对话历史 || []).length, 0);
@@ -1299,46 +1312,38 @@ test('memory route line and clear-this-memory; 改动 vs 重新生成 defaults',
   f.w.confirm = origConfirm;
 });
 
-test('记忆/改动/重新生成 use visible checkmarks; 改动与重新生成互斥', async t => {
+test('记忆与改动用对勾；清除记忆线路为按钮；不勾改动=全文生图', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const memRow = f.w.document.getElementById('记忆模式对勾行');
   const editRow = f.w.document.getElementById('生图方式改动行');
-  const regenRow = f.w.document.getElementById('生图方式重新生成行');
+  const clearBtn = f.w.document.getElementById('清除记忆线路按钮');
   const mem = f.w.document.getElementById('记忆开关');
   const edit = f.w.document.getElementById('生图方式改动');
-  const regen = f.w.document.getElementById('生图方式重新生成');
-  assert.ok(memRow && editRow && regenRow);
+  assert.ok(memRow && editRow && clearBtn);
   assert.ok(memRow.classList.contains('对勾行'));
   assert.ok(editRow.classList.contains('对勾行'));
-  assert.ok(regenRow.classList.contains('对勾行'));
   assert.ok(memRow.querySelector('.对勾盒 .对勾符'));
   assert.ok(editRow.querySelector('.对勾盒 .对勾符'));
-  assert.ok(regenRow.querySelector('.对勾盒 .对勾符'));
   assert.match(editRow.textContent, /改动/);
-  assert.match(editRow.textContent, /参考图局部改/);
-  assert.match(regenRow.textContent, /重新生成/);
-  assert.match(regenRow.textContent, /全新文生图/);
-  // 记忆独立开关
+  assert.match(editRow.textContent, /局部改|全文生图/);
+  assert.match(clearBtn.textContent, /清除记忆线路/);
+  assert.equal(f.w.document.getElementById('生图方式重新生成行'), null);
+  // 记忆独立开关（生完图后也可开）
   assert.equal(mem.checked, true);
   f.w.切换记忆(false);
   assert.equal(mem.checked, false);
   f.w.切换记忆(true);
   assert.equal(mem.checked, true);
-  // 互斥：一次只勾一个
   f.w.document.getElementById('参考图地址').value = PNG;
   f.w.同步生图方式默认(true);
   assert.equal(edit.checked, true);
-  assert.equal(regen.checked, false);
   assert.equal(f.w.读取生图方式(), '改动');
   f.w.切换生图方式('重新生成');
   assert.equal(edit.checked, false);
-  assert.equal(regen.checked, true);
   assert.equal(f.w.读取生图方式(), '重新生成');
   f.w.切换生图方式('改动');
   assert.equal(edit.checked, true);
-  assert.equal(regen.checked, false);
   assert.equal(f.w.读取生图方式(), '改动');
-  // 切换生图方式不影响记忆开关
   assert.equal(mem.checked, true);
   assert.equal(f.w.记忆已开(), true);
 });
@@ -1360,4 +1365,48 @@ test('重新生成 ignores reference image on generate; 改动 keeps local-edit 
   await f.w.开始生成();
   body = imagePayload(f.calls);
   assert.equal(!!body.source_image, false, '重新生成不应带参考图作底');
+});
+
+test('smart-mod enables photoreal enrich on outbound; core unchanged', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('角色描述').value = 'A fictional adult reading by a library window';
+  f.w.document.getElementById('英文描述').value = 'A fictional adult reading by a library window';
+  await f.w.智能修饰();
+  assert.equal(f.w.hasSmartModifier(), true);
+  assert.match(f.w.读取智能修饰后缀(), /photoreal|DSLR|full-body|not anime/i);
+  const beforeCore = f.w.document.getElementById('角色描述').value;
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  assert.match(payload.prompt, /photorealistic RAW photo|photorealistic photography/i);
+  assert.match(payload.prompt, /no text in image|no pinyin/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, beforeCore);
+});
+
+test('gallery caption hides pinyin when Chinese core exists', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('角色描述').value = '一位东亚女性站在雨夜街头';
+  f.w.document.getElementById('中文译文').value = '一位东亚女性站在雨夜街头';
+  f.w.document.getElementById('英文描述').value = 'yi wei dong ya nv xing zhan zai yu ye jie tou';
+  f.w.刷新画面说明();
+  assert.match(f.w.document.getElementById('说明标题').textContent, /东亚女性/);
+  assert.equal(f.w.document.getElementById('说明英文').textContent.trim(), '');
+});
+
+test('full regen when 改动 unchecked ignores reference image', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
+  f.w.同步生图方式默认(true);
+  assert.equal(f.w.读取生图方式(), '改动');
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  let body = imagePayload(f.calls);
+  assert.ok(body.source_image, '改动应带 source_image');
+  f.calls.length = 0;
+  f.w.切换生图方式('重新生成');
+  await f.w.开始生成();
+  body = imagePayload(f.calls);
+  assert.equal(!!body.source_image, false, '不勾改动=全文生图，不应带参考图作底');
 });

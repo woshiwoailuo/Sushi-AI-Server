@@ -65,7 +65,7 @@ function preferNsfwModels(models, isAnime, aggressive) {
   if (aggressive && head.length) return head.concat(rest.slice(0, 2));
   return head.concat(rest);
 }
-const REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render, lowres, blurry, bad anatomy, extra limbs, child, minor, underage, watermark, text';
+const REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render, lowres, blurry, bad anatomy, extra limbs, child, minor, underage, watermark, text, pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
 
 function stripArtStyleWords(text) {
   return String(text || '')
@@ -76,9 +76,23 @@ function stripArtStyleWords(text) {
     .trim();
 }
 
-function sanitizeRealPrompt(prompt) {
+function ensureNoTextOnImage(prompt) {
+  let text = String(prompt || '').replace(/\s+/g, ' ').trim();
+  if (!text) return text;
+  if (!/no text in image|no watermark|no pinyin|no romanization|no letters or characters on image/i.test(text)) {
+    text += ', no text in image, no watermark, no pinyin, no romanization, no letters or characters on image';
+  }
+  return text.replace(/\s{2,}/g, ' ').trim();
+}
+
+function sanitizeRealPrompt(prompt, options = {}) {
+  const enrich = !(options && options.enrich === false);
   let text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
-  if (!text) text = 'a fictional adult, natural light, DSLR';
+  if (!text) text = enrich ? 'a fictional adult, natural light, DSLR' : 'a fictional adult';
+  if (!enrich) {
+    // 未智能修饰：不堆写实修饰词库，仅清掉动漫词并禁止图内文字/拼音
+    return ensureNoTextOnImage(text);
+  }
   const bare = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(text);
   if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
     const lead = bare
@@ -94,7 +108,7 @@ function sanitizeRealPrompt(prompt) {
   if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(text)) {
     text += ', not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading';
   }
-  return text.replace(/\s{2,}/g, ' ').trim();
+  return ensureNoTextOnImage(text.replace(/\s{2,}/g, ' ').trim());
 }
 
 /** Keep adult/NSFW directive when truncating long prompts (do not cut trailing adult instructions). */
@@ -137,11 +151,15 @@ function generationPayload(input = {}, model = '') {
   const negativeRaw = String(input.negativePrompt || '').trim().slice(0, 1000);
   const style = String((input && input.style) || '').trim().toLowerCase();
   const isReal = style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance';
-  let prompt = isReal ? sanitizeRealPrompt(promptRaw) : promptRaw;
+  const enrich = !(input && (input.enrich === false || input.enrichPrompt === false));
+  let prompt = isReal ? sanitizeRealPrompt(promptRaw, { enrich }) : promptRaw;
   if (prompt.length > 2000) prompt = clipPromptPreserveAdult(prompt, 2000);
   let negative = negativeRaw;
   if (isReal) {
     negative = negative ? (negative + ', ' + REAL_NEGATIVE) : REAL_NEGATIVE;
+    if (!/pinyin|romanization|letters on image/i.test(negative)) {
+      negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
+    }
   }
   const cfgScale = Number(input.cfgScale === undefined ? 7 : input.cfgScale);
   if (!Number.isFinite(cfgScale) || cfgScale < 1 || cfgScale > 20) throw new ImageError('引导强度需在 1 到 20 之间', 400, 'BAD_CFG');
@@ -463,4 +481,4 @@ function createImageService(options = {}) {
   return { create, get, cancel, current, sweep };
 }
 
-module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, hordeModelsFor, sanitizeRealPrompt, preferNsfwModels, clipPromptPreserveAdult };
+module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, hordeModelsFor, sanitizeRealPrompt, ensureNoTextOnImage, preferNsfwModels, clipPromptPreserveAdult };

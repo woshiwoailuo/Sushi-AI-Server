@@ -12,8 +12,8 @@ const genJs = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-ge
 
 test('desktop gallery enlarges on wide screens without mobile rewrite', () => {
   assert.match(workshop, /@media \(min-width: 901px\)/);
-  assert.match(workshop, /minmax\(460px, 1fr\)/);
-  assert.match(workshop, /min-height: 64vh/);
+  assert.match(workshop, /minmax\(540px, 1fr\)/);
+  assert.match(workshop, /min-height: 72vh/);
   assert.match(workshop, /@media \(max-width: 800px\)/);
   assert.match(home, /@media \(min-width: 901px\)/);
   assert.match(home, /gen-wrap iframe/);
