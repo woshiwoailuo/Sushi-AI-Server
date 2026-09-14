@@ -522,7 +522,43 @@
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
-  function animePrompt(prompt) {
+  function hasSmartModifier() {
+    try {
+      return !!(typeof window.读取智能修饰后缀 === 'function' && String(window.读取智能修饰后缀() || '').trim());
+    } catch (e) { return false; }
+  }
+
+  function ensureNoTextOnImage(prompt) {
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!text) return text;
+    if (!/no text in image|no watermark|no pinyin|no romanization|no letters or characters on image/i.test(text)) {
+      text += ', no text in image, no watermark, no pinyin, no romanization, no letters or characters on image';
+    }
+    return text.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  /** 未点智能修饰：出图英文=核心翻译为主，仅保留产品必需的成人/东亚/全身锁，不堆写实修饰词库 */
+  function minimalOutboundPrompt(prompt, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var coreHint = opts.core != null ? String(opts.core) : '';
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!text) text = String(coreHint || '').replace(/\s+/g, ' ').trim() || 'a fictional adult';
+    if (!opts.localEdit) {
+      var framingSource = (coreHint ? coreHint + ', ' : '') + text;
+      if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
+        text = 'full body head-to-toe visible, feet in frame, ' + text;
+      }
+      // 产品默认全身正面锁（与写实通道一致）；有半身/特写意图时 applyRealisticFrontFullBody 会尊重
+      text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
+    }
+    text = applyEastAsianEthnicity(text, coreHint || text);
+    if (!/fictional adult|18\+|no minors/i.test(text)) {
+      text += ', fictional adult 18+ only, no minors';
+    }
+    return ensureNoTextOnImage(text);
+  }
+
+    function animePrompt(prompt) {
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (!text) text = 'anime illustration of a fictional adult, clean lineart, cel shading';
     if (hasExplicitArtStyle(text)) {
@@ -1051,7 +1087,7 @@
   ];
 
   // English default for #负面提示 (must match workshop.html textarea default).
-  var DEFAULT_EN_NEGATIVE = 'lowres, blurry, out of focus, bad anatomy, multiple heads, fused bodies, extra arms, extra legs, missing arms, missing legs, wrong number of limbs, extra fingers, missing fingers, malformed hands, duplicated limbs, distorted face, blurry face, deformed face, misplaced facial features, plastic skin, wax figure, cartoon, anime, illustration, digital painting, manga, child, minor, underage, real celebrity, UI, text, watermark, anime, manga, cartoon, illustration, cel shading';
+  var DEFAULT_EN_NEGATIVE = 'lowres, blurry, out of focus, bad anatomy, multiple heads, fused bodies, extra arms, extra legs, missing arms, missing legs, wrong number of limbs, extra fingers, missing fingers, malformed hands, duplicated limbs, distorted face, blurry face, deformed face, misplaced facial features, plastic skin, wax figure, cartoon, anime, illustration, digital painting, manga, child, minor, underage, real celebrity, UI, text, watermark, pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature, anime, manga, cartoon, illustration, cel shading';
 
   // Markers from the pre-PR#73 Chinese default — localStorage/autofill may restore these.
   var OLD_CN_NEG_MARKERS = [
@@ -1169,7 +1205,7 @@
     return kept.join(', ');
   }
 
-  var HORDE_REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render, lowres, blurry, bad anatomy, extra limbs, child, minor, underage, watermark, text';
+  var HORDE_REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render, lowres, blurry, bad anatomy, extra limbs, child, minor, underage, watermark, text, pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
 
   function hordeHeaders() {
     return {
@@ -1672,11 +1708,18 @@
     if (run.payload.sourceImage && engine === 'sana') throw new Error('Sana 当前未接入图生图，未切换平台。');
     var coreHint = String(run.coreSource || '') || (typeof value === 'function' ? (value('角色描述') || '') : '');
     var localEdit = !!(run.localEdit && run.payload && run.payload.sourceImage);
+    var smartOn = hasSmartModifier();
+    run.enrichPrompt = smartOn;
     if (engineFamily(engine) === 'anime') {
       // Honor anime channel wording; still reinject East Asian cues from core when present.
       prompt = applyEastAsianEthnicity(String(prompt || ''), coreHint);
-    } else {
+      prompt = ensureNoTextOnImage(prompt);
+    } else if (smartOn) {
       prompt = forcePhotorealPrompt(prompt, { core: coreHint, localEdit: localEdit });
+      prompt = ensureNoTextOnImage(prompt);
+    } else {
+      // 未智能修饰：以核心描述翻译为主，不堆写实修饰词库
+      prompt = minimalOutboundPrompt(prompt, { core: coreHint, localEdit: localEdit });
     }
     // Adult/NSFW instructions from core + hidden 成人功能状态 must survive photoreal enrich.
     prompt = withAdultDirective(prompt);
@@ -1703,9 +1746,14 @@
       if (!restored) {
         if (!run.coreSource) run.coreSource = String(run.description || '');
         var structured = '';
-        try { structured = await structurePromptForGen(run); } catch (eStruct) {
-          ensureActive(run);
-          if (run.cancelled || (eStruct && eStruct.name === 'AbortError')) throw eStruct;
+        var smartOn = hasSmartModifier();
+        run.enrichPrompt = smartOn;
+        // 未点智能修饰：跳过结构化扩写，只把核心描述译成英文出图
+        if (smartOn) {
+          try { structured = await structurePromptForGen(run); } catch (eStruct) {
+            ensureActive(run);
+            if (run.cancelled || (eStruct && eStruct.name === 'AbortError')) throw eStruct;
+          }
         }
         if (structured) {
           // Structured English is outbound only; keep coreSource for ethnicity/framing cues.
@@ -1879,6 +1927,9 @@
     if (run.localEdit && !/different person|identity change|full scene redraw/i.test(negative)) {
       negative += ', different person, different face, different clothes, new background, full scene redraw, identity change';
     }
+    if (!/pinyin|romanization|letters on image/i.test(negative)) {
+      negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
+    }
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
       negativePrompt: negative, seed: value('随机种子'), cfgScale: Number(value('引导强度')) || 7,
@@ -1940,6 +1991,9 @@
   window.当前引擎 = function () { return resolveEngine(); };
   window.photorealPrompt = photorealPrompt;
   window.forcePhotorealPrompt = forcePhotorealPrompt;
+  window.hasSmartModifier = hasSmartModifier;
+  window.minimalOutboundPrompt = minimalOutboundPrompt;
+  window.ensureNoTextOnImage = ensureNoTextOnImage;
   window.hasEastAsianCue = hasEastAsianCue;
   window.applyEastAsianEthnicity = applyEastAsianEthnicity;
   window.wantsFullBodyFraming = wantsFullBodyFraming;
