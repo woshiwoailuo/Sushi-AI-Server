@@ -82,8 +82,8 @@ function sanitizeRealPrompt(prompt) {
   const bare = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(text);
   if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
     const lead = bare
-      ? 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, '
-      : 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture, ';
+      ? 'photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores, '
+      : 'photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores, realistic fabric texture, ';
     text = lead + text;
   } else if (!/^\s*photoreal/i.test(text)) {
     text = 'photorealistic photograph of ' + text;

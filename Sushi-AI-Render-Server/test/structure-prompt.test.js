@@ -43,7 +43,17 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.54/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.56/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
+});
+
+test('heuristic preserves East Asian and 全身 framing', () => {
+  const east = heuristicStructureFromText('一位东亚中国女性全身站立在雨夜街头');
+  assert.match(east.fields.appearance, /East Asian/i);
+  assert.match(east.fields.pose, /full body|feet in frame/i);
+  assert.match(east.fields.camera, /35mm/i);
+  assert.match(east.promptEn, /East Asian/i);
+  const msgs = buildStructureMessages('韩国女性全身', { anime: false });
+  assert.match(msgs[0].content, /PRESERVE ethnicity|East Asian|NEVER invent blonde/i);
 });

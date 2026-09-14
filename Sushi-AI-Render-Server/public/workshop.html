@@ -1874,7 +1874,8 @@
     return /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i.test(文本);
   }
 
-  function 强制写实英文(英文) {
+  function 强制写实英文(英文, 核心提示) {
+    var 核 = String(核心提示 || "");
     var 文 = String(英文 || "").replace(/\s+/g, " ").trim();
     文 = 文
       .replace(/\b(anime|manga|cartoon|chibi|illustration|cel[\s-]?shading|pixar|disney|comic(?:\s|-)?style|2d\s*art|visual novel)\b/gi, " ")
@@ -1884,8 +1885,8 @@
     if (!文) 文 = "photorealistic RAW photo of a fictional adult, natural light, DSLR";
     var 裸露 = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(文);
     var 头 = 裸露
-      ? "photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores"
-      : "photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture";
+      ? "photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores"
+      : "photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores, realistic fabric texture";
     if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(文)) {
       文 = 头 + ", " + 文;
     } else if (!/^\s*photoreal/i.test(文)) {
@@ -1903,10 +1904,15 @@
     if (!/fictional adult|18\+|no minors/i.test(文)) {
       文 += ", fictional adult 18+ only, no minors";
     }
-    // 写实默认全身正面（强优先靠前）；用户写半身/特写/侧脸等则尊重原文
-    if (!/半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|portrait|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上/i.test(文)) {
+    var 源 = 核 + " " + 文;
+    var 要全身 = /full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in (?:the )?frame|entire body in frame|standing full figure/i.test(源);
+    var 要半身 = !要全身 && /半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上|(?:close[\s-]?up|head|bust|waist[\s-]?up|upper[\s-]?body|half[\s-]?body)\s+portrait|portrait\s+(?:shot|close|crop|headshot)/i.test(文);
+    // 写实默认全身正面（强优先靠前）；用户写半身/特写/侧脸等则尊重原文；裸 portrait 摄影词不挡全身
+    if (!要半身) {
       var 全身片 = [];
-      if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in frame/i.test(文)) {
+      if (要全身) {
+        全身片.push("full body head-to-toe visible", "feet in frame", "standing full figure", "entire body in frame", "wide full-body shot", "complete figure from head to feet", "not cropped at waist or chest", "not a close-up", "not a half-body portrait");
+      } else if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in frame/i.test(文)) {
         全身片.push("full body head-to-toe visible", "feet in frame", "standing full figure", "entire body in frame", "not cropped at waist or chest");
       } else {
         if (!/feet in frame/i.test(文)) 全身片.push("feet in frame");
@@ -1918,14 +1924,26 @@
           全身片.push("front view facing camera", "eye-level", "looking at camera");
         }
       }
+      文 = 文.replace(/\bshot on DSLR,\s*85mm\b/gi, "shot on DSLR, 35mm");
       if (全身片.length) {
         var 注入 = 全身片.join(", ");
-        var 头匹配 = 文.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*85mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+        var 头匹配 = 文.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
         if (头匹配) {
           文 = 头匹配[1] + ", " + 注入 + 文.slice(头匹配[1].length);
         } else {
           文 = 注入 + ", " + 文;
         }
+      }
+      if (要全身) 文 += ", full body head-to-toe visible, feet in frame";
+    }
+    // 东亚外貌：出图英文强化；去掉会盖过东亚的西方默认美貌词
+    if (/东亚|亚洲人|中国人|韩国人|日本人|华人|east[\s-]?asian|\bchinese\b|\bkorean\b|\bjapanese\b|asian (?:woman|man|features|face)/i.test(源)) {
+      文 = 文.replace(/\b(blonde|blond|caucasian|european|western european|blue[\s-]?eyes)\b/gi, " ").replace(/\s{2,}/g, " ").replace(/[，,]{2,}/g, ",").trim();
+      if (!/east[\s-]?asian/i.test(文)) {
+        var 族 = "East Asian, East Asian facial features, distinctly East Asian appearance";
+        var 头2 = 文.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+        if (头2) 文 = 头2[1] + ", " + 族 + 文.slice(头2[1].length);
+        else 文 = 族 + ", " + 文;
       }
     }
     return 文.replace(/\s{2,}/g, " ").trim();
@@ -2218,8 +2236,8 @@
     // 修饰词一律英文：仅叠加入站出图 prompt，不回写核心描述原文语言。
     if (画风) {
       return [
-        ", anime illustration style, clean lineart, cel shading, vivid color hierarchy, detailed character design, fictional adult 18+ only, no minors",
-        ", Japanese anime illustration, clean linework, soft lighting, high-finish character portrait, fictional adult 18+, no minors",
+        ", anime illustration style, clean lineart, cel shading, vivid color hierarchy, detailed character design, full-character standing art, fictional adult 18+ only, no minors",
+        ", Japanese anime illustration, clean linework, soft lighting, high-finish character art, fictional adult 18+, no minors",
         ", comic-style illustration, vivid palette, dynamic composition, crisp expression and outfit detail, fictional adult, no minors",
         ", visual-novel character art, clear facial features and hair, soft gradient shading, polished character design, fictional adult 18+ only, no minors",
         ", high-finish anime character illustration, clean lineart, cel-shaded lighting, readable costume detail, fictional adult 18+, no minors",
@@ -2227,12 +2245,12 @@
       ];
     }
     return [
-      ", photorealistic photography style, shot on DSLR, 85mm lens, full-body front view eye-level facing camera, natural skin texture and fabric detail, natural light, cinematic still, shallow depth of field, true photo look, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
-      ", documentary portrait photography, natural lighting, full-body front framing, real skin texture, sharp material detail, shallow depth of field, not anime, not cartoon, fictional adult 18+, no minors",
-      ", cinematic photoreal photograph, 85mm lens, soft side light, full-body front view eye-level, pore-level skin and fabric weave, not anime, not illustration, fictional adult, no minors",
-      ", commercial photoreal portrait, soft studio-light look, full-body facing camera, clear skin and clothing materials, natural depth of field, not cartoon, not 2d art, fictional adult 18+, no minors",
+      ", photorealistic photography style, shot on DSLR, 35mm lens, full-body front view eye-level facing camera, natural skin texture and fabric detail, natural light, cinematic still, shallow depth of field, true photo look, ethnicity-neutral lighting, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
+      ", documentary photoreal photography, natural lighting, full-body front framing head to toe feet in frame, real skin texture, sharp material detail, shallow depth of field, not anime, not cartoon, fictional adult 18+, no minors",
+      ", cinematic photoreal photograph, 35mm lens, soft side light, full-body front view eye-level, pore-level skin and fabric weave, not anime, not illustration, fictional adult, no minors",
+      ", commercial photoreal photography, soft studio-light look, full-body facing camera head to toe, clear skin and clothing materials, natural depth of field, not cartoon, not 2d art, fictional adult 18+, no minors",
       ", outdoor natural-light photoreal photography, even ambient light, full figure visible head to toe facing camera, clear facial and hair detail, not illustration, not anime, fictional adult, no minors",
-      ", high-definition photoreal photography, eye-level facing camera, full-body framing head to toe, readable materials and light hierarchy, not anime, not manga, fictional adult 18+ only, no minors"
+      ", high-definition photoreal photography, eye-level facing camera, full-body framing head to toe feet in frame, readable materials and light hierarchy, not anime, not manga, fictional adult 18+ only, no minors"
     ];
   }
 
@@ -2256,11 +2274,11 @@
     var 文 = String(基座 || "").trim();
     var 画风 = 显式画风(文);
     var 风格说明 = 画风
-      ? "anime/manga illustration modifiers (lineart, cel shading, palette, character design)"
-      : "photoreal photography modifiers (full-body front view, lens, lighting, materials, not anime)";
+      ? "anime/manga illustration modifiers (lineart, cel shading, palette, character design, full-character standing art)"
+      : "photoreal photography modifiers (full-body front view 35mm, lens, lighting, materials, not anime, not close-up)";
     var 问 = "Output ONLY one English modifier phrase to append after the scene description for the image API. No explanation, no quotes, no line breaks.\n"
       + "Style: " + 风格说明 + ".\n"
-      + "Requirements: product-official wording; fictional adult 18+; do not repeat the base text; do not rewrite the base.\n"
+      + "Requirements: product-official wording; fictional adult 18+; ethnicity-neutral unless base already states ethnicity; if base mentions East Asian/Chinese/Korean/Japanese, reinforce East Asian facial features and never add blonde/caucasian/european/blue eyes; prefer full-body framing, avoid close-up/half-body unless base asks; do not repeat the base text; do not rewrite the base.\n"
       + "Base: " + 文.slice(0, 280);
     var 通道框 = document.getElementById("AI通道");
     var 模型 = 通道框 && 通道框.value ? 通道框.value : "glm";
@@ -2381,7 +2399,7 @@
     if (!文 || /女性[:：]\s*[\d.]+/.test(文) || (文.match(/\d/g) || []).length >= 12) {
       文 = "photoreal cinematic photo of a fictional adult, natural light, DSLR";
     }
-    文 = 强制写实英文(文);
+    文 = 强制写实英文(文, (核 && 核.value) || "");
     if (安) 安.value = 文;
     return 文;
   }
@@ -3108,8 +3126,8 @@
     var 引擎 = "";
     try { 引擎 = String((document.getElementById("出图引擎") || {}).value || ""); } catch (e) {}
     if (/anime|sana/.test(引擎)) return String(英文 || "").replace(/\s+/g, " ").trim();
-    var 文 = 强制写实英文(英文);
     var 核 = ((document.getElementById("角色描述") || {}).value || "") + ((document.getElementById("英文描述") || {}).value || "");
+    var 文 = 强制写实英文(英文, 核);
     var 尾 = ", photorealistic RAW photo, cinematic still, DSLR, natural skin, sharp focus, real human, not anime, not manga, not cartoon";
     if (/性爱|插入|抽插|口交|后入|骑乘|性交|做爱|sex|penetrat|oral|doggy|cowgirl/i.test(核)) {
       尾 += ", explicit adult sex";
@@ -3538,7 +3556,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.55" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.56" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

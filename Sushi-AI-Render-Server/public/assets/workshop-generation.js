@@ -319,47 +319,110 @@
       .trim();
   }
 
+  // Bare "portrait photography" must NOT count as half-body crop — only clear crop intent.
+  // Explicit 全身 / full body always wins over model/default half-body bias.
+  function wantsFullBodyFraming(text) {
+    return /full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in (?:the )?frame|entire body in frame|standing full figure/i.test(String(text || ''));
+  }
+
   function hasExplicitCropFraming(text) {
-    return /半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|portrait|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|from (the )?waist|face only|面部特写|脸部特写|肩部以上/i.test(String(text || ''));
+    var t = String(text || '');
+    if (wantsFullBodyFraming(t)) return false;
+    return /半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|from (the )?waist|face only|面部特写|脸部特写|肩部以上|(?:close[\s-]?up|head|bust|waist[\s-]?up|upper[\s-]?body|half[\s-]?body)\s+portrait|portrait\s+(?:shot|close|crop|headshot|of the face)/i.test(t);
   }
 
   function hasExplicitCameraAngle(text) {
     return /侧脸|侧面|侧身|背面|背影|后视|微仰|俯拍|仰拍|three[\s-]?quarter|profile|from behind|back view|side view|rear view|over[\s-]?shoulder|low angle|high angle/i.test(String(text || ''));
   }
 
-  function applyRealisticFrontFullBody(text) {
-    var t = String(text || '');
-    if (hasExplicitCropFraming(t)) return t;
+  // East Asian ethnicity cues from core/desc — reinforce outbound English; never invent Western beauty defaults.
+  function hasEastAsianCue(text) {
+    return /东亚|东亚洲|亞洲裔|亚洲裔|亚洲人|亞洲人|中国人|中國人|华人|華人|汉族|漢族|韩国人|韓國人|韩系|韓系|日本人|日系|东方人|東方人|中国女性|中国男人|韩国女性|日本女性|east[\s-]?asian|han chinese|\bchinese\b|\bkorean\b|\bjapanese\b|asian (?:woman|man|girl|boy|female|male|person|features|face|facial|look)/i.test(String(text || ''));
+  }
+
+  function stripWesternBeautyDefaults(text) {
+    return String(text || '')
+      .replace(/\b(blonde|blond|caucasian|european|western european|blue[\s-]?eyes|light[\s-]?brown hair|auburn hair|fair[\s-]?skinned european|nordic features)\b/gi, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[，,]{2,}/g, ',')
+      .replace(/^[\s,]+|[\s,]+$/g, '')
+      .trim();
+  }
+
+  function applyEastAsianEthnicity(text, coreHint) {
+    var src = String(coreHint || '') + ' ' + String(text || '');
+    if (!hasEastAsianCue(src)) return String(text || '');
+    var t = stripWesternBeautyDefaults(text);
     var bits = [];
-    if (!/full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in frame/i.test(t)) {
-      bits.push('full body head-to-toe visible', 'feet in frame', 'standing full figure', 'entire body in frame', 'not cropped at waist or chest');
-    } else {
-      if (!/feet in frame/i.test(t)) bits.push('feet in frame');
-      if (!/not cropped/i.test(t)) bits.push('not cropped at waist or chest');
-      if (!/standing full figure|entire body in frame/i.test(t)) bits.push('standing full figure');
+    if (!/east[\s-]?asian/i.test(t)) bits.push('East Asian');
+    if (!/east[\s-]?asian facial features|asian facial features|east[\s-]?asian appearance/i.test(t)) {
+      bits.push('East Asian facial features', 'distinctly East Asian appearance');
     }
-    if (!hasExplicitCameraAngle(t) && !/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(t)) {
-      bits.push('front view facing camera', 'eye-level', 'looking at camera');
-    }
-    if (!bits.length) return t;
+    if (!bits.length) return t.replace(/\s{2,}/g, ' ').trim();
     var inject = bits.join(', ');
-    // Higher priority: place framing right after the photoreal camera lead, before scene text.
-    var m = t.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*85mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+    var m = t.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
     if (m) {
       t = m[1] + ', ' + inject + t.slice(m[1].length);
+    } else if (/^photorealistic photograph of /i.test(t)) {
+      t = t.replace(/^(photorealistic photograph of )/i, '$1' + inject + ', ');
     } else {
       t = inject + ', ' + t;
     }
     return t.replace(/\s{2,}/g, ' ').trim();
   }
 
-  function forcePhotorealPrompt(prompt) {
+  function applyRealisticFrontFullBody(text) {
+    var t = String(text || '');
+    var userFull = wantsFullBodyFraming(t);
+    if (hasExplicitCropFraming(t) && !userFull) return t;
+    var bits = [];
+    if (!userFull) {
+      bits.push('full body head-to-toe visible', 'feet in frame', 'standing full figure', 'entire body in frame', 'not cropped at waist or chest');
+    } else {
+      // User asked 全身 / full body: stronger, earlier, repeated constraints win over model defaults.
+      bits.push(
+        'full body head-to-toe visible',
+        'feet in frame',
+        'standing full figure',
+        'entire body in frame',
+        'wide full-body shot',
+        'complete figure from head to feet',
+        'not cropped at waist or chest',
+        'not a close-up',
+        'not a half-body portrait'
+      );
+    }
+    if (!hasExplicitCameraAngle(t) && !/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(t)) {
+      bits.push('front view facing camera', 'eye-level', 'looking at camera');
+    }
+    if (!bits.length) return t;
+    var inject = bits.join(', ');
+    // Prefer 35mm for full-body; rewrite portrait-biased 85mm lead if present.
+    t = t.replace(/\bshot on DSLR,\s*85mm\b/gi, 'shot on DSLR, 35mm');
+    // Higher priority: place framing right after the photoreal camera lead, before scene text.
+    var m = t.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+    if (m) {
+      t = m[1] + ', ' + inject + t.slice(m[1].length);
+    } else {
+      t = inject + ', ' + t;
+    }
+    // Repeat a short full-body anchor near the end when user explicitly asked, so truncation still keeps framing.
+    if (userFull && !/, full body head-to-toe visible, feet in frame\s*$/i.test(t)) {
+      t += ', full body head-to-toe visible, feet in frame';
+    }
+    return t.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  function forcePhotorealPrompt(prompt, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var coreHint = opts.core != null ? String(opts.core) : '';
     var text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
     if (!text) text = 'a fictional adult, natural light, DSLR';
     var bare = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(text);
+    // 35mm is ethnicity-neutral and favors full-body over classic 85mm portrait crop.
     var lead = bare
-      ? 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores'
-      : 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture';
+      ? 'photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores'
+      : 'photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores, realistic fabric texture';
     if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
       text = lead + ', ' + text;
     } else if (!/^\s*photoreal/i.test(text)) {
@@ -377,7 +440,13 @@
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
     }
-    text = applyRealisticFrontFullBody(text);
+    // Merge core cue text so 全身 / 东亚 survive structure-prompt rewrite.
+    var framingSource = (coreHint ? coreHint + ', ' : '') + text;
+    if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
+      text = 'full body head-to-toe visible, feet in frame, ' + text;
+    }
+    text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
+    text = applyEastAsianEthnicity(text, coreHint || text);
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
@@ -1513,7 +1582,13 @@
   async function generateOne(run, prompt, index) {
     var engine = run.engine;
     if (run.payload.sourceImage && engine === 'sana') throw new Error('Sana 当前未接入图生图，未切换平台。');
-    prompt = engineFamily(engine) === 'anime' ? prompt : forcePhotorealPrompt(prompt);
+    var coreHint = String(run.coreSource || '') || (typeof value === 'function' ? (value('角色描述') || '') : '');
+    if (engineFamily(engine) === 'anime') {
+      // Honor anime channel wording; still reinject East Asian cues from core when present.
+      prompt = applyEastAsianEthnicity(String(prompt || ''), coreHint);
+    } else {
+      prompt = forcePhotorealPrompt(prompt, { core: coreHint });
+    }
     // Adult/NSFW instructions from core + hidden 成人功能状态 must survive photoreal enrich.
     prompt = withAdultDirective(prompt);
     run.payload.prompt = prompt;
@@ -1536,12 +1611,14 @@
   async function execute(run, restored) {
     try {
       if (!restored) {
+        if (!run.coreSource) run.coreSource = String(run.description || '');
         var structured = '';
         try { structured = await structurePromptForGen(run); } catch (eStruct) {
           ensureActive(run);
           if (run.cancelled || (eStruct && eStruct.name === 'AbortError')) throw eStruct;
         }
         if (structured) {
+          // Structured English is outbound only; keep coreSource for ethnicity/framing cues.
           run.description = structured;
           run.payload.prompt = structured;
         } else {
@@ -1633,6 +1710,7 @@
     if (typeof window.标记核心已用于生成 === 'function') window.标记核心已用于生成();
     resetDisabledEnginesForNewRun();
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
+    run.coreSource = String(value('角色描述') || description || '');
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);
     if ($('纯背景出图') && $('纯背景出图').checked) {
       run.backgroundOnly = false;
@@ -1665,6 +1743,11 @@
         .trim();
     } else if (!/anime|manga|cartoon|动漫|卡通/i.test(negative)) {
       negative += ', anime, manga, cartoon, illustration, cel shading, 2d, lineart';
+    }
+    // Only core/角色描述 — never smart-mod phrases like "Japanese anime illustration".
+    var ethSrc = String(value('角色描述') || run.coreSource || '');
+    if (hasEastAsianCue(ethSrc) && !/caucasian|blonde|european/i.test(negative)) {
+      negative += ', caucasian, european, blonde, blue eyes, western european features';
     }
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
@@ -1725,6 +1808,11 @@
   window.当前引擎 = function () { return resolveEngine(); };
   window.photorealPrompt = photorealPrompt;
   window.forcePhotorealPrompt = forcePhotorealPrompt;
+  window.hasEastAsianCue = hasEastAsianCue;
+  window.applyEastAsianEthnicity = applyEastAsianEthnicity;
+  window.wantsFullBodyFraming = wantsFullBodyFraming;
+  window.hasExplicitCropFraming = hasExplicitCropFraming;
+  window.applyRealisticFrontFullBody = applyRealisticFrontFullBody;
   window.applyRealisticFrontFullBody = applyRealisticFrontFullBody;
   window.hasExplicitCropFraming = hasExplicitCropFraming;
   window.animePrompt = animePrompt;
