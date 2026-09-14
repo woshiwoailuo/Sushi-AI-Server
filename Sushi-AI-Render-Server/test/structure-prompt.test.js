@@ -153,3 +153,22 @@ test('core fidelity lead and heuristic do not invent clothing', () => {
   assert.equal(h.fields.clothing, '');
   assert.doesNotMatch(h.fields.clothing + h.fields.scene, /bikini|beach|nude/i);
 });
+
+test('heuristic covers 翻炒+蒸汽 action-first from kitchen core', () => {
+  const core =
+    '厨房里忙碌的虚构成年女人正在翻炒，蒸汽升腾；纪实抓拍全身正面面向镜头，略带运动感；顶灯与窗光混合，不锈钢锅具有高光；围裙与食材细节清楚，表情专注；无未成年人。';
+  const h = heuristicStructureFromText(core);
+  assert.match(h.fields.pose, /stir[\s-]?fry|tossing food in wok|mid-motion/i);
+  assert.match(h.fields.pose, /steam|vapor/i);
+  assert.match(h.fields.clothing, /apron|wok|stainless|ingredient/i);
+  assert.match(h.fields.scene, /kitchen/i);
+  assert.match(h.fields.style, /documentary|candid|photojournal|photoreal/i);
+  assert.match(h.fields.lighting, /overhead|window light/i);
+  // Action (pose) appears before appearance filler in assembled prompt order
+  const poseIdx = h.promptEn.search(/stir[\s-]?fry|tossing/i);
+  const styleIdx = h.promptEn.search(/photorealistic RAW|DSLR/i);
+  assert.ok(poseIdx >= 0);
+  assert.ok(styleIdx < 0 || poseIdx < styleIdx, 'action should appear before style filler');
+  assert.match(CORE_FIDELITY_LEAD, /lead with described actions|actions then subject props/i);
+  assert.match(STRUCTURE_SYSTEM, /ACTION-FIRST|翻炒|steam/i);
+});

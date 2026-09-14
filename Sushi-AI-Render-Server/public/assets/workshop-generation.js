@@ -610,6 +610,7 @@
     text = applyMaleGenderLocks(text, coreHint || text);
     text = stripExposureBiasDefaults(text, coreHint || text);
     text = applyClothingFidelityLocks(text, coreHint || text);
+    text = applyCoreActionCoverage(text, coreHint || text);
     text = applyCoreFidelityLead(text);
     text = finalizeOutboundCoreLocks(text, coreHint || text);
     return text.replace(/\s{2,}/g, ' ').trim();
@@ -622,13 +623,97 @@
   }
 
   var CORE_FIDELITY_LEAD =
-    'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; do not invent clothing, props, pose, identity, gender, revealing outfits, extra people, or setting not in the core; when gender is unspecified stay gender-neutral with no woman default; lead with core facts';
+    'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; lead with described actions then subject props lighting camera before generic fillers; do not invent clothing, props, pose, identity, gender, revealing outfits, extra people, or setting not in the core; when gender is unspecified stay gender-neutral with no woman default; lead with core facts';
 
   function applyCoreFidelityLead(prompt) {
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (!text) return text;
     if (/faithful to core description/i.test(text)) return text;
     return (CORE_FIDELITY_LEAD + ', ' + text).replace(/\s{2,}/g, ' ').trim();
+  }
+
+  /**
+   * Coverage map from core cues → English phrases that MUST appear outbound.
+   * Longest/most-specific cues first. Categories drive action-first ordering.
+   * Visible 核心描述 is never mutated — outbound English only.
+   */
+  var CORE_COVERAGE_RULES = [
+    { re: /翻炒|颠勺|炒菜|wok[\s-]?toss|stir[\s-]?fry(?:ing)?|toss(?:ing)?\s+(?:food|ingredients)?\s*(?:in\s+)?(?:a\s+)?wok/i, en: 'stir-frying tossing food in wok mid-motion', check: /stir[\s-]?fry|tossing(?:\s+food)?|wok[\s-]?toss|mid-motion/i, cat: 'action' },
+    { re: /蒸汽升腾|冒着?蒸汽|热气腾腾|蒸汽|白汽|steam\s+ris|rising\s+steam|visible\s+(?:rising\s+)?(?:steam|vapor|vapour)/i, en: 'visible rising steam vapor', check: /steam|vapor|vapour/i, cat: 'atmosphere' },
+    { re: /正在(?:忙碌地)?(?:做菜|烹饪|炒)|忙碌(?:地)?(?:做菜|烹饪|翻炒)|busy\s+cook|actively\s+cook/i, en: 'actively cooking in motion', check: /actively\s+cook|cooking\s+in\s+motion|busy\s+cook|stir-fry/i, cat: 'action' },
+    { re: /运动感|略带运动|动作感|motion\s+(?:blur|sense|feel)|slight\s+motion/i, en: 'slight motion blur hint from cooking action', check: /motion(?:\s+blur)?|in\s+motion|mid-motion/i, cat: 'action' },
+    { re: /不锈钢锅|炒锅|锅具|不锈钢|wok|stainless\s+(?:steel\s+)?(?:wok|cookware|pan|pot)/i, en: 'stainless steel wok with specular highlights', check: /stainless|wok|cookware/i, cat: 'prop' },
+    { re: /围裙|apron/i, en: 'apron clearly visible', check: /apron/i, cat: 'prop' },
+    { re: /食材|菜肴|ingredients|food\s+detail/i, en: 'ingredients and food details clearly visible', check: /ingredient|food\s+detail|vegetables?\b|food\s+clearly/i, cat: 'prop' },
+    { re: /厨房|kitchen/i, en: 'kitchen', check: /kitchen/i, cat: 'scene' },
+    { re: /顶灯与窗光|顶灯.*?窗光|窗光.*?顶灯|overhead.*?window\s+light|mixed\s+overhead/i, en: 'mixed overhead and window light', check: /overhead|window\s+light|mixed.*light/i, cat: 'light' },
+    { re: /高光|specular\s+highlight/i, en: 'specular metal highlights', check: /specular|highlight/i, cat: 'light' },
+    { re: /纪实|抓拍|documentary|candid|photojournal/i, en: 'documentary candid photojournalistic capture', check: /documentary|candid|photojournal/i, cat: 'style' },
+    { re: /写实|photoreal|realistic\s+photo|RAW\s+photo/i, en: 'photorealistic', check: /photoreal|realistic\s+photo|RAW\s+photo/i, cat: 'style' },
+    { re: /表情专注|神情专注|专注(?:表情)?|focused\s+expression/i, en: 'focused expression', check: /focused\s+expression|concentrated\s+(?:look|expression)/i, cat: 'detail' },
+    { re: /全身正面|正面面向镜头|面向镜头|full[\s-]?body\s+front|facing\s+camera/i, en: 'full-body front view facing camera', check: /full[\s-]?body|front\s+view|facing\s+camera/i, cat: 'camera' }
+  ];
+
+  var DYNAMIC_ACTION_NEG =
+    'static pose, standing idle, arms idle at sides, frozen still pose, no steam, empty cold pan, posed looking at camera without cooking action, idle standing without wok motion';
+
+  function hasDynamicCookingAction(core) {
+    return /翻炒|颠勺|炒菜|蒸汽升腾|冒着?蒸汽|热气腾腾|正在(?:忙碌地)?(?:做菜|烹饪|炒)|wok[\s-]?toss|stir[\s-]?fry|toss(?:ing)?\s+(?:food|ingredients)|rising\s+steam|steam\s+ris/i.test(String(core || ''));
+  }
+
+  /** Extract missing English coverage phrases from core; order ACTION → props → atmosphere → light → camera/style. */
+  function extractCoreCoveragePhrases(core, prompt) {
+    var c = String(core || '');
+    var p = String(prompt || '');
+    if (!c) return [];
+    var order = ['action', 'prop', 'atmosphere', 'scene', 'light', 'camera', 'style', 'detail'];
+    var byCat = Object.create(null);
+    order.forEach(function (k) { byCat[k] = []; });
+    var seenEn = Object.create(null);
+    for (var i = 0; i < CORE_COVERAGE_RULES.length; i += 1) {
+      var rule = CORE_COVERAGE_RULES[i];
+      if (!rule.re.test(c)) continue;
+      // Require English equivalent in outbound prompt (not merely in Chinese core)
+      if (rule.check.test(p)) continue;
+      var key = String(rule.en).toLowerCase();
+      if (seenEn[key]) continue;
+      seenEn[key] = true;
+      var cat = rule.cat || 'detail';
+      if (!byCat[cat]) byCat[cat] = [];
+      byCat[cat].push(rule.en);
+    }
+    var out = [];
+    order.forEach(function (k) {
+      out = out.concat(byCat[k] || []);
+    });
+    return out;
+  }
+
+  /**
+   * Front-load action/prop/atmosphere coverage from core into outbound English.
+   * Smart-mod OFF still runs this (fidelity, not optional sexy pack).
+   * Does NOT invent gender/exposure absent from core.
+   */
+  function applyCoreActionCoverage(prompt, core) {
+    var c = String(core || '');
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!c) return text;
+    var missing = extractCoreCoveragePhrases(c, text);
+    if (missing.length) {
+      text = (missing.join(', ') + (text ? ', ' + text : '')).replace(/\s{2,}/g, ' ').trim();
+    }
+    // Documentary / candid amplification when core asks 纪实/写实/抓拍
+    if (/纪实|抓拍|documentary|candid|photojournal/i.test(c)) {
+      if (!/documentary|candid|photojournal/i.test(text)) {
+        text = 'documentary candid photojournalistic capture, ' + text;
+      }
+      if (/写实|photoreal|realistic/i.test(c) && !/photoreal|realistic\s+photo|RAW\s+photo/i.test(text)) {
+        text = 'photorealistic, ' + text;
+      }
+    } else if (/写实/i.test(c) && !/photoreal|realistic\s+photo|RAW\s+photo|写实/i.test(text)) {
+      text = 'photorealistic, ' + text;
+    }
+    return text.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').replace(/^[\s,]+|[\s,]+$/g, '').trim();
   }
 
   /** Smart-mod layer must not contradict core clothing/pose/identity/scene. */
@@ -732,6 +817,8 @@
     text = applyMaleGenderLocks(text, coreHint || text);
     text = stripExposureBiasDefaults(text, coreHint || text);
     text = applyClothingFidelityLocks(text, coreHint || text);
+    // Smart-mod OFF still must cover core actions/props (fidelity, not optional pack)
+    text = applyCoreActionCoverage(text, coreHint || text);
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
     }
@@ -2170,6 +2257,7 @@
       prompt = applyMaleGenderLocks(prompt, coreHint);
       prompt = stripExposureBiasDefaults(prompt, coreHint);
       prompt = applyClothingFidelityLocks(prompt, coreHint);
+      prompt = applyCoreActionCoverage(prompt, coreHint);
       prompt = applyCoreFidelityLead(prompt);
       prompt = ensureNoTextOnImage(prompt);
     } else if (smartOn) {
@@ -2493,6 +2581,12 @@
         negative += ', nude, naked, nudity, lingerie, cleavage, skimpy outfit, seductive pose, revealing clothes, underwear only, bikini, sheer clothing, topless, bottomless';
       }
     }
+    // 核心有翻炒/蒸汽等动态烹饪动作时，负面压制静态站立、无蒸汽
+    if (hasDynamicCookingAction(ethSrc) || hasDynamicCookingAction(String(run.coreSource || '')) || hasDynamicCookingAction(description)) {
+      if (!/static pose|standing idle|no steam|empty cold pan/i.test(negative)) {
+        negative += ', ' + DYNAMIC_ACTION_NEG;
+      }
+    }
     // 核心男性时负面强压女人/女性身体漂移
     if (isMaleOnlyCore(ethSrc) || isMaleOnlyCore(String(run.coreSource || ''))) {
       if (!/\bwoman\b|\bfemale\b|feminine face|female body/i.test(negative)) {
@@ -2614,6 +2708,11 @@
   window.minimalOutboundPrompt = minimalOutboundPrompt;
   window.CORE_FIDELITY_LEAD = CORE_FIDELITY_LEAD;
   window.applyCoreFidelityLead = applyCoreFidelityLead;
+  window.CORE_COVERAGE_RULES = CORE_COVERAGE_RULES;
+  window.DYNAMIC_ACTION_NEG = DYNAMIC_ACTION_NEG;
+  window.hasDynamicCookingAction = hasDynamicCookingAction;
+  window.extractCoreCoveragePhrases = extractCoreCoveragePhrases;
+  window.applyCoreActionCoverage = applyCoreActionCoverage;
   window.sanitizeModifierAgainstCore = sanitizeModifierAgainstCore;
   window.ensureNoTextOnImage = ensureNoTextOnImage;
   window.hasEastAsianCue = hasEastAsianCue;
