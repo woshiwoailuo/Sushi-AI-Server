@@ -342,23 +342,23 @@
 
   function localEditChangeDirective(core) {
     var t = String(core || '').replace(/\s+/g, ' ').trim();
-    if (!t) return 'CRITICAL EDIT (must be clearly visible): apply the stated local change so it is obvious';
+    if (!t) return 'Visible edit: apply the stated local change so it is obvious';
     if (/抬起左手|左手抬起|左手举起|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?left\s+(?:hand|arm)/i.test(t)) {
-      return 'CRITICAL EDIT (must be clearly visible): left hand raised high, left arm lifted upward, raised left hand clearly visible';
+      return 'Visible edit: left hand raised high, left arm lifted upward, raised left hand clearly visible';
     }
     if (/抬起右手|右手抬起|右手举起|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?right\s+(?:hand|arm)/i.test(t)) {
-      return 'CRITICAL EDIT (must be clearly visible): right hand raised high, right arm lifted upward, raised right hand clearly visible';
+      return 'Visible edit: right hand raised high, right arm lifted upward, raised right hand clearly visible';
     }
     if (/举手|抬起|举起|抬手|伸手|挥手|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|arms?\s+(?:raised|up)/i.test(t)) {
-      return 'CRITICAL EDIT (must be clearly visible): hand/arm raised as requested, pose change obvious and limbs clearly different from the reference';
+      return 'Visible edit: hand/arm raised as requested, pose change obvious and limbs clearly different from the reference';
     }
     if (/转头|回头|侧头|扭头|侧过脸|低头|抬头|turn(?:s|ed|ing)?\s+(?:(?:the)\s+)?head|look(?:s|ing)?\s+(?:left|right|away)/i.test(t)) {
-      return 'CRITICAL EDIT (must be clearly visible): head turned/oriented as requested, new head direction clearly visible';
+      return 'Visible edit: head turned/oriented as requested, new head direction clearly visible';
     }
     if (isPoseGestureEdit(t)) {
-      return 'CRITICAL EDIT (must be clearly visible): apply the requested pose/gesture change strongly so limbs/posture clearly differ from the reference';
+      return 'Visible edit: apply the requested pose/gesture change strongly so limbs/posture clearly differ from the reference';
     }
-    return 'CRITICAL EDIT (must be clearly visible): apply the stated local change so it is obvious';
+    return 'Visible edit: apply the stated local change so it is obvious';
   }
 
   function isLocalEditCore(text) {
@@ -399,10 +399,10 @@
         .replace(/[，,]{2,}/g, ',')
         .replace(/^[,\s]+|[,\s]+$/g, '')
         .trim();
-    } else if (/CRITICAL EDIT \(must be clearly visible\)|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(t)) {
+    } else if (/CRITICAL EDIT \(must be clearly visible\)|Visible edit:|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(t)) {
       return t;
     }
-    if (/CRITICAL EDIT \(must be clearly visible\)/i.test(t)) {
+    if (/CRITICAL EDIT \(must be clearly visible\)|Visible edit:/i.test(t)) {
       if (pose && !/allow pose\/gesture\/limbs to change/i.test(t)) {
         return (t + ', ' + keep).replace(/\s{2,}/g, ' ').trim();
       }
@@ -476,9 +476,10 @@
     if (!hasEastAsianCue(src)) return String(text || '');
     var t = stripWesternBeautyDefaults(text);
     var bits = [];
+    // Soft reinforce when core states ethnicity — recognizable, not a triple wall
     if (!/east[\s-]?asian/i.test(t)) bits.push('East Asian');
-    if (!/east[\s-]?asian facial features|asian facial features|east[\s-]?asian appearance/i.test(t)) {
-      bits.push('East Asian facial features', 'distinctly East Asian appearance');
+    if (!/east[\s-]?asian facial features|asian facial features/i.test(t)) {
+      bits.push('East Asian facial features');
     }
     if (!bits.length) return t.replace(/\s{2,}/g, ' ').trim();
     var inject = bits.join(', ');
@@ -493,61 +494,41 @@
     return t.replace(/\s{2,}/g, ' ').trim();
   }
 
-  function applyRealisticFrontFullBody(text) {
+  function applyRealisticFrontFullBody(text, options) {
+    var opts = options && typeof options === 'object' ? options : {};
     var t = String(text || '');
-    var userFull = wantsFullBodyFraming(t);
-    if (hasExplicitCropFraming(t) && !userFull) return t;
+    var coreHint = opts.core != null ? String(opts.core) : '';
+    var src = (coreHint ? coreHint + ' ' : '') + t;
+    var userFull = wantsFullBodyFraming(src);
+    // Soft: do NOT invent full-body / facing-camera / 35mm walls when core lacks framing cues
+    if (!userFull) return t;
+    if (hasExplicitCropFraming(t) && !wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(t)) return t;
+    // Moderate recognizable reinforcement — enough for the model to notice, not keyword spam
     var bits = [];
-    if (!userFull) {
-      bits.push(
-        'full body head-to-toe visible',
-        'feet in frame',
-        'head and feet both visible',
-        'standing full figure',
-        'entire body in frame',
-        'not cropped at waist or chest'
-      );
+    if (!/full[\s-]?body|head[\s-]?to[\s-]?toe|feet in frame/i.test(t)) {
+      bits.push('full body head-to-toe visible', 'feet in frame');
     } else {
-      // User asked 全身 / full body: stronger, earlier, repeated constraints win over model defaults.
-      bits.push(
-        'full body head-to-toe visible',
-        'feet in frame',
-        'head and feet both visible',
-        'standing full figure',
-        'entire body in frame',
-        'wide FOV full-body shot',
-        'wide enough field of view',
-        'complete figure from crown to shoes',
-        'uncropped standing full figure',
-        'space above head and below feet',
-        'subject fills vertical frame from head to toe',
-        'not cropped at waist or chest',
-        'not a close-up',
-        'not a half-body portrait',
-        'no waist crop'
-      );
+      if (!/feet in frame/i.test(t)) bits.push('feet in frame');
+      if (!/head and feet both visible|head[\s-]?to[\s-]?toe/i.test(t)) bits.push('head and feet both visible');
     }
-    if (!hasExplicitCameraAngle(t) && !/front[\s-]?view|front[\s-]?facing|facing (the )?camera|looking at (the )?camera|eye[\s-]?level|正面|面向镜头|平视/i.test(t)) {
-      bits.push('front view facing camera', 'eye-level', 'looking at camera');
+    // Facing camera only when core asks 正面/面向镜头
+    if (/正面|面向镜头|平视|facing\s+(?:the\s+)?camera|front\s+view|eye[\s-]?level/i.test(src)
+        && !hasExplicitCameraAngle(t)
+        && !/front[\s-]?view|facing (the )?camera|eye[\s-]?level|looking at (the )?camera/i.test(t)) {
+      bits.push('front view facing camera');
     }
-    if (!bits.length) return t;
-    var inject = bits.join(', ');
-    // Prefer wider FOV for full-body; rewrite portrait-biased 85/50mm lead if present.
-    if (userFull) {
+    if (!bits.length) {
+      // Soft wider FOV when user asked 全身
       t = t.replace(/\bshot on DSLR,\s*(?:85|50|35)mm\b/gi, 'shot on DSLR, 28mm');
-    } else {
-      t = t.replace(/\bshot on DSLR,\s*85mm\b/gi, 'shot on DSLR, 35mm');
+      return t.replace(/\s{2,}/g, ' ').trim();
     }
-    // Higher priority: place framing right after the photoreal camera lead, before scene text.
-    var m = t.match(/^(photorealistic RAW photo,\s*shot on DSLR,\s*(?:28|35|50|85)mm,\s*natural skin pores(?:,\s*realistic fabric texture)?)/i);
+    var inject = bits.join(', ');
+    t = t.replace(/\bshot on DSLR,\s*(?:85|50|35)mm\b/gi, 'shot on DSLR, 28mm');
+    var m = t.match(/^(photorealistic (?:RAW )?photo(?:graph)?(?:,\s*shot on DSLR,\s*(?:28|35|50|85)mm)?(?:,\s*natural (?:skin pores|light))?(?:,\s*realistic fabric texture)?)/i);
     if (m) {
       t = m[1] + ', ' + inject + t.slice(m[1].length);
     } else {
       t = inject + ', ' + t;
-    }
-    // Repeat a short full-body anchor near the end when user explicitly asked, so truncation still keeps framing.
-    if (userFull && !/, full body head-to-toe visible, feet in frame, head and feet both visible\s*$/i.test(t)) {
-      t += ', full body head-to-toe visible, feet in frame, head and feet both visible';
     }
     return t.replace(/\s{2,}/g, ' ').trim();
   }
@@ -571,39 +552,33 @@
     var opts = options && typeof options === 'object' ? options : {};
     var coreHint = opts.core != null ? String(opts.core) : '';
     var text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
-    if (!text) text = 'a fictional adult, natural light, DSLR';
-    var bare = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(text);
-    // Wider FOV favors full-body over classic 85mm portrait crop; 28mm when user asked 全身.
-    var fullCue = wantsFullBodyFraming(coreHint) || wantsFullBodyFraming(text);
-    var lensMm = fullCue ? '28mm' : '35mm';
-    var lead = bare
-      ? 'photorealistic RAW photo, shot on DSLR, ' + lensMm + ', natural skin pores'
-      : 'photorealistic RAW photo, shot on DSLR, ' + lensMm + ', natural skin pores, realistic fabric texture';
-    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
+    if (!text) text = 'a fictional adult, natural light';
+    // Minimal photoreal default — no always-on 35mm / RAW / cinematic / skin-pore walls
+    var lead = 'photorealistic photograph, natural light';
+    if (!/photoreal|RAW photo|DSLR|real human|写实摄影|写实照片|documentary|candid/i.test(text)) {
       text = lead + ', ' + text;
-    } else if (!/^\s*photoreal/i.test(text)) {
+    } else if (!/^\s*photoreal/i.test(text) && !/documentary|candid/i.test(text)) {
       text = 'photorealistic photograph of ' + text;
     }
-    if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric|shallow depth/i.test(text)) {
-      text += ', natural light, cinematic still, shallow depth of field';
+    if (!/natural light|warm light|soft light|golden hour|studio light|window light|overhead/i.test(text)) {
+      text += ', natural light';
     }
-    if (!/skin pores|subsurface|imperfection|fabric texture|material detail|sharp focus/i.test(text)) {
-      text += ', natural skin texture, clear material detail, sharp focus, real human';
-    }
-    if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(text)) {
-      text += ', not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading';
+    // Soft anti-anime (keep); skip long not-manga/not-cel walls
+    if (!/not anime|no anime|非卡通|非动漫|NOT anime|not cartoon|not 2d/i.test(text)) {
+      text += ', not anime, not cartoon, not 2d';
     }
     if (!/fictional adult|18\+|no minors/i.test(text)) {
       text += ', fictional adult 18+ only, no minors';
     }
-    // Merge core cue text so 全身 / 东亚 survive structure-prompt rewrite.
-    // Local img2img edits must keep original composition — skip full-body redraw injection.
+    // Framing only when core asks 全身 — never invent full-body / facing-camera walls
     if (!opts.localEdit) {
       var framingSource = (coreHint ? coreHint + ', ' : '') + text;
-      if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
-        text = 'full body head-to-toe visible, feet in frame, ' + text;
+      if (wantsFullBodyFraming(framingSource)) {
+        if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
+          text = 'full body head-to-toe visible, feet in frame, ' + text;
+        }
+        text = applyRealisticFrontFullBody(text, { core: coreHint });
       }
-      text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
     text = stripInjectedFemaleDefaults(text, coreHint || text);
@@ -623,7 +598,7 @@
   }
 
   var CORE_FIDELITY_LEAD =
-    'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; lead with described actions then subject props lighting camera before generic fillers; do not invent clothing, props, pose, identity, gender, revealing outfits, extra people, or setting not in the core; when gender is unspecified stay gender-neutral with no woman default; lead with core facts';
+    'Faithful to core description: depict only what the core states; include every explicitly described element (clothing, props, pose, scene, actions, counts) and omit none; prefer completeness of core facts over filler style words; lead with described actions then subject props lighting camera before generic fillers; do not invent clothing, props, pose, identity, gender, revealing outfits, extra people, or setting not in the core; when gender is unspecified stay gender-neutral without inventing a gendered subject; lead with core facts';
 
   function applyCoreFidelityLead(prompt) {
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
@@ -638,20 +613,43 @@
    * Visible 核心描述 is never mutated — outbound English only.
    */
   var CORE_COVERAGE_RULES = [
+    // COUNT first — multi-person must be recognizable outbound
+    { re: /两名|两个|两位|二人|俩人|一对|情侣|情侣们|two\s+(?:adults?|people|persons|figures)|a\s+couple|both\s+(?:adults?|people)/i, en: 'two adults', check: /\btwo\b|\bboth\b|couple|pair of/i, cat: 'count' },
+    { re: /三名|三个|三位|三人|three\s+(?:adults?|people|persons|figures)/i, en: 'three adults', check: /\bthree\b/i, cat: 'count' },
+    { re: /多名|几个|数名|几位|多人|several\s+(?:adults?|people)|multiple\s+(?:adults?|people)/i, en: 'multiple adults', check: /multiple|several|\bgroup\b|more than one/i, cat: 'count' },
+    // RELATION / mutual action
+    { re: /对视|互相看|彼此对视|四目相对|looking at each other|eye\s*contact|gaze(?:s|ing)?\s+at\s+each\s+other|互望/i, en: 'looking at each other, eye contact', check: /looking at each other|eye\s*contact|gazing at each other|mutual gaze/i, cat: 'action' },
+    { re: /拥抱|相拥|抱着|embrac(?:e|ing)|hugg(?:ing|ed)?\b/i, en: 'embracing hugging', check: /embrac|hugg/i, cat: 'action' },
+    { re: /握手|handshak|holding\s+hands|牵手/i, en: 'holding hands', check: /holding hands|handshak|hand in hand/i, cat: 'action' },
     { re: /翻炒|颠勺|炒菜|wok[\s-]?toss|stir[\s-]?fry(?:ing)?|toss(?:ing)?\s+(?:food|ingredients)?\s*(?:in\s+)?(?:a\s+)?wok/i, en: 'stir-frying tossing food in wok mid-motion', check: /stir[\s-]?fry|tossing(?:\s+food)?|wok[\s-]?toss|mid-motion/i, cat: 'action' },
-    { re: /蒸汽升腾|冒着?蒸汽|热气腾腾|蒸汽|白汽|steam\s+ris|rising\s+steam|visible\s+(?:rising\s+)?(?:steam|vapor|vapour)/i, en: 'visible rising steam vapor', check: /steam|vapor|vapour/i, cat: 'atmosphere' },
     { re: /正在(?:忙碌地)?(?:做菜|烹饪|炒)|忙碌(?:地)?(?:做菜|烹饪|翻炒)|busy\s+cook|actively\s+cook/i, en: 'actively cooking in motion', check: /actively\s+cook|cooking\s+in\s+motion|busy\s+cook|stir-fry/i, cat: 'action' },
-    { re: /运动感|略带运动|动作感|motion\s+(?:blur|sense|feel)|slight\s+motion/i, en: 'slight motion blur hint from cooking action', check: /motion(?:\s+blur)?|in\s+motion|mid-motion/i, cat: 'action' },
+    { re: /跑步|奔跑|奔跑着|runn(?:ing|er)|jogging/i, en: 'running in motion', check: /runn(?:ing)?|jogging|in motion/i, cat: 'action' },
+    { re: /弹琴|弹钢琴|演奏钢琴|playing\s+(?:the\s+)?piano/i, en: 'playing piano', check: /piano|playing\s+(?:the\s+)?piano/i, cat: 'action' },
+    { re: /拿着|手持|握着|举着|holding\b/i, en: 'holding object clearly visible', check: /holding\b|in (?:his|her|their) hand/i, cat: 'action' },
+    { re: /运动感|略带运动|动作感|motion\s+(?:blur|sense|feel)|slight\s+motion/i, en: 'slight motion blur hint from action', check: /motion(?:\s+blur)?|in\s+motion|mid-motion/i, cat: 'action' },
+    // Atmosphere / light
+    { re: /蒸汽升腾|冒着?蒸汽|热气腾腾|蒸汽|白汽|steam\s+ris|rising\s+steam|visible\s+(?:rising\s+)?(?:steam|vapor|vapour)/i, en: 'visible rising steam vapor', check: /steam|vapor|vapour/i, cat: 'atmosphere' },
+    { re: /暖光|暖色光|温暖(?:的)?(?:室内)?光|暖黄|warm\s+(?:light|lighting|glow|interior)|tungsten\s+(?:light|glow)/i, en: 'warm interior lighting', check: /warm\s+(?:light|lighting|glow|interior)|tungsten|orange(?:\s+rim)?\s+light/i, cat: 'light' },
+    { re: /顶灯与窗光|顶灯.*?窗光|窗光.*?顶灯|overhead.*?window\s+light|mixed\s+overhead/i, en: 'mixed overhead and window light', check: /overhead|window\s+light|mixed.*light/i, cat: 'light' },
+    { re: /高光|specular\s+highlight/i, en: 'specular metal highlights', check: /specular|highlight/i, cat: 'light' },
+    // Props / objects
     { re: /不锈钢锅|炒锅|锅具|不锈钢|wok|stainless\s+(?:steel\s+)?(?:wok|cookware|pan|pot)/i, en: 'stainless steel wok with specular highlights', check: /stainless|wok|cookware/i, cat: 'prop' },
     { re: /围裙|apron/i, en: 'apron clearly visible', check: /apron/i, cat: 'prop' },
     { re: /食材|菜肴|ingredients|food\s+detail/i, en: 'ingredients and food details clearly visible', check: /ingredient|food\s+detail|vegetables?\b|food\s+clearly/i, cat: 'prop' },
+    { re: /雨伞|黑伞|撑伞|umbrella/i, en: 'umbrella clearly visible', check: /umbrella/i, cat: 'prop' },
+    { re: /桌子|桌边|餐桌|table\b/i, en: 'table', check: /\btable\b/i, cat: 'prop' },
+    { re: /椅子|沙发|sofa|chair/i, en: 'chair or sofa', check: /chair|sofa|seat/i, cat: 'prop' },
+    // Scene
     { re: /厨房|kitchen/i, en: 'kitchen', check: /kitchen/i, cat: 'scene' },
-    { re: /顶灯与窗光|顶灯.*?窗光|窗光.*?顶灯|overhead.*?window\s+light|mixed\s+overhead/i, en: 'mixed overhead and window light', check: /overhead|window\s+light|mixed.*light/i, cat: 'light' },
-    { re: /高光|specular\s+highlight/i, en: 'specular metal highlights', check: /specular|highlight/i, cat: 'light' },
-    { re: /纪实|抓拍|documentary|candid|photojournal/i, en: 'documentary candid photojournalistic capture', check: /documentary|candid|photojournal/i, cat: 'style' },
+    { re: /室内|屋内|房间里|indoors?|indoor\s+room|interior/i, en: 'indoor interior', check: /indoor|interior|inside\b|room\b/i, cat: 'scene' },
+    { re: /图书馆|library/i, en: 'library', check: /library/i, cat: 'scene' },
+    { re: /雨夜|雨街|rainy\s+night|rain[- ]?soaked\s+street/i, en: 'rainy night street', check: /rainy|rain|wet street/i, cat: 'scene' },
+    // Style / realism (short, soft)
+    { re: /纪实|抓拍|documentary|candid|photojournal/i, en: 'documentary candid', check: /documentary|candid|photojournal/i, cat: 'style' },
     { re: /写实|photoreal|realistic\s+photo|RAW\s+photo/i, en: 'photorealistic', check: /photoreal|realistic\s+photo|RAW\s+photo/i, cat: 'style' },
     { re: /表情专注|神情专注|专注(?:表情)?|focused\s+expression/i, en: 'focused expression', check: /focused\s+expression|concentrated\s+(?:look|expression)/i, cat: 'detail' },
-    { re: /全身正面|正面面向镜头|面向镜头|full[\s-]?body\s+front|facing\s+camera/i, en: 'full-body front view facing camera', check: /full[\s-]?body|front\s+view|facing\s+camera/i, cat: 'camera' }
+    // Camera only when core states facing/front — soft single phrase
+    { re: /全身正面|正面面向镜头|面向镜头|full[\s-]?body\s+front|facing\s+camera/i, en: 'front view facing camera', check: /front\s+view|facing\s+camera|eye[- ]?level/i, cat: 'camera' }
   ];
 
   var DYNAMIC_ACTION_NEG =
@@ -666,7 +664,7 @@
     var c = String(core || '');
     var p = String(prompt || '');
     if (!c) return [];
-    var order = ['action', 'prop', 'atmosphere', 'scene', 'light', 'camera', 'style', 'detail'];
+    var order = ['count', 'action', 'prop', 'atmosphere', 'scene', 'light', 'camera', 'style', 'detail'];
     var byCat = Object.create(null);
     order.forEach(function (k) { byCat[k] = []; });
     var seenEn = Object.create(null);
@@ -699,22 +697,34 @@
     var text = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (!c) return text;
     var missing = extractCoreCoveragePhrases(c, text);
+    // Soft cap: recognizable coverage, not keyword walls
+    if (missing.length > 8) missing = missing.slice(0, 8);
     if (missing.length) {
       text = (missing.join(', ') + (text ? ', ' + text : '')).replace(/\s{2,}/g, ' ').trim();
     }
-    // Documentary / candid amplification when core asks 纪实/写实/抓拍
+    // Soft documentary / photoreal amplify from core — short tokens only
     if (/纪实|抓拍|documentary|candid|photojournal/i.test(c)) {
       if (!/documentary|candid|photojournal/i.test(text)) {
-        text = 'documentary candid photojournalistic capture, ' + text;
+        text = 'documentary candid, ' + text;
       }
-      if (/写实|photoreal|realistic/i.test(c) && !/photoreal|realistic\s+photo|RAW\s+photo/i.test(text)) {
-        text = 'photorealistic, ' + text;
-      }
-    } else if (/写实/i.test(c) && !/photoreal|realistic\s+photo|RAW\s+photo|写实/i.test(text)) {
+    }
+    if (/写实|photoreal|realistic/i.test(c) && !/photoreal|realistic\s+photo|RAW\s+photo|写实/i.test(text)) {
       text = 'photorealistic, ' + text;
     }
     return text.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').replace(/^[\s,]+|[\s,]+$/g, '').trim();
   }
+
+  /** Detect multi-person count ≥2 from core (两名/两个/二人/couple/…). */
+  function corePersonCount(core) {
+    var c = String(core || '');
+    if (/三名|三个|三位|三人|three\s+(?:adults?|people|persons|figures)/i.test(c)) return 3;
+    if (/两名|两个|两位|二人|俩人|一对|情侣|two\s+(?:adults?|people|persons|figures)|a\s+couple|both\s+(?:adults?|people)|对视/i.test(c)) return 2;
+    if (/多名|几个|数名|几位|多人|several\s+(?:adults?|people)|multiple\s+(?:adults?|people)/i.test(c)) return 2;
+    return 1;
+  }
+
+  var MULTI_PERSON_NEG =
+    'single person, solo portrait, alone, one woman only, one man only, only one person, solitary figure, empty second person';
 
   /** Smart-mod layer must not contradict core clothing/pose/identity/scene. */
   function sanitizeModifierAgainstCore(suffix, core) {
@@ -722,13 +732,16 @@
     var c = String(core || '');
     if (!mod) return mod;
     // Pose / camera contradictions
-    if (/侧脸|侧面|侧身|背面|背影|后视|profile|from behind|back view|side view|rear view|three[\s-]?quarter/i.test(c)) {
+    if (/侧脸|侧面|侧身|背面|背影|后视|profile|from behind|back view|side view|rear view|three[\s-]?quarter/i.test(c)
+        || /对视|互相看|彼此对视|looking at each other|eye\s*contact/i.test(c)
+        || corePersonCount(c) >= 2) {
       mod = mod
         .replace(/,?\s*full-body front view eye-level facing camera/gi, '')
         .replace(/,?\s*full-body front view(?: eye-level)?/gi, '')
         .replace(/,?\s*full-body facing camera(?: head to toe)?/gi, '')
         .replace(/,?\s*front view(?: facing camera)?/gi, '')
         .replace(/,?\s*facing camera/gi, '')
+        .replace(/,?\s*looking at camera/gi, '')
         .replace(/,?\s*eye-level facing camera/gi, '');
     }
     if (/半身|七分身|胸像|头像|特写|近景|close[\s-]?up|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body/i.test(c)) {
@@ -778,7 +791,7 @@
     return text.replace(/\s{2,}/g, ' ').trim();
   }
 
-  /** 未点智能修饰：出图英文=核心翻译为主，仅保留产品必需锁（写实风格/防文字/东亚若核心有/全身）；不堆写实修饰词库与暴露偏置 */
+  /** 未点智能修饰：出图英文=核心翻译为主；最小写实/防文字/东亚若核心有；全身仅当核心要求；不堆写实修饰词库与暴露偏置 */
   function minimalOutboundPrompt(prompt, options) {
     var opts = options && typeof options === 'object' ? options : {};
     var coreHint = opts.core != null ? String(opts.core) : '';
@@ -806,11 +819,13 @@
     }
     if (!opts.localEdit) {
       var framingSource = (coreHint ? coreHint + ', ' : '') + text;
-      if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
-        text = 'full body head-to-toe visible, feet in frame, ' + text;
+      // Soft: framing only when core asks 全身 — no always-on full-body / facing-camera
+      if (wantsFullBodyFraming(framingSource)) {
+        if (wantsFullBodyFraming(coreHint) && !wantsFullBodyFraming(text)) {
+          text = 'full body head-to-toe visible, feet in frame, ' + text;
+        }
+        text = applyRealisticFrontFullBody(text, { core: coreHint });
       }
-      // 产品默认全身正面锁（与写实通道一致）；有半身/特写意图时 applyRealisticFrontFullBody 会尊重
-      text = applyRealisticFrontFullBody(wantsFullBodyFraming(framingSource) && !wantsFullBodyFraming(text) ? ('full body, ' + text) : text);
     }
     text = applyEastAsianEthnicity(text, coreHint || text);
     text = stripInjectedFemaleDefaults(text, coreHint || text);
@@ -870,6 +885,16 @@
     if (hasNudeIntent(src) || hasExposureIntent(src)) return String(text || '');
     var t = String(text || '');
     if (!t) return t;
+    // Protect instructional leads (adult bans + fidelity) from token stripping
+    var shields = [];
+    t = t.replace(/adult mode enabled[\s\S]*?no minors;?/gi, function (m) {
+      shields.push(m.replace(/[;.\s]+$/, ''));
+      return '__ADULT_DIR_' + (shields.length - 1) + '__';
+    });
+    t = t.replace(/Faithful to core description:[\s\S]*?lead with core facts/gi, function (m) {
+      shields.push(m);
+      return '__ADULT_DIR_' + (shields.length - 1) + '__';
+    });
     t = t
       .replace(EXPOSURE_BIAS_TOKEN_RE, ' ')
       .replace(/,\s*explicit adult nudity[^,]*/gi, '')
@@ -881,12 +906,15 @@
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
       .trim();
-    return t;
+    for (var si = 0; si < shields.length; si += 1) {
+      t = t.replace('__ADULT_DIR_' + si + '__', shields[si]);
+    }
+    return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').replace(/,\s*,/g, ',').replace(/^[\s,]+|[\s,]+$/g, '').trim();
   }
 
   // Positive clothing/exposure anti-lead when core does NOT ask for revealing/nude.
   var CLOTHING_FIDELITY_LEAD =
-    'fully clothed as described, clothing matching the core exactly, modest attire, fabric coverage intact';
+    'clothing matching the core';
 
   // Female / woman cues from core — never invent woman/female defaults when absent.
   var FEMALE_INTENT_RE = /女人|女性|女的|女主|女孩|少女|美女|女郎|姑娘|女士|小姐|女王|公主|妻子|女友|女战士|女角色|\bwoman\b|\bwomen\b|\bfemale\b|\bgirl\b|\blady\b|\bladies\b|\bshe\b|\bher\b|\bhers\b|\b1girl\b|beautiful (?:young )?(?:woman|girl)/i;
@@ -913,6 +941,10 @@
     if (hasFemaleIntent(core)) return String(text || '');
     var t = String(text || '');
     if (!t || !/\b(woman|women|female|girl|lady|ladies|1girl|she|her|hers|breasts?|boobs?|cleavage|feminine|hourglass)\b|beautiful (?:young )?(?:woman|girl)/i.test(t)) return t;
+    t = t.replace(/\bno woman default\b/gi, 'no __WOMAN_DEFAULT__')
+      .replace(/\bno female-default\b/gi, 'no __FEMALE_DEFAULT__')
+      .replace(/\bdo NOT invent woman\b/gi, 'do NOT invent __WOMAN_DEFAULT__')
+      .replace(/\bdo not invent woman\b/gi, 'do not invent __WOMAN_DEFAULT__');
     t = t
       .replace(/\bbeautiful (?:young )?(?:woman|girl|lady)\b/gi, 'adult')
       .replace(/\bfictional adult woman\b/gi, 'fictional adult')
@@ -932,6 +964,8 @@
       .replace(/\bfeminine(?:\s+(?:face|body|figure|features))?\b/gi, ' ')
       .replace(/\b(breasts?|boobs?|cleavage|hourglass(?:\s+figure)?)\b/gi, ' ')
       .replace(/\bsoft curves\b/gi, ' ')
+      .replace(/__WOMAN_DEFAULT__/g, 'woman default')
+      .replace(/__FEMALE_DEFAULT__/g, 'female-default')
       .replace(/\s{2,}/g, ' ')
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
@@ -939,7 +973,7 @@
     return t;
   }
 
-  var MALE_LOCK_LEAD = 'adult man, male, masculine';
+  var MALE_LOCK_LEAD = 'adult man';
 
   /** When core is male-only: strip leftover female/feminine tokens and inject strong male locks FIRST (before photoreal filler). Visible 核心描述 is never mutated. */
   function applyMaleGenderLocks(text, core) {
@@ -968,19 +1002,9 @@
       .replace(/\ba person\b/gi, 'a man')
       .replace(/\bthe person\b/gi, 'the man')
       .replace(/\b1person\b/gi, '1boy');
-    // Gender locks MUST lead the entire prompt (before photoreal / adult filler)
-    t = t
-      .replace(/^\s*adult man,\s*male,\s*masculine,?\s*/i, '')
-      .replace(/,?\s*adult man,\s*male,\s*masculine\b/gi, '')
-      .replace(/,?\s*\badult man\b/gi, '')
-      .replace(/,?\s*\bmasculine\b/gi, '')
-      .replace(/,?\s*\bmale\b(?!\s+body)/gi, '')
-      .replace(/\s{2,}/g, ' ')
-      .replace(/[，,]{2,}/g, ',')
-      .replace(/^[\s,]+|[\s,]+$/g, '')
-      .trim();
-    t = MALE_LOCK_LEAD + ', ' + t;
-    if (!/\badult man\b/i.test(t) || !/\bmale\b/i.test(t) || !/\bmasculine\b/i.test(t)) {
+    // Soft gender lead once — keep "fictional adult man" intact
+    t = t.replace(/^\s*adult man,\s*male,\s*masculine,?\s*/i, '');
+    if (!/^\s*adult man\b/i.test(t)) {
       t = MALE_LOCK_LEAD + ', ' + t;
     }
     return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
@@ -993,8 +1017,10 @@
     if (!t) return t;
     if (hasNudeIntent(src) || hasExposureIntent(src)) return t;
     t = stripExposureBiasDefaults(t, src);
-    if (!/fully clothed as described|clothing matching the core exactly|modest attire|fabric coverage intact/i.test(t)) {
+    if (!/clothing matching the core|fully clothed as described/i.test(t)) {
       t = t
+        .replace(/^\s*clothing matching the core,?\s*/i, '')
+        .replace(/,?\s*clothing matching the core\b/gi, '')
         .replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '')
         .replace(/,?\s*fully clothed as described[^,]*/gi, '')
         .replace(/\s{2,}/g, ' ')
@@ -1026,8 +1052,13 @@
     t = stripExposureBiasDefaults(t, c);
     // Strip any existing identity leads anywhere so we can re-prefix absolute-first
     t = t
+      .replace(/^\s*adult man,\s*male,\s*masculine,?\s*/i, '')
+      .replace(/^\s*adult man,?\s*/i, '')
       .replace(/,?\s*adult man,\s*male,\s*masculine\b/gi, '')
+      .replace(/^\s*fully clothed as described, clothing matching the core exactly, modest attire, fabric coverage intact,?\s*/i, '')
+      .replace(/^\s*clothing matching the core,?\s*/i, '')
       .replace(/,?\s*fully clothed as described, clothing matching the core exactly, modest attire, fabric coverage intact\b/gi, '')
+      .replace(/,?\s*clothing matching the core\b/gi, '')
       .replace(/\s{2,}/g, ' ')
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
@@ -1036,13 +1067,13 @@
     t = applyMaleGenderLocks(t, c);
     // Absolute lead order: gender → clothing → adult → rest (Faithful/photoreal follow)
     var leads = [];
-    if (isMaleOnlyCore(c) && /^\s*adult man,\s*male,\s*masculine\b/i.test(t)) {
+    if (isMaleOnlyCore(c) && /^\s*adult man\b/i.test(t)) {
       leads.push(MALE_LOCK_LEAD);
-      t = t.replace(/^\s*adult man,\s*male,\s*masculine,?\s*/i, '');
+      t = t.replace(/^\s*adult man,\s*male,\s*masculine,?\s*/i, '').replace(/^\s*adult man,?\s*/i, '');
     }
-    if (!hasNudeIntent(c) && !hasExposureIntent(c) && /^\s*fully clothed as described\b/i.test(t)) {
+    if (!hasNudeIntent(c) && !hasExposureIntent(c) && /^\s*(?:clothing matching the core|fully clothed as described)\b/i.test(t)) {
       leads.push(CLOTHING_FIDELITY_LEAD);
-      t = t.replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '');
+      t = t.replace(/^\s*clothing matching the core,?\s*/i, '').replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '');
     }
     var head = leads.length ? leads.join(', ') + ', ' : '';
     if (adultPrefix) head += adultPrefix + ', ';
@@ -2587,6 +2618,19 @@
         negative += ', ' + DYNAMIC_ACTION_NEG;
       }
     }
+    // 核心人数≥2：负面压制单人/独照（避免两名对视变成一人）
+    var personSrc = ethSrc || String(run.coreSource || '') || description;
+    if (corePersonCount(personSrc) >= 2) {
+      if (!/single person|solo portrait|one woman only|only one person/i.test(negative)) {
+        negative += ', ' + MULTI_PERSON_NEG;
+      }
+      // Soft: suppress invented crop-top / midriff when core has no clothing/exposure cue
+      if (!hasExposureIntent(personSrc) && !/衣|裙|衫|外套|毛衣|大衣|sweater|coat|dress|shirt|outfit|clothing|穿着|穿著/i.test(personSrc)) {
+        if (!/crop top|bare midriff|navel|exposed stomach/i.test(negative)) {
+          negative += ', crop top, bare midriff, exposed navel, revealing outfit, lingerie';
+        }
+      }
+    }
     // 核心男性时负面强压女人/女性身体漂移
     if (isMaleOnlyCore(ethSrc) || isMaleOnlyCore(String(run.coreSource || ''))) {
       if (!/\bwoman\b|\bfemale\b|feminine face|female body/i.test(negative)) {
@@ -2710,7 +2754,9 @@
   window.applyCoreFidelityLead = applyCoreFidelityLead;
   window.CORE_COVERAGE_RULES = CORE_COVERAGE_RULES;
   window.DYNAMIC_ACTION_NEG = DYNAMIC_ACTION_NEG;
+  window.MULTI_PERSON_NEG = MULTI_PERSON_NEG;
   window.hasDynamicCookingAction = hasDynamicCookingAction;
+  window.corePersonCount = corePersonCount;
   window.extractCoreCoveragePhrases = extractCoreCoveragePhrases;
   window.applyCoreActionCoverage = applyCoreActionCoverage;
   window.sanitizeModifierAgainstCore = sanitizeModifierAgainstCore;

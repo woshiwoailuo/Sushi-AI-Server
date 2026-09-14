@@ -461,22 +461,21 @@ test('photorealPrompt enriches by default but style-keyword bypass keeps anime/�
 
   const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
   assert.match(plain, /a fictional adult standing by a rainy window/i);
-  assert.match(plain, /photorealistic RAW photo/i);
-  assert.ok(/fully clothed as described|Faithful to core description|photorealistic RAW photo/i.test(plain));
-  assert.ok(plain.toLowerCase().indexOf('photorealistic raw photo') >= 0);
-  assert.match(plain, /photoreal|cinematic|natural light|texture|DSLR|85mm/i);
-  assert.match(plain, /not anime|not manga|not cartoon/i);
+  assert.match(plain, /photorealistic photograph|natural light/i);
+  assert.ok(/clothing matching the core|Faithful to core description|photorealistic photograph/i.test(plain));
+  assert.match(plain, /photoreal|natural light/i);
+  assert.match(plain, /not anime|not cartoon|not 2d/i);
   assert.ok(plain.length > 'a fictional adult standing by a rainy window'.length);
-  assert.ok(plain.toLowerCase().indexOf('photorealistic raw photo') < plain.toLowerCase().indexOf('fictional adult standing'));
+  assert.ok(plain.toLowerCase().indexOf('photorealistic') < plain.toLowerCase().indexOf('fictional adult standing'));
 
   const anime = f.w.photorealPrompt('anime style girl with red hair under cherry blossoms');
   assert.match(anime, /anime style girl with red hair under cherry blossoms/i);
-  assert.doesNotMatch(anime, /not anime|not manga|not cartoon|photorealistic RAW photo/i);
+  assert.doesNotMatch(anime, /not anime|not manga|not cartoon|photorealistic photograph|photorealistic RAW photo/i);
   assert.equal(f.w.hasExplicitArtStyle('二次元插画 夜市少女'), true);
   assert.equal(f.w.hasExplicitArtStyle('窗边的小猫'), false);
   const cn = f.w.photorealPrompt('二次元插画，夜市里的成年少女吃章鱼烧');
   assert.match(cn, /二次元插画/);
-  assert.doesNotMatch(cn, /not anime|photorealistic RAW photo/i);
+  assert.doesNotMatch(cn, /not anime|photorealistic photograph|photorealistic RAW photo/i);
 });
 
 test('写实 channel without smart-mod stays translate-only but still bans text/pinyin in negatives', async t => {
@@ -689,19 +688,19 @@ test('platform picker shows full names without Perch abbreviation', async t => {
 test('photorealPrompt helper still available for style-aware enrich logic', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const plain = f.w.photorealPrompt('a fictional adult standing by a rainy window');
-  assert.match(plain, /photorealistic RAW photo/i);
-  assert.ok(/fully clothed as described|Faithful to core description|photorealistic RAW photo/i.test(plain));
-  assert.ok(plain.toLowerCase().indexOf('photorealistic raw photo') >= 0);
-  assert.match(plain, /not anime|not manga|not cartoon/i);
+  assert.match(plain, /photorealistic photograph/i);
+  assert.ok(/clothing matching the core|Faithful to core description|photorealistic photograph/i.test(plain));
+  assert.ok(plain.toLowerCase().indexOf('photorealistic') >= 0);
+  assert.match(plain, /not anime|not cartoon|not 2d/i);
   const anime = f.w.animePrompt('a fictional adult standing by a rainy window');
   assert.match(anime, /anime illustration/i);
-  assert.doesNotMatch(anime, /not anime|photorealistic RAW photo/i);
+  assert.doesNotMatch(anime, /not anime|photorealistic photograph/i);
   assert.equal(f.w.engineFamily('horde-anime'), 'anime');
   assert.equal(f.w.engineFamily('perchance'), 'perchance');
   assert.equal(f.w.engineFamily('turbo'), 'real');
   assert.equal(typeof f.w.forcePhotorealPrompt, 'function');
   const forced = f.w.forcePhotorealPrompt('anime style girl with red hair');
-  assert.match(forced, /photorealistic RAW photo/i);
+  assert.match(forced, /photorealistic photograph/i);
   assert.match(forced, /not anime/i);
   assert.doesNotMatch(forced, /\banime style\b/i);
 });
@@ -951,7 +950,8 @@ test('balanced gen: no woman/nude tokens when core lacks them; coverage instruct
 
   const minimal = f.w.minimalOutboundPrompt(injected, { core: coreZh });
   assert.match(minimal, /Faithful to core description|include every explicitly described element|omit none/i);
-  assert.doesNotMatch(minimal, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman/i);
+  const sceneMin = minimal.replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '');
+  assert.doesNotMatch(sceneMin, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman/i);
   assert.doesNotMatch(minimal, /\bnude\b|\bnaked\b|unclothed/i);
   assert.match(minimal, /red knit sweater|black umbrella|rainy/i);
 
@@ -991,16 +991,15 @@ test('male core: outbound has male locks and no woman tokens; female core kept; 
   const drifted = 'a fictional adult woman in a trench coat standing on a rainy night street holding a black umbrella, feminine face, cleavage';
   const locked = f.w.applyMaleGenderLocks(drifted, maleCoreZh);
   assert.match(locked, /adult man/i);
-  assert.match(locked, /\bmale\b/i);
-  assert.match(locked, /masculine/i);
+  assert.doesNotMatch(locked, /adult man,\s*male,\s*masculine/i);
   assert.doesNotMatch(locked, /\bwoman\b|\bfemale\b|\bgirl\b|feminine face|cleavage/i);
   assert.match(locked, /trench coat|black umbrella|rainy/i);
 
   const minimalMale = f.w.minimalOutboundPrompt(drifted, { core: maleCoreZh });
   assert.match(minimalMale, /adult man/i);
-  assert.match(minimalMale, /\bmale\b/i);
-  assert.match(minimalMale, /masculine/i);
-  assert.doesNotMatch(minimalMale, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman|feminine face/i);
+  assert.doesNotMatch(minimalMale, /adult man,\s*male,\s*masculine/i);
+  const sceneMaleMin = minimalMale.replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '').replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
+  assert.doesNotMatch(sceneMaleMin, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman|feminine face/i);
   assert.match(minimalMale, /trench coat|black umbrella|rainy/i);
 
   const femaleKept = f.w.minimalOutboundPrompt(
@@ -1014,7 +1013,8 @@ test('male core: outbound has male locks and no woman tokens; female core kept; 
     'a fictional adult in a red knit sweater',
     { core: '一位虚构成年人穿红毛衣' }
   );
-  assert.doesNotMatch(neutral, /\bwoman\b|\bfemale\b|beautiful woman/i);
+  const sceneNeu = neutral.replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '');
+  assert.doesNotMatch(sceneNeu, /\bwoman\b|\bfemale\b|beautiful woman/i);
   assert.doesNotMatch(neutral, /adult man,\s*male,\s*masculine/i);
 
   const mod = f.w.sanitizeModifierAgainstCore(
@@ -1031,9 +1031,8 @@ test('male core: outbound has male locks and no woman tokens; female core kept; 
   const pos = String(payload.prompt || '').split(' ### ')[0];
   const neg = String(payload.prompt || '').split(' ### ')[1] || String(payload.negativePrompt || '');
   assert.match(pos, /adult man/i);
-  assert.match(pos, /\bmale\b/i);
-  assert.match(pos, /masculine/i);
-  assert.match(pos, /^\s*(?:adult man,\s*male,\s*masculine)/i, 'gender locks must lead outbound prompt');
+  assert.match(pos, /^\s*adult man\b/i, 'gender lead must lead outbound prompt');
+  assert.doesNotMatch(pos, /adult man,\s*male,\s*masculine/i);
   assert.doesNotMatch(pos, /\bwoman\b|\bfemale\b|beautiful woman|feminine face|\bbreasts?\b|hourglass/i);
   assert.doesNotMatch(pos.split(/adult mode enabled/i)[0] || pos, /\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy/i);
   assert.match(neg, /\bwoman\b|\bfemale\b|feminine face|female body|\bbreasts?\b/i);
@@ -1168,16 +1167,14 @@ test('adult off keeps censor_nsfw true and does not use adult censor retry copy'
   assert.doesNotMatch(detail, /换节点重试/);
 });
 
-test('photoreal default prefers full-body front view unless user asks half-body', async t => {
+test('photoreal soft: no always-on full-body; 全身 still covered; half/side respected', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const plain = f.w.forcePhotorealPrompt('fictional adult woman in a park');
-  assert.match(plain, /full body head-to-toe visible|feet in frame|standing full figure/i);
-  assert.match(plain, /not cropped at waist or chest/i);
-  assert.match(plain, /front view|facing camera|eye-level/i);
-  // Framing tokens should appear early (near photoreal lead), not only as a weak trailing tag.
-  const leadIdx = plain.toLowerCase().indexOf('photorealistic');
-  const feetIdx = plain.toLowerCase().indexOf('feet in frame');
-  assert.ok(leadIdx >= 0 && feetIdx > leadIdx && feetIdx - leadIdx < 220, 'full-body tokens should be early: ' + plain.slice(0, 260));
+  assert.match(plain, /photorealistic photograph|natural light/i);
+  assert.doesNotMatch(plain, /full body head-to-toe visible|feet in frame|standing full figure|front view facing camera/i);
+  assert.doesNotMatch(plain, /shot on DSLR,\s*35mm|cinematic still, shallow depth of field|natural skin texture, clear material detail/i);
+  const withFull = f.w.forcePhotorealPrompt('fictional adult woman in a park', { core: '虚构成年女人全身站立在公园' });
+  assert.match(withFull, /full body head-to-toe visible|feet in frame/i);
   const half = f.w.forcePhotorealPrompt('半身肖像 fictional adult woman close-up portrait');
   assert.doesNotMatch(half, /full body head-to-toe visible|feet in frame/i);
   const side = f.w.forcePhotorealPrompt('fictional adult man side view profile');
@@ -1288,7 +1285,8 @@ test('East Asian cues get strong outbound ethnicity tokens; western beauty defau
   assert.match(out, /East Asian facial features/i);
   assert.doesNotMatch(out, /\bblonde\b|\bcaucasian\b|blue eyes/i);
   const en = f.w.forcePhotorealPrompt('East Asian woman standing outdoors');
-  assert.match(en, /East Asian facial features|distinctly East Asian/i);
+  assert.match(en, /East Asian facial features/i);
+  assert.doesNotMatch(en, /distinctly East Asian appearance/i);
 });
 
 test('全身 / full body wins over portrait modifier tokens and half-body defaults', async t => {
@@ -1300,10 +1298,10 @@ test('全身 / full body wins over portrait modifier tokens and half-body defaul
     'fictional adult woman, documentary portrait photography, natural lighting',
     { core: '虚构成年女人全身站立' }
   );
-  assert.match(withPortraitMod, /full body head-to-toe visible/i);
-  assert.match(withPortraitMod, /feet in frame/i);
-  assert.match(withPortraitMod, /not a half-body portrait|wide FOV full-body shot|complete figure from crown to shoes|head and feet both visible/i);
-  assert.match(withPortraitMod, /28mm/i);
+  assert.match(withPortraitMod, /full body head-to-toe visible|feet in frame/i);
+  assert.match(withPortraitMod, /feet in frame|head and feet both visible/i);
+  // Soft: no keyword spam walls
+  assert.doesNotMatch(withPortraitMod, /complete figure from crown to shoes|subject fills vertical frame from head to toe/i);
   const half = f.w.forcePhotorealPrompt('半身肖像 fictional adult woman close-up portrait');
   assert.doesNotMatch(half, /full body head-to-toe visible|feet in frame/i);
 });
@@ -1400,7 +1398,7 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   const prompt = String(payload.prompt || '');
   const pos = prompt.split(' ### ')[0];
   const neg = prompt.includes(' ### ') ? prompt.split(' ### ')[1] : String(payload.negativePrompt || '');
-  assert.match(pos, /CRITICAL EDIT \(must be clearly visible\).*left hand raised|raised left hand clearly visible/i);
+  assert.match(pos, /(?:CRITICAL EDIT \(must be clearly visible\)|Visible edit:).*left hand raised|raised left hand clearly visible/i);
   assert.match(pos, /keep the (?:EXACT )?same person identity|allow pose\/gesture\/limbs to change/i);
   assert.match(pos, /do NOT invent a new person|invent a new background|allow pose\/gesture\/limbs/i);
   assert.doesNotMatch(pos, /camera angle, crop, and framing/i);
@@ -1420,7 +1418,7 @@ test('img2img local smile/hair still keep rest; t2i 全身+东亚 unchanged', as
   f.w.document.getElementById('出图引擎').value = 'horde-real';
   await f.w.开始生成();
   const smile = String(imagePayload(f.calls).prompt || '').split(' ### ')[0];
-  assert.match(smile, /CRITICAL EDIT|keep the same person identity|stated local change must stay clearly visible|do NOT invent a new person/i);
+  assert.match(smile, /CRITICAL EDIT|Visible edit:|keep the same person identity|stated local change must stay clearly visible|do NOT invent a new person/i);
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物微笑');
 
   f.w.document.getElementById('参考图地址').value = '';
@@ -1706,7 +1704,7 @@ test('pose local-edit harder strength; mild color lower; pose omits seed lock; r
   assert.ok(body.source_image, '改动必须带 source_image');
   assert.equal(body.source_processing, 'img2img');
   assert.ok(body.params.seed === undefined || body.params.seed === '' || body.params.seed == null, 'pose should omit seed lock, got ' + body.params.seed);
-  assert.match(String(body.prompt || ''), /CRITICAL EDIT.*left hand raised|raised left hand clearly visible/i);
+  assert.match(String(body.prompt || ''), /(?:CRITICAL EDIT|Visible edit:).*left hand raised|raised left hand clearly visible/i);
   assert.match(String(body.prompt || ''), /same person identity|allow pose\/gesture\/limbs to change/i);
   assert.doesNotMatch(String(body.prompt || ''), /camera angle, crop, and framing/i);
   assert.doesNotMatch(String(body.prompt || '') + ' ### ' + String(body.params && ''), /camera move, new composition/);
@@ -1793,7 +1791,7 @@ test('改动 ON ⇒ payload has source_image + denoising in pose band; 核心描
   assert.equal(body.source_processing, 'img2img');
   const ds = Number(body.params && body.params.denoising_strength);
   assert.ok(ds >= 0.55 && ds <= 0.65, 'pose band denoising, got ' + ds);
-  assert.match(String(body.prompt || ''), /CRITICAL EDIT.*left hand raised|raised left hand clearly visible/i);
+  assert.match(String(body.prompt || ''), /(?:CRITICAL EDIT|Visible edit:).*left hand raised|raised left hand clearly visible/i);
   assert.match(String(body.prompt || ''), /allow pose\/gesture\/limbs to change/i);
   assert.doesNotMatch(String(body.prompt || ''), /camera angle and crop as the reference/i);
   assert.equal(f.w.document.getElementById('角色描述').value, core, '核心描述不变');
@@ -1830,7 +1828,7 @@ test('no exposure tokens without core; realism default lock; smart-mod off skips
   const neg = String(payload.prompt || '').split(' ### ')[1] || '';
   assert.match(pos, /photorealistic photograph|natural light/i);
   assert.match(pos, /do not invent undressing|revealing outfits/i);
-  assert.match(pos, /fully clothed as described|clothing matching the core exactly|modest attire/i);
+  assert.match(pos, /clothing matching the core/i);
   assert.doesNotMatch(pos, /\bkeep requested nudity\b|\bNSFW fully allowed\b|\bpreferred when described\b/i);
   const sceneOnly = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
   assert.doesNotMatch(sceneOnly, /\bnude\b|\bnaked\b|\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy/i);
@@ -1857,13 +1855,13 @@ test('harder gender+clothing locks: male core leads; clothed core gets exposure 
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.equal(typeof f.w.finalizeOutboundCoreLocks, 'function');
   assert.equal(typeof f.w.applyClothingFidelityLocks, 'function');
-  assert.match(f.w.CLOTHING_FIDELITY_LEAD, /fully clothed as described|modest attire/i);
+  assert.match(f.w.CLOTHING_FIDELITY_LEAD, /clothing matching the core/i);
 
   const maleCore = '一位虚构成年男人穿风衣站在雨夜街头';
   const drifted = 'beautiful woman, feminine face, breasts, cleavage, lingerie, seductive pose, a person in a trench coat';
   const finalized = f.w.finalizeOutboundCoreLocks(drifted, maleCore);
-  assert.match(finalized, /^\s*adult man,\s*male,\s*masculine/i);
-  assert.match(finalized, /fully clothed as described|modest attire/i);
+  assert.match(finalized, /^\s*adult man\b/i);
+  assert.match(finalized, /clothing matching the core/i);
   assert.doesNotMatch(finalized, /\bwoman\b|\bfemale\b|\bgirl\b|beautiful woman|feminine face|\bbreasts?\b|\blingerie\b|\bcleavage\b|\bseductive\b/i);
   assert.match(finalized, /trench coat/i);
 
@@ -1872,9 +1870,10 @@ test('harder gender+clothing locks: male core leads; clothed core gets exposure 
     'a fictional adult in a red knit sweater, sexy revealing lingerie, cleavage',
     { core: clothedCore }
   );
-  assert.match(clothedOut, /fully clothed as described|modest attire|fabric coverage intact/i);
-  assert.doesNotMatch(clothedOut, /\blingerie\b|\bcleavage\b|\bsexy\b|\brevealing\b/i);
-  assert.doesNotMatch(clothedOut, /\bwoman\b|\bfemale\b|beautiful woman/i);
+  assert.match(clothedOut, /clothing matching the core/i);
+  const sceneCloth = clothedOut.replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '').replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
+  assert.doesNotMatch(sceneCloth, /\blingerie\b|\bcleavage\b|\bsexy\b|\brevealing\b/i);
+  assert.doesNotMatch(sceneCloth, /\bwoman\b|\bfemale\b|beautiful woman/i);
 
   f.w.document.getElementById('角色描述').value = maleCore;
   f.w.document.getElementById('英文描述').value = drifted;
@@ -1883,8 +1882,9 @@ test('harder gender+clothing locks: male core leads; clothed core gets exposure 
   const payload = imagePayload(f.calls);
   const pos = String(payload.prompt || '').split(' ### ')[0];
   const neg = String(payload.prompt || '').split(' ### ')[1] || '';
-  assert.match(pos, /^\s*adult man,\s*male,\s*masculine/i);
-  assert.doesNotMatch(pos, /\bwoman\b|\bfemale\b|beautiful woman|\bbreasts?\b|\blingerie\b/i);
+  assert.match(pos, /^\s*adult man\b/i);
+  const sceneMale = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
+  assert.doesNotMatch(sceneMale, /\bwoman\b|\bfemale\b|beautiful woman|\bbreasts?\b|\blingerie\b/i);
   assert.match(neg, /woman|female|lingerie|cleavage|nude|revealing clothes/i);
   assert.equal(f.w.document.getElementById('角色描述').value, maleCore);
 });
@@ -1986,5 +1986,49 @@ test('core action coverage: 翻炒+蒸汽 front-loaded even when smart-mod off',
   assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心不改写');
   // Woman+apron OK because core states 女人+围裙; no invented nude
   assert.match(pos, /woman|female|apron/i);
-  assert.doesNotMatch(pos, /\bnude\b|\blingerie\b|\bcleavage\b/i);
+  const sceneCook = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
+  assert.doesNotMatch(sceneCook, /\bnude\b|\blingerie\b|\bcleavage\b/i);
+});
+
+test('two-person 对视 core: count+eye-contact+warm light covered; solo negatives; no invented crop-top', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.corePersonCount, 'function');
+  const core = '两名成年人在暖光室内对视';
+  assert.equal(f.w.corePersonCount(core), 2);
+  const weakEn = 'a fictional adult standing indoors';
+  const covered = f.w.applyCoreActionCoverage(weakEn, core);
+  assert.match(covered, /\btwo\b|\bboth\b/i);
+  assert.match(covered, /looking at each other|eye\s*contact/i);
+  assert.match(covered, /warm\s+(?:light|lighting|glow|interior)|warm interior/i);
+  assert.match(covered, /indoor|interior/i);
+  // Count/action should lead
+  const twoIdx = covered.search(/\btwo\b/i);
+  const standIdx = covered.search(/standing indoors/i);
+  assert.ok(twoIdx >= 0 && (standIdx < 0 || twoIdx < standIdx), 'count should front-load: ' + covered.slice(0, 200));
+
+  const minimal = f.w.minimalOutboundPrompt(weakEn, { core });
+  assert.match(minimal, /\btwo\b|\bboth\b/i);
+  assert.match(minimal, /looking at each other|eye\s*contact/i);
+  assert.match(minimal, /warm/i);
+  assert.doesNotMatch(minimal, /crop top|bare midriff|lingerie|cleavage/i);
+  // Neutral gender — core says 成年人, not woman
+  const sceneTwo = minimal.replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '');
+  assert.doesNotMatch(sceneTwo, /\bwoman\b|beautiful woman|\bfemale\b/i);
+  // No always-on full-body facing-camera wall
+  assert.doesNotMatch(minimal, /front view facing camera, eye-level, looking at camera/i);
+
+  f.w.document.getElementById('角色描述').value = core;
+  f.w.document.getElementById('英文描述').value = weakEn;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  try { if (typeof f.w.清除智能修饰 === 'function') f.w.清除智能修饰(); } catch (e) {}
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  const neg = String(payload.prompt || '').split(' ### ')[1] || String(payload.negativePrompt || '');
+  assert.match(pos, /\btwo\b|\bboth\b/i);
+  assert.match(pos, /looking at each other|eye\s*contact/i);
+  assert.match(pos, /warm/i);
+  assert.match(neg, /single person|solo portrait|alone|one woman only|only one person/i);
+  assert.match(neg, /crop top|bare midriff|revealing outfit/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心不改写');
 });
