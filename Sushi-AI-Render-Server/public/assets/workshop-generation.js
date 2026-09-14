@@ -326,7 +326,7 @@
   }
 
   var LOCAL_EDIT_KEEP_REST =
-    'Keep the EXACT same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, framing, and composition as the reference image, do NOT redraw, recompose, restyle, or invent a new scene, apply ONLY the stated local change, leave every other region unchanged, high fidelity lock to the reference photo';
+    'IMG2IMG local edit of the REFERENCE IMAGE only: Keep the EXACT same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, framing, and composition as the reference image, do NOT redraw, recompose, restyle, or invent a new scene, apply ONLY the stated local change, leave every other region unchanged, high fidelity identity lock to the reference photo, preserve likeness';
 
   function isLocalEditCore(text) {
     var t = String(text || '').replace(/\s+/g, ' ').trim();
@@ -358,8 +358,11 @@
     var base = isFinite(n) && n > 0 ? n : 0.45;
     var coreText = String(core || '').replace(/\s+/g, ' ').trim();
     var shortEdit = coreText.length > 0 && coreText.length <= 48;
-    var cap = shortEdit ? 0.22 : 0.26;
+    // Horde ignores very weak denoise poorly; keep in 0.15–0.25 for local edits.
+    var cap = shortEdit ? 0.15 : 0.22;
+    var floor = 0.15;
     if (base > cap) return cap;
+    if (base < floor) return floor;
     return base;
   }
 
@@ -1384,6 +1387,11 @@
     var censoredRetries = 0;
     var maxCensoredRetries = 3;
     var rateRetries = 0;
+    if (run.payload && run.payload.sourceImage) {
+      try {
+        run.payload.sourceImage = await materializeSourceImage(run.payload.sourceImage);
+      } catch (eMat) {}
+    }
     for (var attempt = 0; attempt < 8; attempt += 1) {
       ensureActive(run);
       var payload = buildHordeBody(run, prompt, index, styleName, shrink, censoredRetries > 0);
@@ -1764,7 +1772,54 @@
   }
 
   function resolveImg2imgEngine(selected) {
-    return normalizeEngineName(selected);
+    var name = normalizeEngineName(selected);
+    // Perchance / Sana cannot img2img — force Horde so 改动 keeps source_image path.
+    if (!name || name === 'perchance' || name === 'sana' || name === 'turbo' || name === 'flux' || name === 'flux-realism') {
+      var txt = normalizeEngineName(value('出图引擎'));
+      if (engineFamily(txt) === 'anime' || name === 'sana') return 'horde-anime';
+      return 'horde-real';
+    }
+    return name;
+  }
+
+  async function materializeSourceImage(src) {
+    var text = String(src || '').trim();
+    if (!text) return '';
+    if (/^data:image\//i.test(text)) return text;
+    if (!/^https?:\/\//i.test(text)) return text;
+    try {
+      var response = await fetch(text, { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'force-cache' });
+      if (!response.ok) throw new Error('ref-http-' + response.status);
+      var blob = await response.blob();
+      if (!blob || !blob.size) throw new Error('ref-empty');
+      return await blobToDataUrl(blob);
+    } catch (eFetch) {
+      try {
+        var dataUrl = await new Promise(function (resolve, reject) {
+          var img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = function () {
+            try {
+              var maxSide = 768;
+              var w = img.naturalWidth || img.width || 512;
+              var h = img.naturalHeight || img.height || 512;
+              var scale = Math.min(1, maxSide / Math.max(w, h));
+              var canvas = document.createElement('canvas');
+              canvas.width = Math.max(1, Math.round(w * scale));
+              canvas.height = Math.max(1, Math.round(h * scale));
+              var ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL('image/jpeg', 0.9));
+            } catch (eDraw) { reject(eDraw); }
+          };
+          img.onerror = function () { reject(new Error('ref-img')); };
+          img.src = text;
+        });
+        return dataUrl;
+      } catch (eImg) {
+        return text;
+      }
+    }
   }
 
   async function execute(run, restored) {
@@ -1808,15 +1863,54 @@
       }
       while (run.completed < run.total) {
         ensureActive(run);
+        var gotUrl = '';
+        var gotEngine = 'horde';
         if (restored) {
           var done = await poll(run, run.job);
           addImage(run, done.image, (done.provider || 'horde'));
+          gotUrl = done && done.image && done.image.url ? done.image.url : '';
+          gotEngine = done && done.provider ? done.provider : 'horde';
         } else {
           var result = await generateOne(run, run.payload.prompt, run.completed);
           ensureActive(run);
           addImage(run, result, result.engine);
+          gotUrl = result && result.url ? result.url : '';
+          gotEngine = result && result.engine ? result.engine : gotEngine;
         }
         ensureActive(run);
+        try {
+          if (gotUrl && typeof window.记忆已开 === 'function' && window.记忆已开()) {
+            var routeMeta = { image: gotUrl, seed: run.payload && run.payload.seed };
+            var routeItem = null;
+            if (run.completed === 0 && typeof window.追加记忆路线 === 'function') {
+              routeItem = window.追加记忆路线(run.coreSource || value('角色描述') || run.description || '', routeMeta);
+            } else if (typeof window.更新记忆路线图片 === 'function') {
+              var cur = typeof window.当前记忆路线 === 'function' ? window.当前记忆路线() : null;
+              routeItem = window.更新记忆路线图片(cur && cur.id, routeMeta) || cur;
+            }
+            if (typeof window.makeThumbnailDataUrl === 'function' && routeItem) {
+              window.makeThumbnailDataUrl(gotUrl, 120, 0.65).then(function (thumb) {
+                if (!thumb) return;
+                try {
+                  if (typeof window.更新记忆路线图片 === 'function') {
+                    window.更新记忆路线图片(routeItem.id, { thumb: thumb, image: gotUrl, seed: run.payload && run.payload.seed });
+                  }
+                } catch (eThumb) {}
+              });
+            }
+            try {
+              // Soft-adopt as next 改动 base; do not auto-check「改动」(keeps Perchance t2i intact).
+              var addr = $('参考图地址');
+              var seedEl = $('参考图种子');
+              if (addr) addr.value = String(gotUrl);
+              if (seedEl) {
+                var sk = run.payload && run.payload.seed;
+                seedEl.value = (sk !== '' && sk != null && String(sk) !== '-1') ? String(sk) : (seedEl.value || '');
+              }
+              try { if (typeof window.预览参考图 === 'function') window.预览参考图(); } catch (ePrev) {}
+            } catch (eAdopt) {}
+          }
+        } catch (eRouteImg) {}
         run.completed += 1;
         restored = false;
       }
@@ -1876,13 +1970,16 @@
     if (typeof window.标记核心已用于生成 === 'function') window.标记核心已用于生成();
     resetDisabledEnginesForNewRun();
     try { if (typeof window.同步生图方式默认 === 'function') window.同步生图方式默认(false); } catch (eSync) {}
+    try { if (typeof window.确保改动参考图 === 'function') window.确保改动参考图(); } catch (eRefMem) {}
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
     run.coreSource = String(value('角色描述') || description || '');
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);
     var genMode = typeof window.读取生图方式 === 'function' ? String(window.读取生图方式() || '') : '';
-    var hasRef = !!value('参考图地址');
+    var memSrc = '';
+    try { memSrc = typeof window.当前记忆路线图 === 'function' ? String(window.当前记忆路线图() || '') : ''; } catch (eMemSrc) { memSrc = ''; }
+    var hasRef = !!(value('参考图地址') || memSrc);
     var useRef = hasRef && genMode !== '重新生成';
-    if (typeof window.本轮使用参考图 === 'function') useRef = !!window.本轮使用参考图();
+    if (typeof window.本轮使用参考图 === 'function') useRef = !!window.本轮使用参考图() || !!(genMode === '改动' && (value('参考图地址') || memSrc));
     if (genMode === '重新生成') {
       run.localEdit = false;
       useRef = false;
@@ -1956,10 +2053,21 @@
     if (!/pinyin|romanization|letters on image/i.test(negative)) {
       negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
     }
+    var sourceForRun = '';
+    if (useRef || run.localEdit) {
+      sourceForRun = value('参考图地址') || memSrc || '';
+    }
+    if (run.localEdit && !sourceForRun) {
+      run.localEdit = false;
+      useRef = false;
+    } else if (run.localEdit) {
+      useRef = true;
+      run.engine = resolveImg2imgEngine(value('图生图平台'));
+    }
     run.payload = {
       prompt: description, width: Number(dimensions[0]) || 512, height: Number(dimensions[1]) || 512,
       negativePrompt: negative, seed: value('随机种子'), cfgScale: Number(value('引导强度')) || 7,
-      sourceImage: useRef ? value('参考图地址') : '', strength: Number(value('图生图强度')) || 0.45
+      sourceImage: (useRef || run.localEdit) ? sourceForRun : '', strength: Number(value('图生图强度')) || 0.45
     };
     if (run.localEdit) {
       run.payload.strength = preferLocalEditStrength(run.payload.strength, run.coreSource || description);
@@ -1978,11 +2086,6 @@
         if (seedKeep && !seedKeep.value) seedKeep.value = String(run.payload.seed);
       } catch (eKeep) {}
     }
-    try {
-      if (typeof window.记忆已开 === 'function' && window.记忆已开() && typeof window.追加记忆路线 === 'function') {
-        window.追加记忆路线(run.coreSource || value('角色描述') || description);
-      }
-    } catch (eRoute) {}
     try { if (typeof window.刷新记忆生成线路 === 'function') window.刷新记忆生成线路(); } catch (eLine) {}
     active = run; controls(true);
     $('图像输出').replaceChildren(); $('官方画廊').replaceChildren(); $('官方画廊').hidden = true;
@@ -2048,6 +2151,8 @@
   window.applyLocalEditOutbound = applyLocalEditOutbound;
   window.preferLocalEditStrength = preferLocalEditStrength;
   window.resolveLocalEditSeed = resolveLocalEditSeed;
+  window.resolveImg2imgEngine = resolveImg2imgEngine;
+  window.materializeSourceImage = materializeSourceImage;
   window.采用参考图地址 = function (url, seed) {
     var addr = $('参考图地址');
     var seedEl = $('参考图种子');

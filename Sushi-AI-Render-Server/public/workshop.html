@@ -89,7 +89,7 @@
           <p id="记忆生成线路" class="记忆生成线路" role="status">记忆线路：加载中…</p>
           <ul id="记忆路线列表" class="记忆路线列表" aria-label="记忆模式生成描述历史"></ul>
           <div class="记忆线路操作" role="group" aria-label="生图方式与清除记忆">
-            <div class="生图方式行" role="group" aria-label="改动或全文生图">
+            <div class="生图方式行" id="生图方式行" role="group" aria-label="改动或全文生图">
               <label class="换背景行 对勾行 生图方式项" id="生图方式改动行" hidden>
                 <input type="checkbox" id="生图方式改动" value="改动" onchange="切换生图方式(this.checked ? '改动' : '重新生成')">
                 <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
@@ -1320,7 +1320,13 @@
   function 默认生图方式() {
     // 局部改仅在记忆模式开启时可选；记忆关 → 全文生图。
     if (!记忆已开()) return "重新生成";
-    return 有参考图() ? "改动" : "重新生成";
+    if (!有参考图()) return "重新生成";
+    // Perchance/Sana 不能图生图：有参考图时仍默认全文生图；用户勾选「改动」再强制 Horde img2img。
+    try {
+      var 通 = String((document.getElementById("出图引擎") || {}).value || "");
+      if (/^perchance$/i.test(通) || /^sana$/i.test(通)) return "重新生成";
+    } catch (eEng) {}
+    return "改动";
   }
   function 读取生图方式() {
     if (!记忆已开()) return "重新生成";
@@ -1337,8 +1343,10 @@
   }
   function 同步改动可见性() {
     var 行 = document.getElementById("生图方式改动行");
+    var 区 = document.getElementById("生图方式行");
     var 开 = 记忆已开();
     if (行) 行.hidden = !开;
+    if (区) 区.hidden = !开;
     if (!开) 写入生图方式单选("重新生成");
   }
   function 同步生图方式默认(强制) {
@@ -1398,24 +1406,60 @@
     }
     return typeof 引擎名称 === "function" ? 引擎名称(引擎) : String(引擎 || "Perchance");
   }
+  var 当前记忆路线Id = "";
+  function 规范化记忆路线项(项) {
+    if (!项 || typeof 项 !== "object" || !项.id || !项.text) return null;
+    var 出 = {
+      id: String(项.id),
+      text: String(项.text || "").slice(0, 500),
+      at: Number(项.at) || 0
+    };
+    if (项.image) 出.image = String(项.image);
+    if (项.thumb) 出.thumb = String(项.thumb);
+    if (项.seed !== undefined && 项.seed !== null && String(项.seed) !== "" && String(项.seed) !== "-1") {
+      出.seed = String(项.seed);
+    }
+    return 出;
+  }
   function 载入记忆路线() {
     记忆路线 = [];
+    当前记忆路线Id = "";
     try {
       var 原 = localStorage.getItem(记忆路线键());
       var 列 = 原 ? JSON.parse(原) : [];
       if (Array.isArray(列)) {
-        记忆路线 = 列.filter(function (项) {
-          return 项 && typeof 项 === "object" && 项.id && 项.text;
-        }).map(function (项) {
-          return { id: String(项.id), text: String(项.text || "").slice(0, 500), at: Number(项.at) || 0 };
-        }).slice(-40);
+        记忆路线 = 列.map(规范化记忆路线项).filter(Boolean).slice(-40);
+        if (记忆路线.length) 当前记忆路线Id = 记忆路线[记忆路线.length - 1].id;
       }
     } catch (e) { 记忆路线 = []; }
   }
-  function 保存记忆路线() {
-    try { localStorage.setItem(记忆路线键(), JSON.stringify(记忆路线.slice(-40))); } catch (e) {}
+  function 序列化记忆路线(含大图) {
+    return 记忆路线.slice(-40).map(function (项) {
+      var 出 = { id: 项.id, text: 项.text, at: 项.at || 0 };
+      if (项.seed) 出.seed = 项.seed;
+      if (含大图 && 项.image) 出.image = 项.image;
+      if (项.thumb) 出.thumb = 项.thumb;
+      else if (含大图 && 项.image && String(项.image).indexOf("data:image/") === 0 && 项.image.length < 120000) 出.thumb = 项.image;
+      return 出;
+    });
   }
-  function 追加记忆路线(描述) {
+  function 保存记忆路线() {
+    try {
+      localStorage.setItem(记忆路线键(), JSON.stringify(序列化记忆路线(true)));
+    } catch (e1) {
+      try {
+        localStorage.setItem(记忆路线键(), JSON.stringify(序列化记忆路线(false)));
+      } catch (e2) {
+        try {
+          var 精简 = 记忆路线.slice(-12).map(function (项) {
+            return { id: 项.id, text: 项.text, at: 项.at || 0, seed: 项.seed || undefined };
+          });
+          localStorage.setItem(记忆路线键(), JSON.stringify(精简));
+        } catch (e3) {}
+      }
+    }
+  }
+  function 追加记忆路线(描述, 图信息) {
     if (!记忆已开()) return null;
     var 文 = String(描述 || "").replace(/\s+/g, " ").trim();
     if (!文) return null;
@@ -1424,18 +1468,145 @@
       text: 文.slice(0, 500),
       at: Date.now()
     };
+    if (图信息 && typeof 图信息 === "object") {
+      if (图信息.image || 图信息.url) 项.image = String(图信息.image || 图信息.url || "");
+      if (图信息.thumb) 项.thumb = String(图信息.thumb);
+      if (图信息.seed !== undefined && 图信息.seed !== null && String(图信息.seed) !== "" && String(图信息.seed) !== "-1") {
+        项.seed = String(图信息.seed);
+      }
+    }
     记忆路线.push(项);
     if (记忆路线.length > 40) 记忆路线 = 记忆路线.slice(-40);
+    当前记忆路线Id = 项.id;
     保存记忆路线();
     刷新记忆路线列表();
     return 项;
   }
+  function 更新记忆路线图片(id, 图信息) {
+    var 目标 = String(id || "");
+    if (!目标 || !图信息) return null;
+    var 项 = null;
+    for (var i = 0; i < 记忆路线.length; i++) {
+      if (String(记忆路线[i].id) === 目标) { 项 = 记忆路线[i]; break; }
+    }
+    if (!项) 项 = 记忆路线.length ? 记忆路线[记忆路线.length - 1] : null;
+    if (!项) return null;
+    if (图信息.image || 图信息.url) 项.image = String(图信息.image || 图信息.url || "");
+    if (图信息.thumb) 项.thumb = String(图信息.thumb);
+    if (图信息.seed !== undefined && 图信息.seed !== null && String(图信息.seed) !== "" && String(图信息.seed) !== "-1") {
+      项.seed = String(图信息.seed);
+    }
+    当前记忆路线Id = 项.id;
+    保存记忆路线();
+    刷新记忆路线列表();
+    return 项;
+  }
+  function 最新记忆路线() {
+    return 记忆路线.length ? 记忆路线[记忆路线.length - 1] : null;
+  }
+  function 当前记忆路线() {
+    if (当前记忆路线Id) {
+      for (var i = 0; i < 记忆路线.length; i++) {
+        if (String(记忆路线[i].id) === String(当前记忆路线Id)) return 记忆路线[i];
+      }
+    }
+    return 最新记忆路线();
+  }
+  function 当前记忆路线图() {
+    var 项 = 当前记忆路线();
+    return 项 && 项.image ? String(项.image) : "";
+  }
+  function 展示记忆路线图(项) {
+    if (!项 || !项.image) return;
+    var 区 = document.getElementById("图像输出");
+    if (!区) return;
+    区.replaceChildren();
+    var card = document.createElement("figure");
+    card.className = "生图卡片 已加载 记忆路线焦点";
+    card.setAttribute("data-memory-route-id", 项.id);
+    card.setAttribute("data-full-url", 项.image);
+    if (项.seed) card.setAttribute("data-seed", String(项.seed));
+    var img = document.createElement("img");
+    img.alt = 项.text || "记忆路线图";
+    img.referrerPolicy = "no-referrer";
+    img.decoding = "async";
+    img.setAttribute("data-full-url", 项.image);
+    if (项.seed) img.setAttribute("data-seed", String(项.seed));
+    img.src = 项.thumb || 项.image;
+    card.appendChild(img);
+    区.appendChild(card);
+    try {
+      var 官 = document.getElementById("官方画廊");
+      if (官) { 官.replaceChildren(); 官.hidden = true; }
+    } catch (eG) {}
+  }
+  function 激活记忆路线项(id, 选项) {
+    var 目标 = String(id || "");
+    var 项 = null;
+    if (目标) {
+      for (var i = 0; i < 记忆路线.length; i++) {
+        if (String(记忆路线[i].id) === 目标) { 项 = 记忆路线[i]; break; }
+      }
+    }
+    if (!项) 项 = 最新记忆路线();
+    if (!项) return null;
+    当前记忆路线Id = 项.id;
+    var 图 = 项.image || "";
+    if (图) {
+      try {
+        if (typeof window.采用参考图地址 === "function") window.采用参考图地址(图, 项.seed);
+        else {
+          var 地址 = document.getElementById("参考图地址");
+          var 种子 = document.getElementById("参考图种子");
+          if (地址) 地址.value = 图;
+          if (种子) 种子.value = 项.seed ? String(项.seed) : "";
+          try { if (typeof 预览参考图 === "function") 预览参考图(); } catch (eP) {}
+        }
+      } catch (eA) {}
+      var 要展示 = !选项 || 选项.展示 !== false;
+      if (要展示) 展示记忆路线图(项);
+    }
+    刷新记忆路线列表();
+    try { 同步生图方式默认(false); } catch (eS) {}
+    return 项;
+  }
+  function 确保改动参考图() {
+    if (!记忆已开()) return "";
+    if (读取生图方式() === "重新生成") return "";
+    var 地址 = document.getElementById("参考图地址");
+    var 现有 = 地址 && String(地址.value || "").trim();
+    if (现有) return 现有;
+    var 图 = 当前记忆路线图();
+    if (!图) return "";
+    try {
+      if (typeof window.采用参考图地址 === "function") {
+        var 项 = 当前记忆路线();
+        window.采用参考图地址(图, 项 && 项.seed);
+      } else if (地址) {
+        地址.value = 图;
+      }
+    } catch (e) {}
+    return 图;
+  }
   function 清除一条记忆路线(id) {
     var 目标 = String(id || "");
     if (!目标) return;
+    var 删的是当前 = String(当前记忆路线Id) === 目标;
+    var 删的是最新 = 记忆路线.length && String(记忆路线[记忆路线.length - 1].id) === 目标;
     记忆路线 = 记忆路线.filter(function (项) { return String(项.id) !== 目标; });
     保存记忆路线();
-    刷新记忆路线列表();
+    if (!记忆路线.length) {
+      当前记忆路线Id = "";
+      刷新记忆路线列表();
+      刷新记忆生成线路();
+      return;
+    }
+    if (删的是当前 || 删的是最新 || !当前记忆路线Id) {
+      var 最新 = 最新记忆路线();
+      激活记忆路线项(最新 && 最新.id, { 展示: true });
+    } else {
+      刷新记忆路线列表();
+    }
     刷新记忆生成线路();
   }
   function 刷新记忆路线列表() {
@@ -1456,8 +1627,20 @@
     }
     记忆路线.forEach(function (项, 序) {
       var li = document.createElement("li");
-      li.className = "记忆路线项";
+      li.className = "记忆路线项" + (String(项.id) === String(当前记忆路线Id) ? " 现行" : "");
       li.setAttribute("data-id", 项.id);
+      li.setAttribute("role", "button");
+      li.tabIndex = 0;
+      li.title = "点击采用此步图片作为改动参考";
+      if (项.thumb || 项.image) {
+        var 缩 = document.createElement("img");
+        缩.className = "记忆路线缩略";
+        缩.alt = "";
+        缩.decoding = "async";
+        缩.referrerPolicy = "no-referrer";
+        缩.src = 项.thumb || 项.image;
+        li.appendChild(缩);
+      }
       var 文 = document.createElement("span");
       文.className = "记忆路线文";
       文.textContent = (序 + 1) + ". " + 项.text;
@@ -1467,8 +1650,22 @@
       钮.className = "次按钮 清除单条记忆钮";
       钮.textContent = "清除";
       钮.setAttribute("aria-label", "清除这次记忆路线");
-      钮.onclick = function () { 清除一条记忆路线(项.id); };
+      钮.onclick = function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        清除一条记忆路线(项.id);
+      };
       li.append(文, 钮);
+      li.onclick = function (ev) {
+        if (ev && ev.target && ev.target.closest && ev.target.closest("button")) return;
+        激活记忆路线项(项.id, { 展示: true });
+      };
+      li.onkeydown = function (ev) {
+        if (!ev) return;
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          激活记忆路线项(项.id, { 展示: true });
+        }
+      };
       列表.appendChild(li);
     });
   }
@@ -1490,6 +1687,7 @@
     try { 对话抢出通道 = ""; } catch (e0) {}
     写记忆摘要("");
     记忆路线 = [];
+    当前记忆路线Id = "";
     保存记忆路线();
     保存对话历史();
     try { 渲染对话(); } catch (e1) {}
@@ -1505,6 +1703,13 @@
   window.刷新记忆生成线路 = 刷新记忆生成线路;
   window.刷新记忆路线列表 = 刷新记忆路线列表;
   window.追加记忆路线 = 追加记忆路线;
+  window.更新记忆路线图片 = 更新记忆路线图片;
+  window.最新记忆路线 = 最新记忆路线;
+  window.当前记忆路线 = 当前记忆路线;
+  window.当前记忆路线图 = 当前记忆路线图;
+  window.激活记忆路线项 = 激活记忆路线项;
+  window.确保改动参考图 = 确保改动参考图;
+  window.展示记忆路线图 = 展示记忆路线图;
   window.清除一条记忆路线 = 清除一条记忆路线;
   window.清除记忆线路 = 清除记忆线路;
   window.清除本记忆 = 清除本记忆;
@@ -3644,7 +3849,7 @@
         body: JSON.stringify({
           k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
           width: 尺寸.宽, height: 尺寸.高,
-          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.22 : 0.26; return base > cap ? cap : base; })(), seed: (function () { var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
+          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.15 : 0.22; return base > cap ? cap : base; })(), seed: (function () { var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
           style: "real"
         })
       }, 95_000);
@@ -3845,7 +4050,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.63" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.64" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4378,6 +4583,26 @@
     flex-wrap: wrap;
     gap: 8px 10px;
     width: 100%;
+  }
+  .生图方式行[hidden],
+  #生图方式改动行[hidden],
+  .生图方式项[hidden] {
+    display: none !important;
+  }
+  .记忆路线缩略 {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.04);
+  }
+  .记忆路线项.现行 {
+    border-color: rgba(225, 29, 72, 0.45);
+    background: rgba(225, 29, 72, 0.06);
+  }
+  .记忆路线项 {
+    cursor: pointer;
   }
   .生图方式项 {
     display: inline-flex;

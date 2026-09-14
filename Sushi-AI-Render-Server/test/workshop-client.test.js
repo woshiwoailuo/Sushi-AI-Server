@@ -1203,7 +1203,7 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   assert.equal(f.w.isLocalEditCore('raise left hand'), true);
   assert.equal(f.w.isLocalEditCore('一位东亚中国女性全身站立在雨夜街头'), false);
   assert.equal(f.w.isLocalEditCore('背景换成宁静雪山与晨雾，人物保持原样'), false);
-  assert.equal(f.w.preferLocalEditStrength(0.52, '图中人物抬起左手'), 0.22);
+  assert.equal(f.w.preferLocalEditStrength(0.52, '图中人物抬起左手'), 0.15);
 
   const core = '图中人物抬起左手';
   f.w.document.getElementById('角色描述').value = core;
@@ -1415,16 +1415,19 @@ test('full regen when 改动 unchecked ignores reference image', async t => {
 test('改动 UI only when memory ON; memory off forces full regen', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const editRow = f.w.document.getElementById('生图方式改动行');
+  const editBlock = f.w.document.getElementById('生图方式行');
   const edit = f.w.document.getElementById('生图方式改动');
   f.w.切换记忆(true);
   f.w.同步改动可见性();
   assert.equal(editRow.hidden, false);
+  assert.equal(editBlock.hidden, false);
   f.w.document.getElementById('参考图地址').value = PNG;
   f.w.同步生图方式默认(true);
   assert.equal(f.w.读取生图方式(), '改动');
   assert.equal(f.w.应用局部改图(), true);
   f.w.切换记忆(false);
   assert.equal(editRow.hidden, true);
+  assert.equal(editBlock.hidden, true, '记忆关应整块隐藏改动板块');
   assert.equal(f.w.读取生图方式(), '重新生成');
   assert.equal(f.w.应用局部改图(), false);
   assert.equal(f.w.本轮使用参考图(), false);
@@ -1467,8 +1470,8 @@ test('memory route list shows each generation description; per-step clear', asyn
 
 test('local edit strength lower for short core; seed lock from 参考图种子', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
-  assert.equal(f.w.preferLocalEditStrength(0.52, '抬起左手'), 0.22);
-  assert.equal(f.w.preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景'), 0.26);
+  assert.equal(f.w.preferLocalEditStrength(0.52, '抬起左手'), 0.15);
+  assert.equal(f.w.preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景'), 0.22);
   f.w.切换记忆(true);
   f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
   f.w.document.getElementById('参考图地址').value = PNG;
@@ -1482,8 +1485,67 @@ test('local edit strength lower for short core; seed lock from 参考图种子',
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   const strength = body.params && body.params.denoising_strength;
-  assert.ok(Number(strength) <= 0.22, 'short local edit strength, got ' + strength);
+  assert.ok(Number(strength) <= 0.15, 'short local edit strength, got ' + strength);
   assert.equal(String(body.params.seed), '424242');
   assert.match(String(body.prompt || ''), /EXACT same person identity|ONLY the stated local change|recompose/i);
   assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手');
 });
+
+test('memory steps persist images; delete-3 shows-2 as reference', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const PNG2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mP8z8BQz0AEYBxVSF+FAP5EBfTZO8fNAAAAAElFTkSuQmCC';
+  const PNG3 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAYAAABWKLW/AAAAGUlEQVR42mNkYGD4z8DAwMgABXAGNgGwSgwAW0wD/QAAAABJRU5ErkJggg==';
+  f.w.切换记忆(true);
+  f.w.追加记忆路线('第一步站立', { image: PNG, seed: '11' });
+  f.w.追加记忆路线('第二步抬手', { image: PNG2, seed: '22' });
+  f.w.追加记忆路线('第三步微笑', { image: PNG3, seed: '33' });
+  assert.equal(f.w.记忆路线.length, 3);
+  assert.ok(f.w.记忆路线.every(item => !!item.image), '每步应保存图片');
+  assert.match(f.w.document.getElementById('记忆路线列表').innerHTML, /记忆路线缩略|img/);
+  const id3 = f.w.记忆路线[2].id;
+  f.w.清除一条记忆路线(id3);
+  assert.equal(f.w.记忆路线.length, 2);
+  assert.equal(f.w.当前记忆路线().text, '第二步抬手');
+  assert.equal(f.w.当前记忆路线图(), PNG2);
+  assert.equal(f.w.document.getElementById('参考图地址').value, PNG2);
+  assert.equal(f.w.document.getElementById('参考图种子').value, '22');
+  const focus = f.w.document.querySelector('#图像输出 img');
+  assert.ok(focus, '删除第3步后应立刻显示第2步图');
+  assert.equal(focus.getAttribute('data-full-url') || focus.src, PNG2);
+});
+
+test('改动 payload includes source_image from memory step image', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.切换记忆(true);
+  f.w.追加记忆路线('基底全身站立', { image: PNG, seed: '99' });
+  f.w.document.getElementById('参考图地址').value = '';
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  f.w.document.getElementById('出图引擎').value = 'perchance';
+  f.w.document.getElementById('图生图平台').value = 'perchance';
+  f.w.用户选定图生图平台 = 'perchance';
+  f.w.同步生图方式默认(true);
+  f.w.切换生图方式('改动');
+  assert.equal(f.w.读取生图方式(), '改动');
+  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'horde-real');
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.ok(body.source_image, '改动必须带 source_image');
+  assert.equal(body.source_processing, 'img2img');
+  assert.ok(Number(body.params.denoising_strength) <= 0.25);
+  assert.ok(Number(body.params.denoising_strength) >= 0.15);
+  assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手');
+});
+
+test('generation success stores image on memory route step', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.切换记忆(true);
+  f.w.记忆路线 = [];
+  f.w.document.getElementById('角色描述').value = '东亚女性站立全身';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.切换生图方式('重新生成');
+  await f.w.开始生成();
+  assert.equal(f.w.记忆路线.length, 1);
+  assert.ok(f.w.记忆路线[0].image, '出图成功应把图片写入记忆路线');
+  assert.equal(f.w.document.getElementById('参考图地址').value, f.w.记忆路线[0].image);
+});
+
