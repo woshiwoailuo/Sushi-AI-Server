@@ -1344,9 +1344,11 @@
   function 同步改动可见性() {
     var 行 = document.getElementById("生图方式改动行");
     var 区 = document.getElementById("生图方式行");
+    var 线路区 = document.getElementById("记忆线路区");
     var 开 = 记忆已开();
     if (行) 行.hidden = !开;
     if (区) 区.hidden = !开;
+    if (线路区) 线路区.hidden = !开;
     if (!开) 写入生图方式单选("重新生成");
   }
   function 同步生图方式默认(强制) {
@@ -4584,6 +4586,7 @@
     gap: 8px 10px;
     width: 100%;
   }
+  .记忆线路区[hidden],
   .生图方式行[hidden],
   #生图方式改动行[hidden],
   .生图方式项[hidden] {
@@ -4976,9 +4979,9 @@
     grid-template-columns:
       repeat(auto-fit, minmax(260px, 1fr));
     gap: 16px;
-    flex: 1;
+    flex: 0 1 auto;
     align-content: start;
-    min-height: 32vh;
+    min-height: 0;
   }
 
   .画廊 img,
@@ -4987,7 +4990,7 @@
     width: 100% !important;
     max-width: 100%;
     height: auto !important;
-    max-height: 62vh;
+    max-height: min(62vh, 640px);
     object-fit: contain;
     object-position: center top;
     border: 0;
@@ -5418,7 +5421,8 @@
     max-height: 72vh;
     overflow: auto;
       grid-template-columns: 1fr;
-      min-height: 34vh;
+      min-height: 0;
+      flex: 0 1 auto;
     }
 
     .画廊 img,
@@ -5426,6 +5430,7 @@
       border-radius: 12px;
       min-height: 0;
       max-height: min(58vh, 480px);
+      height: auto !important;
       object-fit: contain;
     }
 
@@ -5501,17 +5506,17 @@
     }
 
     .画廊 {
-      min-height: 48vh;
-      gap: 18px;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-      flex: 1 1 auto;
+      min-height: 0;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      flex: 0 1 auto;
       max-height: 78vh;
     }
 
     .画廊 img,
     .画廊 iframe {
       min-height: 0;
-      max-height: min(64vh, 720px);
+      max-height: min(64vh, 640px);
       width: 100% !important;
       height: auto !important;
       object-fit: contain;
@@ -5525,7 +5530,8 @@
     }
 
     .生图卡片 img {
-      max-height: min(64vh, 720px);
+      max-height: min(64vh, 640px);
+      height: auto !important;
       object-fit: contain;
     }
 
