@@ -1833,7 +1833,7 @@ test('no exposure tokens without core; realism default lock; smart-mod off skips
   const sceneOnly = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
   assert.doesNotMatch(sceneOnly, /\bnude\b|\bnaked\b|\blingerie\b|\bcleavage\b|\bseductive\b|\bsexy\b|skimpy/i);
   assert.doesNotMatch(pos, /photorealistic photography style, shot on DSLR, 35mm lens, natural skin texture and fabric detail/i);
-  assert.match(neg, /lingerie|cleavage|skimpy|nude|naked|revealing clothes|bikini|sheer/i);
+  assert.match(neg, /lingerie|cleavage|skimpy|nude|naked|revealing (?:clothes|outfit)|bikini|sheer|bra visible|panties|crop top/i);
   assert.equal(f.w.document.getElementById('角色描述').value, core);
 });
 
@@ -1856,6 +1856,11 @@ test('harder gender+clothing locks: male core leads; clothed core gets exposure 
   assert.equal(typeof f.w.finalizeOutboundCoreLocks, 'function');
   assert.equal(typeof f.w.applyClothingFidelityLocks, 'function');
   assert.match(f.w.CLOTHING_FIDELITY_LEAD, /clothing matching the core/i);
+  assert.match(f.w.CLOTHING_EVERYDAY_LEAD, /ordinary everyday clothing/i);
+  assert.equal(f.w.hasClothingCue('穿红毛衣的女人'), true);
+  assert.equal(f.w.hasClothingCue('女人站在窗边'), false);
+  assert.match(f.w.clothingLeadForCore('女人站在窗边'), /ordinary everyday clothing/i);
+  assert.match(f.w.clothingLeadForCore('穿红毛衣的女人'), /clothing matching the core/i);
 
   const maleCore = '一位虚构成年男人穿风衣站在雨夜街头';
   const drifted = 'beautiful woman, feminine face, breasts, cleavage, lingerie, seductive pose, a person in a trench coat';
@@ -1885,7 +1890,7 @@ test('harder gender+clothing locks: male core leads; clothed core gets exposure 
   assert.match(pos, /^\s*adult man\b/i);
   const sceneMale = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
   assert.doesNotMatch(sceneMale, /\bwoman\b|\bfemale\b|beautiful woman|\bbreasts?\b|\blingerie\b/i);
-  assert.match(neg, /woman|female|lingerie|cleavage|nude|revealing clothes/i);
+  assert.match(neg, /woman|female|lingerie|cleavage|nude|revealing (?:clothes|outfit)|bra visible|panties/i);
   assert.equal(f.w.document.getElementById('角色描述').value, maleCore);
 });
 
@@ -2031,4 +2036,64 @@ test('two-person 对视 core: count+eye-contact+warm light covered; solo negativ
   assert.match(neg, /single person|solo portrait|alone|one woman only|only one person/i);
   assert.match(neg, /crop top|bare midriff|revealing outfit/i);
   assert.equal(f.w.document.getElementById('角色描述').value, core, '可见核心不改写');
+});
+
+test('female core without lingerie: strip underwear positives, everyday/clothed lead, anti-lingerie negatives; explicit lingerie still allowed', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.hasExposureIntent, 'function');
+  assert.equal(f.w.hasExposureIntent('穿红毛衣的虚构成年女人站在窗边'), false);
+  assert.equal(f.w.hasExposureIntent('穿内衣的虚构成年女人'), true);
+  assert.equal(f.w.hasExposureIntent('a woman in lingerie'), true);
+  assert.equal(f.w.hasExposureIntent('woman wearing bra and panties'), true);
+
+  const womanNoOutfit = '一位虚构成年女人站在窗边';
+  const drifted = 'beautiful woman, lingerie, underwear, bra visible, panties, cleavage, crop top, bare midriff, sheer blouse, seductive pose, standing by a window';
+  const stripped = f.w.stripExposureBiasDefaults(drifted, womanNoOutfit);
+  assert.doesNotMatch(stripped, /\blingerie\b|\bunderwear\b|\bbra\b|\bpanties\b|\bcleavage\b|\bcrop top\b|\bbare midriff\b|\bsheer blouse\b|\bseductive\b/i);
+  assert.match(stripped, /window/i);
+
+  const locked = f.w.finalizeOutboundCoreLocks(drifted, womanNoOutfit);
+  assert.match(locked, /ordinary everyday clothing|fully clothed/i);
+  assert.doesNotMatch(locked, /\blingerie\b|\bunderwear\b|\bbra\b|\bpanties\b|\bcleavage\b|\bcrop top\b|\bseductive\b/i);
+
+  const womanClothed = '一位虚构成年女人穿蓝连衣裙站在公园';
+  const clothedLocked = f.w.finalizeOutboundCoreLocks(
+    'a woman in a blue dress, sexy lingerie, cleavage, panties',
+    womanClothed
+  );
+  assert.match(clothedLocked, /clothing matching the core|fully clothed as described/i);
+  assert.doesNotMatch(clothedLocked, /\blingerie\b|\bcleavage\b|\bpanties\b|\bsexy\b/i);
+
+  const lingerieCore = '一位穿黑色内衣的虚构成年女人躺在床上';
+  assert.equal(f.w.hasExposureIntent(lingerieCore), true);
+  const allowed = f.w.stripExposureBiasDefaults('woman in black lingerie, cleavage', lingerieCore);
+  assert.match(allowed, /lingerie/i);
+  const allowLock = f.w.applyClothingFidelityLocks('woman in black lingerie', lingerieCore);
+  assert.doesNotMatch(allowLock, /ordinary everyday clothing|clothing matching the core/i);
+  assert.match(allowLock, /lingerie/i);
+
+  const gated = f.w.sanitizeModifierAgainstCore(', lingerie, bra, panties, crop top, seductive pose, photoreal', womanNoOutfit);
+  assert.doesNotMatch(gated, /\blingerie\b|\bbra\b|\bpanties\b|\bcrop top\b|\bseductive\b/i);
+
+  f.w.document.getElementById('角色描述').value = womanNoOutfit;
+  f.w.document.getElementById('英文描述').value = drifted;
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  try { if (typeof f.w.清除智能修饰 === 'function') f.w.清除智能修饰(); } catch (e) {}
+  await f.w.开始生成();
+  const payload = imagePayload(f.calls);
+  const pos = String(payload.prompt || '').split(' ### ')[0];
+  const neg = String(payload.prompt || '').split(' ### ')[1] || String(payload.negativePrompt || '');
+  const scene = pos.replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '').replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '');
+  assert.doesNotMatch(scene, /\blingerie\b|\bunderwear\b|\bbra\b|\bpanties\b|\bcleavage\b|\bcrop top\b|\bbare midriff\b|\bsheer blouse\b|\bseductive\b/i);
+  assert.match(pos, /ordinary everyday clothing|fully clothed/i);
+  assert.match(neg, /lingerie/);
+  assert.match(neg, /underwear as outerwear|bra visible|panties/);
+  assert.match(neg, /cleavage focus|bare midriff|crop top|sheer blouse|seductive pose|revealing outfit/);
+  assert.equal(f.w.document.getElementById('角色描述').value, womanNoOutfit, '可见核心不改写');
+
+  const neutral = '一位虚构成年人站在雨夜街头';
+  const neutOut = f.w.minimalOutboundPrompt('a fictional adult standing on a rainy night street, lingerie, cleavage', { core: neutral });
+  assert.match(neutOut, /ordinary everyday clothing|fully clothed/i);
+  const neutScene = neutOut.replace(/Faithful to core description:[\s\S]*?lead with core facts,?\s*/i, '').replace(/adult mode enabled[\s\S]*?no minors,?\s*/i, '');
+  assert.doesNotMatch(neutScene, /\blingerie\b|\bcleavage\b/i);
 });

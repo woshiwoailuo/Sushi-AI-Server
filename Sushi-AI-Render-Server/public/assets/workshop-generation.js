@@ -872,8 +872,8 @@
   }
 
   // Revealing / sexy bias — only keep when core explicitly asks; otherwise strip invented exposure.
-  var EXPOSURE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|lingerie|cleavage|skimpy|seductive|sexy|revealing|see[\s-]?through|microbikini|bikini|underwear only|无衣|裸体|裸身|全裸|裸露|暴露|性感|低胸|情趣|脱光|赤裸|比基尼|内衣外穿|开胸|深V|透视|半裸/i;
-  var EXPOSURE_BIAS_TOKEN_RE = /\b(nude|naked|nudity|unclothed|topless|bottomless|lingerie|cleavage|skimpy|seductive|sexy|revealing(?:\s+(?:outfit|clothes|clothing|dress|top))?|see[\s-]?through|sheer(?:\s+\w+)?|microbikini|micro[\s-]?bikini|underwear only|no pants|no bra|shirtless|pantsless|bare (?:chest|breasts|midriff)|deep cleavage|plunging neckline)\b/gi;
+  var EXPOSURE_INTENT_RE = /nude|naked|nudity|unclothed|topless|bottomless|lingerie|underwear|undergarment|\bbra\b|panties|panty|thong|cleavage|skimpy|seductive|sexy|revealing|see[\s-]?through|microbikini|bikini|underwear only|crop[\s-]?top|bare midriff|无衣|裸体|裸身|全裸|裸露|暴露|性感|低胸|情趣|脱光|赤裸|比基尼|内衣|胸罩|内裤|丁字裤|内衣外穿|开胸|深V|透视|半裸/i;
+  var EXPOSURE_BIAS_TOKEN_RE = /\b(nude|naked|nudity|unclothed|topless|bottomless|lingerie|underwear(?:\s+only)?|undergarments?|bras?(?:\s+visible)?|panties|panty|thong|cleavage(?:\s+focus)?|skimpy|seductive(?:\s+pose)?|sexy|revealing(?:\s+(?:outfit|clothes|clothing|dress|top|blouse))?|see[\s-]?through|sheer(?:\s+(?:blouse|top|dress|clothing|fabric))?|microbikini|micro[\s-]?bikini|bikini|no pants|no bra|shirtless|pantsless|bare (?:chest|breasts|midriff|navel|stomach)|crop(?:ped)?[\s-]?top|exposed (?:midriff|navel|stomach|bra)|deep cleavage|plunging neckline|lace lingerie|underwear as outerwear)\b/gi;
 
   function hasExposureIntent(text) {
     return EXPOSURE_INTENT_RE.test(String(text || ''));
@@ -901,7 +901,8 @@
       .replace(/,\s*keep requested nudity[^,]*/gi, '')
       .replace(/,\s*do not add clothes[^,]*/gi, '')
       .replace(/\bbeautiful (?:young )?(?:woman|girl|lady)\b/gi, ' ')
-      .replace(/\b(erotic|sensual|alluring|provocative|bedroom eyes)\b/gi, ' ')
+      .replace(/\b(erotic|sensual|alluring|provocative|bedroom eyes|come[\s-]?hither)\b/gi, ' ')
+      .replace(/\b(underboob|sideboob|cameltoe|nipples?(?:\s+visible)?)\b/gi, ' ')
       .replace(/\s{2,}/g, ' ')
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
@@ -912,9 +913,27 @@
     return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').replace(/,\s*,/g, ',').replace(/^[\s,]+|[\s,]+$/g, '').trim();
   }
 
-  // Positive clothing/exposure anti-lead when core does NOT ask for revealing/nude.
+  // Strong anti-lingerie negatives (outbound only; never mutate visible 核心描述).
+  var ANTI_LINGERIE_NEG =
+    'lingerie, underwear as outerwear, bra visible, panties, cleavage focus, bare midriff, crop top, sheer blouse, seductive pose, revealing outfit, underwear only, skimpy outfit, bikini, sheer clothing, nude, naked, nudity, topless, bottomless';
+
+  // Positive clothing leads when core does NOT ask for revealing/nude.
+  // Soft: match described outfit; if core omits outfit, everyday clothes (counters female lingerie model prior).
+  // Affirmative wording only — lingerie bans stay in negatives (no ban-tokens in positive lead).
   var CLOTHING_FIDELITY_LEAD =
-    'clothing matching the core';
+    'clothing matching the core, fully clothed as described';
+  var CLOTHING_EVERYDAY_LEAD =
+    'wearing ordinary everyday clothing, fully clothed';
+  var CLOTHING_CUE_RE = /衣|裙|衫|外套|毛衣|大衣|风衣|夹克|裤|帽|鞋|袜|靴|围巾|披肩|袍|西装|制服|校服|连衣裙|旗袍|汉服|围裙|hoodie|sweater|coat|dress|shirt|blouse|jacket|pants|trousers|jeans|outfit|clothing|wearing|dressed|uniform|suit|skirt|boots|sneakers|scarf|apron|穿着|穿著|身穿|穿了|穿上/i;
+
+  function hasClothingCue(text) {
+    return CLOTHING_CUE_RE.test(String(text || ''));
+  }
+
+  /** Soft clothed lead: described outfit if present, else neutral everyday (never sexy/lingerie). */
+  function clothingLeadForCore(core) {
+    return hasClothingCue(core) ? CLOTHING_FIDELITY_LEAD : CLOTHING_EVERYDAY_LEAD;
+  }
 
   // Female / woman cues from core — never invent woman/female defaults when absent.
   var FEMALE_INTENT_RE = /女人|女性|女的|女主|女孩|少女|美女|女郎|姑娘|女士|小姐|女王|公主|妻子|女友|女战士|女角色|\bwoman\b|\bwomen\b|\bfemale\b|\bgirl\b|\blady\b|\bladies\b|\bshe\b|\bher\b|\bhers\b|\b1girl\b|beautiful (?:young )?(?:woman|girl)/i;
@@ -1017,17 +1036,32 @@
     if (!t) return t;
     if (hasNudeIntent(src) || hasExposureIntent(src)) return t;
     t = stripExposureBiasDefaults(t, src);
-    if (!/clothing matching the core|fully clothed as described/i.test(t)) {
+    var lead = clothingLeadForCore(src);
+    var hasLead = /clothing matching the core|fully clothed as described|wearing ordinary everyday clothing/i.test(t);
+    if (!hasLead) {
       t = t
         .replace(/^\s*clothing matching the core,?\s*/i, '')
         .replace(/,?\s*clothing matching the core\b/gi, '')
         .replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '')
         .replace(/,?\s*fully clothed as described[^,]*/gi, '')
+        .replace(/^\s*wearing ordinary everyday clothing,?\s*(?:fully clothed,?\s*)?/i, '')
+        .replace(/,?\s*wearing ordinary everyday clothing(?:,?\s*fully clothed)?\b/gi, '')
+        .replace(/^\s*fully clothed as described, clothing matching the core exactly, modest attire, fabric coverage intact,?\s*/i, '')
         .replace(/\s{2,}/g, ' ')
         .replace(/[，,]{2,}/g, ',')
         .replace(/^[\s,]+|[\s,]+$/g, '')
         .trim();
-      t = CLOTHING_FIDELITY_LEAD + ', ' + t;
+      t = lead + ', ' + t;
+    } else if (!hasClothingCue(src) && /clothing matching the core/i.test(t) && !/ordinary everyday clothing/i.test(t)) {
+      t = t
+        .replace(/^\s*clothing matching the core,?\s*(?:fully clothed as described,?\s*)?/i, '')
+        .replace(/,?\s*clothing matching the core(?:,?\s*fully clothed as described)?\b/gi, '')
+        .replace(/^\s*fully clothed as described,?\s*/i, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/[，,]{2,}/g, ',')
+        .replace(/^[\s,]+|[\s,]+$/g, '')
+        .trim();
+      t = CLOTHING_EVERYDAY_LEAD + ', ' + t;
     }
     return t.replace(/\s{2,}/g, ' ').replace(/[，,]{2,}/g, ',').trim();
   }
@@ -1056,9 +1090,12 @@
       .replace(/^\s*adult man,?\s*/i, '')
       .replace(/,?\s*adult man,\s*male,\s*masculine\b/gi, '')
       .replace(/^\s*fully clothed as described, clothing matching the core exactly, modest attire, fabric coverage intact,?\s*/i, '')
-      .replace(/^\s*clothing matching the core,?\s*/i, '')
+      .replace(/^\s*wearing ordinary everyday clothing,?\s*(?:fully clothed,?\s*)?/i, '')
+      .replace(/^\s*clothing matching the core,?\s*(?:fully clothed as described,?\s*)?/i, '')
+      .replace(/^\s*fully clothed as described,?\s*/i, '')
       .replace(/,?\s*fully clothed as described, clothing matching the core exactly, modest attire, fabric coverage intact\b/gi, '')
-      .replace(/,?\s*clothing matching the core\b/gi, '')
+      .replace(/,?\s*wearing ordinary everyday clothing(?:,?\s*fully clothed)?\b/gi, '')
+      .replace(/,?\s*clothing matching the core(?:,?\s*fully clothed as described)?\b/gi, '')
       .replace(/\s{2,}/g, ' ')
       .replace(/[，,]{2,}/g, ',')
       .replace(/^[\s,]+|[\s,]+$/g, '')
@@ -1071,9 +1108,12 @@
       leads.push(MALE_LOCK_LEAD);
       t = t.replace(/^\s*adult man,\s*male,\s*masculine,?\s*/i, '').replace(/^\s*adult man,?\s*/i, '');
     }
-    if (!hasNudeIntent(c) && !hasExposureIntent(c) && /^\s*(?:clothing matching the core|fully clothed as described)\b/i.test(t)) {
-      leads.push(CLOTHING_FIDELITY_LEAD);
-      t = t.replace(/^\s*clothing matching the core,?\s*/i, '').replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '');
+    if (!hasNudeIntent(c) && !hasExposureIntent(c) && /^\s*(?:clothing matching the core|fully clothed as described|wearing ordinary everyday clothing)\b/i.test(t)) {
+      leads.push(clothingLeadForCore(c));
+      t = t
+        .replace(/^\s*wearing ordinary everyday clothing,?\s*(?:fully clothed,?\s*)?/i, '')
+        .replace(/^\s*clothing matching the core,?\s*(?:fully clothed as described,?\s*)?/i, '')
+        .replace(/^\s*fully clothed as described[^,]*(?:,\s*)?/i, '');
     }
     var head = leads.length ? leads.join(', ') + ', ' : '';
     if (adultPrefix) head += adultPrefix + ', ';
@@ -2606,10 +2646,10 @@
     if (!/pinyin|romanization|letters on image/i.test(negative)) {
       negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
     }
-    // 核心未写裸露/性感时，负面强压模型默认暴露偏置
+    // 核心未写裸露/性感时，负面强压内衣/暴露默认（含女体模型先验）
     if (!hasNudeIntent(ethSrc) && !hasExposureIntent(ethSrc) && !hasNudeIntent(description) && !hasExposureIntent(description)) {
-      if (!/lingerie|cleavage|skimpy|seductive nudity|revealing clothes/i.test(negative)) {
-        negative += ', nude, naked, nudity, lingerie, cleavage, skimpy outfit, seductive pose, revealing clothes, underwear only, bikini, sheer clothing, topless, bottomless';
+      if (!/lingerie|underwear as outerwear|bra visible|panties|cleavage focus|bare midriff|crop top|sheer blouse/i.test(negative)) {
+        negative += ', ' + ANTI_LINGERIE_NEG;
       }
     }
     // 核心有翻炒/蒸汽等动态烹饪动作时，负面压制静态站立、无蒸汽
@@ -2624,10 +2664,10 @@
       if (!/single person|solo portrait|one woman only|only one person/i.test(negative)) {
         negative += ', ' + MULTI_PERSON_NEG;
       }
-      // Soft: suppress invented crop-top / midriff when core has no clothing/exposure cue
-      if (!hasExposureIntent(personSrc) && !/衣|裙|衫|外套|毛衣|大衣|sweater|coat|dress|shirt|outfit|clothing|穿着|穿著/i.test(personSrc)) {
-        if (!/crop top|bare midriff|navel|exposed stomach/i.test(negative)) {
-          negative += ', crop top, bare midriff, exposed navel, revealing outfit, lingerie';
+      // Soft: extra midriff pressure when multi-person core omits outfit
+      if (!hasExposureIntent(personSrc) && !hasClothingCue(personSrc)) {
+        if (!/exposed navel|exposed stomach/i.test(negative)) {
+          negative += ', exposed navel, exposed stomach';
         }
       }
     }
@@ -2804,6 +2844,10 @@
   window.finalizeOutboundCoreLocks = finalizeOutboundCoreLocks;
   window.MALE_LOCK_LEAD = MALE_LOCK_LEAD;
   window.CLOTHING_FIDELITY_LEAD = CLOTHING_FIDELITY_LEAD;
+  window.CLOTHING_EVERYDAY_LEAD = CLOTHING_EVERYDAY_LEAD;
+  window.hasClothingCue = hasClothingCue;
+  window.clothingLeadForCore = clothingLeadForCore;
+  window.ANTI_LINGERIE_NEG = ANTI_LINGERIE_NEG;
   window.ADULT_DIR_BASE = ADULT_DIR_BASE;
   window.ADULT_DIR_NUDE = ADULT_DIR_NUDE;
   window.hasExplicitArtStyle = hasExplicitArtStyle;
