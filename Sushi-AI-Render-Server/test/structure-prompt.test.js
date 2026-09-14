@@ -46,7 +46,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.62/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.63/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
@@ -77,9 +77,9 @@ test('img2img local-edit detection and keep-rest outbound', () => {
   assert.equal(none, 'raise left hand');
 
   const out = applyLocalEditOutbound('raise the left hand', '图中人物抬起左手', { img2img: true });
-  assert.match(out, /keep the same person identity/i);
+  assert.match(out, /keep the EXACT same person identity/i);
   assert.match(out, /apply ONLY the stated local change/i);
-  assert.match(out, /do not redraw the whole scene/i);
+  assert.match(out, /do NOT redraw, recompose/i);
   assert.match(out, /same clothing|same background|composition/i);
   const again = applyLocalEditOutbound(out, '图中人物抬起左手', { img2img: true });
   assert.equal(again, out);
@@ -95,16 +95,18 @@ test('img2img local-edit detection and keep-rest outbound', () => {
   assert.match(msgs[0].content, /LOCAL EDIT|keep identity|same as reference/i);
   assert.match(msgs[1].content, /图中人物抬起左手/);
 
-  assert.equal(preferLocalEditStrength(0.52), 0.32);
-  assert.equal(preferLocalEditStrength(0.68), 0.32);
-  assert.equal(preferLocalEditStrength(0.28), 0.28);
+  assert.equal(preferLocalEditStrength(0.52, '图中人物抬起左手'), 0.22);
+  assert.equal(preferLocalEditStrength(0.68, '图中人物抬起左手'), 0.22);
+  assert.equal(preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景'), 0.26);
+  assert.equal(preferLocalEditStrength(0.18, '抬手'), 0.18);
 });
 
 test('force local-edit outbound even when core is not heuristic local-edit', () => {
   const prompt = applyLocalEditOutbound('a woman in a red dress on a rainy street', '一位穿红裙的女性站在雨夜街头', { img2img: true, force: true });
-  assert.match(prompt, /Keep the same person identity/i);
+  assert.match(prompt, /Keep the (?:EXACT )?same person identity/i);
   assert.match(prompt, /red dress|rainy street/i);
   const skipped = applyLocalEditOutbound('a woman in a red dress', '一位穿红裙的女性', { img2img: true });
-  assert.doesNotMatch(skipped, /Keep the same person identity/i);
-  assert.equal(preferLocalEditStrength(0.45), 0.32);
+  assert.doesNotMatch(skipped, /Keep the (?:EXACT )?same person identity/i);
+  assert.equal(preferLocalEditStrength(0.45, '一位穿红裙的女性站在雨夜街头，保持参考图人物身份与构图，只微调表情与手势，不要整张重绘场景或换背景'), 0.26);
+  assert.equal(preferLocalEditStrength(0.45, '微笑'), 0.22);
 });

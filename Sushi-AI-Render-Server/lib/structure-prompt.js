@@ -28,7 +28,7 @@ const STRUCTURE_SYSTEM = [
 
 /** Outbound-only lock for img2img local edits. Visible 核心描述 is never rewritten. */
 const LOCAL_EDIT_KEEP_REST =
-  'Keep the same person identity, face, hairstyle, body, clothing, background, lighting, camera angle, crop, and composition as the reference image, do not redraw the whole scene, apply ONLY the stated local change, everything else must stay the same, high fidelity to the reference photo';
+  'Keep the EXACT same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, framing, and composition as the reference image, do NOT redraw, recompose, restyle, or invent a new scene, apply ONLY the stated local change, leave every other region unchanged, high fidelity lock to the reference photo';
 
 function isLocalEditCore(text) {
   const t = String(text || '').replace(/\s+/g, ' ').trim();
@@ -51,16 +51,18 @@ function applyLocalEditOutbound(promptEn, core, options) {
   if (!hasRef) return String(promptEn || '');
   if (!opts.force && !isLocalEditCore(core || promptEn)) return String(promptEn || '');
   const text = String(promptEn || '').replace(/\s+/g, ' ').trim();
-  if (/keep the same person identity|apply ONLY the stated local change|do not redraw the whole scene/i.test(text)) {
+  if (/keep the (?:EXACT )?same person identity|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(text)) {
     return text;
   }
   return (LOCAL_EDIT_KEEP_REST + (text ? ', ' + text : '')).replace(/\s{2,}/g, ' ').trim();
 }
 
-function preferLocalEditStrength(current) {
+function preferLocalEditStrength(current, core) {
   const n = Number(current);
   const base = Number.isFinite(n) && n > 0 ? n : 0.45;
-  if (base > 0.35) return 0.32;
+  const shortEdit = String(core || '').trim().length > 0 && String(core || '').trim().length <= 48;
+  const cap = shortEdit ? 0.22 : 0.26;
+  if (base > cap) return cap;
   return base;
 }
 

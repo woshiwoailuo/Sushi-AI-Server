@@ -326,7 +326,7 @@
   }
 
   var LOCAL_EDIT_KEEP_REST =
-    'Keep the same person identity, face, hairstyle, body, clothing, background, lighting, camera angle, crop, and composition as the reference image, do not redraw the whole scene, apply ONLY the stated local change, everything else must stay the same, high fidelity to the reference photo';
+    'Keep the EXACT same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, framing, and composition as the reference image, do NOT redraw, recompose, restyle, or invent a new scene, apply ONLY the stated local change, leave every other region unchanged, high fidelity lock to the reference photo';
 
   function isLocalEditCore(text) {
     var t = String(text || '').replace(/\s+/g, ' ').trim();
@@ -349,15 +349,31 @@
     if (!hasRef) return String(promptEn || '');
     if (!opts.force && !isLocalEditCore(core || promptEn)) return String(promptEn || '');
     var t = String(promptEn || '').replace(/\s+/g, ' ').trim();
-    if (/keep the same person identity|apply ONLY the stated local change|do not redraw the whole scene/i.test(t)) return t;
+    if (/keep the (?:EXACT )?same person identity|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(t)) return t;
     return (LOCAL_EDIT_KEEP_REST + (t ? ', ' + t : '')).replace(/\s{2,}/g, ' ').trim();
   }
 
-  function preferLocalEditStrength(current) {
+  function preferLocalEditStrength(current, core) {
     var n = Number(current);
     var base = isFinite(n) && n > 0 ? n : 0.45;
-    if (base > 0.35) return 0.32;
+    var coreText = String(core || '').replace(/\s+/g, ' ').trim();
+    var shortEdit = coreText.length > 0 && coreText.length <= 48;
+    var cap = shortEdit ? 0.22 : 0.26;
+    if (base > cap) return cap;
     return base;
+  }
+
+  function resolveLocalEditSeed(fallback) {
+    var locked = Number(($('参考图种子') && $('参考图种子').value) || '');
+    if (isFinite(locked) && locked > 0) return String(Math.floor(locked));
+    var box = $('随机种子');
+    var fromBox = Number(box && box.value);
+    if (isFinite(fromBox) && fromBox >= 0 && String(box.value || '').trim() !== '' && String(box.value) !== '-1') {
+      return String(Math.floor(fromBox));
+    }
+    var n = Number(fallback);
+    if (isFinite(n) && n >= 0) return String(Math.floor(n));
+    return String(Math.floor(Math.random() * 2147483646));
   }
 
   function hasExplicitCropFraming(text) {
@@ -835,6 +851,13 @@
     img.decoding = 'async';
     img.setAttribute('data-engine', engine || 'horde');
     img.setAttribute('data-full-url', url);
+    try {
+      var usedSeed = run && run.payload && run.payload.seed;
+      if (usedSeed !== '' && usedSeed != null && String(usedSeed) !== '-1') {
+        card.setAttribute('data-seed', String(usedSeed));
+        img.setAttribute('data-seed', String(usedSeed));
+      }
+    } catch (eSeed) {}
     card.append(progressNote, img);
     $('图像输出').appendChild(card);
     recordImageProvider(engine || 'horde');
@@ -1251,7 +1274,10 @@
       cfg_scale: Number((run.payload && run.payload.cfgScale) || 7)
     };
     var seed = run.payload && run.payload.seed;
-    if (seed !== '' && seed != null) params.seed = String(Number(seed) + (index || 0));
+    if (seed !== '' && seed != null) {
+      if (run.localEdit) params.seed = String(Number(seed));
+      else params.seed = String(Number(seed) + (index || 0));
+    }
     var nsfwOn = typeof window.成人主题已开启 === 'undefined' ? true : !!window.成人主题已开启;
     var models = isReal ? HORDE_REAL_MODELS.slice() : HORDE_ANIME_MODELS.slice();
     if (nsfwOn) models = preferNsfwModels(models, isReal, !!aggressiveNsfw);
@@ -1925,7 +1951,7 @@
       }
     }
     if (run.localEdit && !/different person|identity change|full scene redraw/i.test(negative)) {
-      negative += ', different person, different face, different clothes, new background, full scene redraw, identity change';
+      negative += ', different person, different face, different clothes, new background, full scene redraw, identity change, full recompose, restyle, camera move, new composition';
     }
     if (!/pinyin|romanization|letters on image/i.test(negative)) {
       negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
@@ -1935,7 +1961,28 @@
       negativePrompt: negative, seed: value('随机种子'), cfgScale: Number(value('引导强度')) || 7,
       sourceImage: useRef ? value('参考图地址') : '', strength: Number(value('图生图强度')) || 0.45
     };
-    if (run.localEdit) run.payload.strength = preferLocalEditStrength(run.payload.strength);
+    if (run.localEdit) {
+      run.payload.strength = preferLocalEditStrength(run.payload.strength, run.coreSource || description);
+      run.payload.seed = resolveLocalEditSeed(run.payload.seed);
+      try {
+        var seedBox = $('参考图种子');
+        if (seedBox && run.payload.seed !== '' && run.payload.seed != null) seedBox.value = String(run.payload.seed);
+      } catch (eLock) {}
+      if (!/recompose|restyle|invent a new scene|leave every other region unchanged/i.test(negative)) {
+        negative += ', full recompose, restyle, new scene, different composition, camera move, identity change';
+        run.payload.negativePrompt = negative;
+      }
+    } else if (run.payload && run.payload.seed !== '' && run.payload.seed != null && String(run.payload.seed) !== '-1') {
+      try {
+        var seedKeep = $('参考图种子');
+        if (seedKeep && !seedKeep.value) seedKeep.value = String(run.payload.seed);
+      } catch (eKeep) {}
+    }
+    try {
+      if (typeof window.记忆已开 === 'function' && window.记忆已开() && typeof window.追加记忆路线 === 'function') {
+        window.追加记忆路线(run.coreSource || value('角色描述') || description);
+      }
+    } catch (eRoute) {}
     try { if (typeof window.刷新记忆生成线路 === 'function') window.刷新记忆生成线路(); } catch (eLine) {}
     active = run; controls(true);
     $('图像输出').replaceChildren(); $('官方画廊').replaceChildren(); $('官方画廊').hidden = true;
@@ -2000,6 +2047,15 @@
   window.isLocalEditCore = isLocalEditCore;
   window.applyLocalEditOutbound = applyLocalEditOutbound;
   window.preferLocalEditStrength = preferLocalEditStrength;
+  window.resolveLocalEditSeed = resolveLocalEditSeed;
+  window.采用参考图地址 = function (url, seed) {
+    var addr = $('参考图地址');
+    var seedEl = $('参考图种子');
+    if (addr && url) addr.value = String(url);
+    if (seedEl) seedEl.value = (seed !== '' && seed != null && String(seed) !== '-1') ? String(seed) : '';
+    try { if (typeof window.预览参考图 === 'function') window.预览参考图(); } catch (e) {}
+    try { if (typeof window.同步生图方式默认 === 'function') window.同步生图方式默认(false); } catch (e2) {}
+  };
   window.preferPortraitAspectForFullBody = preferPortraitAspectForFullBody;
   window.hasExplicitCropFraming = hasExplicitCropFraming;
   window.applyRealisticFrontFullBody = applyRealisticFrontFullBody;
