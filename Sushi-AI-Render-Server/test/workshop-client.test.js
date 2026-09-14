@@ -1416,11 +1416,13 @@ test('改动 UI only when memory ON; memory off forces full regen', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const editRow = f.w.document.getElementById('生图方式改动行');
   const editBlock = f.w.document.getElementById('生图方式行');
+  const routeZone = f.w.document.getElementById('记忆线路区');
   const edit = f.w.document.getElementById('生图方式改动');
   f.w.切换记忆(true);
   f.w.同步改动可见性();
   assert.equal(editRow.hidden, false);
   assert.equal(editBlock.hidden, false);
+  assert.equal(routeZone.hidden, false, '记忆开应显示记忆线路区');
   f.w.document.getElementById('参考图地址').value = PNG;
   f.w.同步生图方式默认(true);
   assert.equal(f.w.读取生图方式(), '改动');
@@ -1428,6 +1430,7 @@ test('改动 UI only when memory ON; memory off forces full regen', async t => {
   f.w.切换记忆(false);
   assert.equal(editRow.hidden, true);
   assert.equal(editBlock.hidden, true, '记忆关应整块隐藏改动板块');
+  assert.equal(routeZone.hidden, true, '记忆关应隐藏记忆线路区');
   assert.equal(f.w.读取生图方式(), '重新生成');
   assert.equal(f.w.应用局部改图(), false);
   assert.equal(f.w.本轮使用参考图(), false);
@@ -1439,6 +1442,12 @@ test('改动 UI only when memory ON; memory off forces full regen', async t => {
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   assert.equal(!!body.source_image, false, '记忆关时即使有参考图也走全文生图');
+});
+
+test('记忆关隐藏记忆线路区 CSS [hidden] override', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/workshop.html'), 'utf8');
+  assert.match(html, /\.记忆线路区\[hidden\]/);
+  assert.match(html, /function 同步改动可见性\(\)[\s\S]*?记忆线路区[\s\S]*?hidden = !开/);
 });
 
 test('memory route list shows each generation description; per-step clear', async t => {
