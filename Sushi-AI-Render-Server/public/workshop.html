@@ -1609,8 +1609,23 @@
       var 列表 = typeof 读取生成历史 === "function" ? 读取生成历史() : [];
       if (!列表 || !列表.length) return null;
       // 历史 unshift：下标 0 = 最新；编号语义取「最大序号」= 列表长度对应最新
-      var 项 = 列表[0];
+      // Prefer an entry that already has data: thumb/full so 改动不必等 CORS
+      var 项 = null;
+      var i = 0;
+      for (i = 0; i < 列表.length; i++) {
+        var cand = 列表[i];
+        if (!cand) continue;
+        var full = typeof 历史原图地址 === "function" ? 历史原图地址(cand) : (cand.u || cand.thumb || "");
+        var th = cand.thumb || "";
+        if (/^data:image\//i.test(th) || /^data:image\//i.test(String(full || ""))) {
+          项 = cand;
+          break;
+        }
+        if (!项 && (full || th)) 项 = cand;
+      }
+      if (!项) 项 = 列表[0];
       var 原 = typeof 历史原图地址 === "function" ? 历史原图地址(项) : (项 && (项.u || 项.thumb)) || "";
+      if (!原 && 项 && 项.thumb) 原 = 项.thumb;
       if (!原) return null;
       return { image: 原, thumb: (项 && 项.thumb) || "", seed: "", 步: 列表.length };
     } catch (eH) { return null; }
@@ -1633,7 +1648,8 @@
       return { image: url || thumb, thumb: thumb || "", seed: last.getAttribute("data-seed") || "", 步: 卡.length };
     } catch (eG) { return null; }
   }
-  /** 返回 { url, thumb, seed, step, source }；url 可能是 http 或 data；thumb 优先 data 供 materialize。 */
+  /** 返回 { url, thumb, seed, step, source }；url 可能是 http 或 data；thumb 优先 data 供 materialize。
+   * 优先：记忆最大编号 → 历史最新（有编号图时）→ 画廊主图。记忆空但历史有图时用历史，勿强迫用户点选。 */
   function 改动参照源图() {
     var mem = 最大编号记忆路线项();
     if (mem) {
@@ -1645,13 +1661,13 @@
         source: "memory-" + mem.步
       };
     }
-    var gal = 画廊当前源图();
-    if (gal) {
-      return { url: gal.image || gal.thumb || "", thumb: gal.thumb || "", seed: gal.seed, step: gal.步, source: "gallery-" + gal.步 };
-    }
     var hist = 最新历史原图();
     if (hist) {
       return { url: hist.image || hist.thumb || "", thumb: hist.thumb || "", seed: hist.seed, step: hist.步, source: "history-" + hist.步 };
+    }
+    var gal = 画廊当前源图();
+    if (gal) {
+      return { url: gal.image || gal.thumb || "", thumb: gal.thumb || "", seed: gal.seed, step: gal.步, source: "gallery-" + gal.步 };
     }
     return null;
   }
@@ -1820,6 +1836,8 @@
   window.确保改动参考图 = 确保改动参考图;
   window.改动参照源图 = 改动参照源图;
   window.最大编号记忆路线项 = 最大编号记忆路线项;
+  window.最新历史原图 = 最新历史原图;
+  window.画廊当前源图 = 画廊当前源图;
   window.展示记忆路线图 = 展示记忆路线图;
   window.清除一条记忆路线 = 清除一条记忆路线;
   window.清除记忆线路 = 清除记忆线路;
@@ -3558,6 +3576,10 @@
     保存生成历史(空列表());
     刷新历史面板();
   }
+  window.读取生成历史 = 读取生成历史;
+  window.历史原图地址 = 历史原图地址;
+  window.最新历史原图 = 最新历史原图;
+  window.收入历史 = 收入历史;
 
   function 下载历史图片(序号) {
     var 全部 = 读取生成历史();
