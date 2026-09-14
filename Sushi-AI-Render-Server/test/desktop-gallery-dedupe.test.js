@@ -10,10 +10,13 @@ const workshop = fs.readFileSync(path.join(__dirname, '../public/workshop.html')
 const chatLib = fs.readFileSync(path.join(__dirname, '../lib/chat-response.js'), 'utf8');
 const genJs = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
 
-test('desktop gallery enlarges on wide screens without mobile rewrite', () => {
+test('desktop gallery shortens vs #82 and fits aspect on wide screens', () => {
   assert.match(workshop, /@media \(min-width: 901px\)/);
-  assert.match(workshop, /minmax\(540px, 1fr\)/);
-  assert.match(workshop, /min-height: 72vh/);
+  assert.match(workshop, /minmax\(360px, 1fr\)/);
+  assert.match(workshop, /min-height: 48vh/);
+  assert.doesNotMatch(workshop, /minmax\(540px, 1fr\)/);
+  assert.doesNotMatch(workshop, /min-height: 72vh/);
+  assert.match(workshop, /object-fit:\s*contain/);
   assert.match(workshop, /@media \(max-width: 800px\)/);
   assert.match(home, /@media \(min-width: 901px\)/);
   assert.match(home, /gen-wrap iframe/);

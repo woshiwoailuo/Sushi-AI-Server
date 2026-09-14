@@ -1203,7 +1203,7 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   assert.equal(f.w.isLocalEditCore('raise left hand'), true);
   assert.equal(f.w.isLocalEditCore('一位东亚中国女性全身站立在雨夜街头'), false);
   assert.equal(f.w.isLocalEditCore('背景换成宁静雪山与晨雾，人物保持原样'), false);
-  assert.equal(f.w.preferLocalEditStrength(0.52), 0.32);
+  assert.equal(f.w.preferLocalEditStrength(0.52, '图中人物抬起左手'), 0.22);
 
   const core = '图中人物抬起左手';
   f.w.document.getElementById('角色描述').value = core;
@@ -1218,13 +1218,13 @@ test('img2img local-edit helpers and outbound keep-rest; 核心描述 unchanged'
   const prompt = String(payload.prompt || '');
   const pos = prompt.split(' ### ')[0];
   const neg = prompt.includes(' ### ') ? prompt.split(' ### ')[1] : String(payload.negativePrompt || '');
-  assert.match(pos, /keep the same person identity/i);
+  assert.match(pos, /keep the (?:EXACT )?same person identity/i);
   assert.match(pos, /apply ONLY the stated local change/i);
-  assert.match(pos, /do not redraw the whole scene/i);
+  assert.match(pos, /do NOT redraw|do not redraw|recompose/i);
   assert.doesNotMatch(pos, /change only the background/i);
   assert.ok(payload.source_image);
   const strength = (payload.params && payload.params.denoising_strength);
-  assert.ok(Number(strength) <= 0.35, 'local edit uses lower denoising strength, got ' + strength);
+  assert.ok(Number(strength) <= 0.26, 'local edit uses lower denoising strength, got ' + strength);
   assert.match(neg, /different person|identity change|full scene redraw/i);
 });
 
@@ -1264,7 +1264,7 @@ test('memory route line and clear-memory-path button; 改动 checkbox vs full re
   assert.equal(edit.type, 'checkbox');
   assert.equal(f.w.document.getElementById('生图方式重新生成'), null);
   assert.ok(f.w.document.getElementById('生图方式改动行')?.querySelector('.对勾盒'));
-  assert.match(clearBtn.textContent, /清除记忆线路/);
+  assert.match(clearBtn.textContent, /清除(?:全部)?记忆线路/);
   const row = f.w.document.getElementById('记忆模式对勾行');
   const zone = f.w.document.getElementById('记忆线路区');
   assert.ok(zone);
@@ -1326,7 +1326,7 @@ test('记忆与改动用对勾；清除记忆线路为按钮；不勾改动=全�
   assert.ok(editRow.querySelector('.对勾盒 .对勾符'));
   assert.match(editRow.textContent, /改动/);
   assert.match(editRow.textContent, /局部改|全文生图/);
-  assert.match(clearBtn.textContent, /清除记忆线路/);
+  assert.match(clearBtn.textContent, /清除(?:全部)?记忆线路/);
   assert.equal(f.w.document.getElementById('生图方式重新生成行'), null);
   // 记忆独立开关（生完图后也可开）
   assert.equal(mem.checked, true);
@@ -1409,4 +1409,81 @@ test('full regen when 改动 unchecked ignores reference image', async t => {
   await f.w.开始生成();
   body = imagePayload(f.calls);
   assert.equal(!!body.source_image, false, '不勾改动=全文生图，不应带参考图作底');
+});
+
+
+test('改动 UI only when memory ON; memory off forces full regen', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const editRow = f.w.document.getElementById('生图方式改动行');
+  const edit = f.w.document.getElementById('生图方式改动');
+  f.w.切换记忆(true);
+  f.w.同步改动可见性();
+  assert.equal(editRow.hidden, false);
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.同步生图方式默认(true);
+  assert.equal(f.w.读取生图方式(), '改动');
+  assert.equal(f.w.应用局部改图(), true);
+  f.w.切换记忆(false);
+  assert.equal(editRow.hidden, true);
+  assert.equal(f.w.读取生图方式(), '重新生成');
+  assert.equal(f.w.应用局部改图(), false);
+  assert.equal(f.w.本轮使用参考图(), false);
+  assert.equal(edit.checked, false);
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.equal(!!body.source_image, false, '记忆关时即使有参考图也走全文生图');
+});
+
+test('memory route list shows each generation description; per-step clear', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  const list = f.w.document.getElementById('记忆路线列表');
+  assert.ok(list);
+  f.w.切换记忆(true);
+  f.w.载入记忆路线();
+  f.w.刷新记忆路线列表();
+  assert.equal(typeof f.w.追加记忆路线, 'function');
+  f.w.追加记忆路线('第一步：东亚女性站立');
+  f.w.追加记忆路线('第二步：图中人物抬起左手');
+  assert.equal((f.w.记忆路线 || []).length, 2);
+  assert.match(list.textContent, /第一步：东亚女性站立/);
+  assert.match(list.textContent, /第二步：图中人物抬起左手/);
+  const clearBtns = list.querySelectorAll('.清除单条记忆钮');
+  assert.equal(clearBtns.length, 2);
+  const firstId = f.w.记忆路线[0].id;
+  f.w.清除一条记忆路线(firstId);
+  assert.equal(f.w.记忆路线.length, 1);
+  assert.doesNotMatch(list.textContent, /第一步：东亚女性站立/);
+  assert.match(list.textContent, /第二步：图中人物抬起左手/);
+  f.w.document.getElementById('角色描述').value = '第三步：微笑';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  assert.ok(f.w.记忆路线.some(item => /第三步：微笑/.test(item.text)));
+  assert.match(f.w.document.getElementById('记忆生成线路').textContent, /\d+ 步/);
+});
+
+test('local edit strength lower for short core; seed lock from 参考图种子', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(f.w.preferLocalEditStrength(0.52, '抬起左手'), 0.22);
+  assert.equal(f.w.preferLocalEditStrength(0.52, '图中人物保持身份与构图，只把外套颜色稍微改成深红，并调整站姿让右手自然垂下，其余全部不变不要重画场景'), 0.26);
+  f.w.切换记忆(true);
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.document.getElementById('参考图种子').value = '424242';
+  f.w.document.getElementById('随机种子').value = '111';
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.同步生图方式默认(true);
+  f.w.切换生图方式('改动');
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  const strength = body.params && body.params.denoising_strength;
+  assert.ok(Number(strength) <= 0.22, 'short local edit strength, got ' + strength);
+  assert.equal(String(body.params.seed), '424242');
+  assert.match(String(body.prompt || ''), /EXACT same person identity|ONLY the stated local change|recompose/i);
+  assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手');
 });

@@ -87,15 +87,16 @@
         </label>
         <div id="记忆线路区" class="记忆线路区">
           <p id="记忆生成线路" class="记忆生成线路" role="status">记忆线路：加载中…</p>
+          <ul id="记忆路线列表" class="记忆路线列表" aria-label="记忆模式生成描述历史"></ul>
           <div class="记忆线路操作" role="group" aria-label="生图方式与清除记忆">
             <div class="生图方式行" role="group" aria-label="改动或全文生图">
-              <label class="换背景行 对勾行 生图方式项" id="生图方式改动行">
+              <label class="换背景行 对勾行 生图方式项" id="生图方式改动行" hidden>
                 <input type="checkbox" id="生图方式改动" value="改动" onchange="切换生图方式(this.checked ? '改动' : '重新生成')">
                 <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
-                <span class="生图方式文案"><b>改动</b><small>勾选=参考图局部改；不勾=全文生图</small></span>
+                <span class="生图方式文案"><b>改动</b><small>勾选=参考图局部改；不勾=全文生图（仅记忆模式）</small></span>
               </label>
             </div>
-            <button type="button" class="次按钮 清除本记忆钮" id="清除记忆线路按钮" onclick="清除记忆线路()">清除记忆线路</button>
+            <button type="button" class="次按钮 清除本记忆钮" id="清除记忆线路按钮" onclick="清除记忆线路()">清除全部记忆线路</button>
           </div>
         </div>
         <div class="核心操作">
@@ -347,6 +348,7 @@
             type="hidden"
             value=""
           >
+          <input id="参考图种子" name="参考图种子" type="hidden" value="">
           <label class="换背景行 对勾行">
             <input
               id="只换背景"
@@ -621,7 +623,9 @@
     载入对话();
     载入记忆摘要();
     载入记忆模式();
+    载入记忆路线();
     同步生图方式默认(false);
+    同步改动可见性();
     刷新记忆生成线路();
     var 核框 = document.getElementById("角色描述");
     if (核框) {
@@ -1231,7 +1235,13 @@
     var 邮 = 读取登录邮箱();
     return 邮 ? 基 + "_" + 邮 : 基;
   }
+  function 记忆路线键() {
+    var 基 = "苏轼AI_记忆路线";
+    var 邮 = 读取登录邮箱();
+    return 邮 ? 基 + "_" + 邮 : 基;
+  }
   var 记忆摘要 = "";
+  var 记忆路线 = [];
   var 上次用于生成的核心 = "";
   function 记忆已开() {
     if (记忆模式值() === "off") return false;
@@ -1297,15 +1307,23 @@
       else if (记忆模式值() === "off") localStorage.setItem(记忆模式键(), "long");
     } catch (e) {}
     载入记忆模式();
+    if (!开) {
+      生图方式用户自选 = false;
+      写入生图方式单选("重新生成");
+    }
+    同步改动可见性();
     刷新记忆生成线路();
   }
   window.切换记忆 = 切换记忆;
 
   var 生图方式用户自选 = false;
   function 默认生图方式() {
+    // 局部改仅在记忆模式开启时可选；记忆关 → 全文生图。
+    if (!记忆已开()) return "重新生成";
     return 有参考图() ? "改动" : "重新生成";
   }
   function 读取生图方式() {
+    if (!记忆已开()) return "重新生成";
     // 用户未自选时，始终按「有参考图→改动 / 否则全文生图」即时默认。
     // 改动为对勾：勾选=局部改；不勾选=全文生图（原「重新生成」语义）。
     if (!生图方式用户自选) return 默认生图方式();
@@ -1317,26 +1335,49 @@
     var 改 = document.getElementById("生图方式改动");
     if (改) 改.checked = 值 === "改动";
   }
+  function 同步改动可见性() {
+    var 行 = document.getElementById("生图方式改动行");
+    var 开 = 记忆已开();
+    if (行) 行.hidden = !开;
+    if (!开) 写入生图方式单选("重新生成");
+  }
   function 同步生图方式默认(强制) {
+    if (!记忆已开()) {
+      生图方式用户自选 = false;
+      写入生图方式单选("重新生成");
+      同步改动可见性();
+      刷新记忆生成线路();
+      return "重新生成";
+    }
     if (!强制 && 生图方式用户自选) {
+      同步改动可见性();
       刷新记忆生成线路();
       return 读取生图方式();
     }
     var 值 = 默认生图方式();
     写入生图方式单选(值);
+    同步改动可见性();
     刷新记忆生成线路();
     return 值;
   }
   function 切换生图方式(值) {
+    if (!记忆已开()) {
+      写入生图方式单选("重新生成");
+      同步改动可见性();
+      刷新记忆生成线路();
+      return;
+    }
     生图方式用户自选 = true;
     写入生图方式单选(值 === "改动" ? "改动" : "重新生成");
     刷新记忆生成线路();
   }
   function 本轮使用参考图() {
     if (!有参考图()) return false;
+    if (!记忆已开()) return false;
     return 读取生图方式() !== "重新生成";
   }
   function 应用局部改图() {
+    if (!记忆已开()) return false;
     if (!本轮使用参考图()) return false;
     if (读取生图方式() === "改动") return true;
     try {
@@ -1357,21 +1398,99 @@
     }
     return typeof 引擎名称 === "function" ? 引擎名称(引擎) : String(引擎 || "Perchance");
   }
+  function 载入记忆路线() {
+    记忆路线 = [];
+    try {
+      var 原 = localStorage.getItem(记忆路线键());
+      var 列 = 原 ? JSON.parse(原) : [];
+      if (Array.isArray(列)) {
+        记忆路线 = 列.filter(function (项) {
+          return 项 && typeof 项 === "object" && 项.id && 项.text;
+        }).map(function (项) {
+          return { id: String(项.id), text: String(项.text || "").slice(0, 500), at: Number(项.at) || 0 };
+        }).slice(-40);
+      }
+    } catch (e) { 记忆路线 = []; }
+  }
+  function 保存记忆路线() {
+    try { localStorage.setItem(记忆路线键(), JSON.stringify(记忆路线.slice(-40))); } catch (e) {}
+  }
+  function 追加记忆路线(描述) {
+    if (!记忆已开()) return null;
+    var 文 = String(描述 || "").replace(/\s+/g, " ").trim();
+    if (!文) return null;
+    var 项 = {
+      id: String(Date.now()) + "_" + Math.random().toString(36).slice(2, 8),
+      text: 文.slice(0, 500),
+      at: Date.now()
+    };
+    记忆路线.push(项);
+    if (记忆路线.length > 40) 记忆路线 = 记忆路线.slice(-40);
+    保存记忆路线();
+    刷新记忆路线列表();
+    return 项;
+  }
+  function 清除一条记忆路线(id) {
+    var 目标 = String(id || "");
+    if (!目标) return;
+    记忆路线 = 记忆路线.filter(function (项) { return String(项.id) !== 目标; });
+    保存记忆路线();
+    刷新记忆路线列表();
+    刷新记忆生成线路();
+  }
+  function 刷新记忆路线列表() {
+    var 列表 = document.getElementById("记忆路线列表");
+    if (!列表) return;
+    列表.replaceChildren();
+    if (!记忆已开()) {
+      列表.hidden = true;
+      return;
+    }
+    列表.hidden = false;
+    if (!记忆路线.length) {
+      var 空 = document.createElement("li");
+      空.className = "记忆路线空";
+      空.textContent = "暂无记忆生成描述";
+      列表.appendChild(空);
+      return;
+    }
+    记忆路线.forEach(function (项, 序) {
+      var li = document.createElement("li");
+      li.className = "记忆路线项";
+      li.setAttribute("data-id", 项.id);
+      var 文 = document.createElement("span");
+      文.className = "记忆路线文";
+      文.textContent = (序 + 1) + ". " + 项.text;
+      文.title = 项.text;
+      var 钮 = document.createElement("button");
+      钮.type = "button";
+      钮.className = "次按钮 清除单条记忆钮";
+      钮.textContent = "清除";
+      钮.setAttribute("aria-label", "清除这次记忆路线");
+      钮.onclick = function () { 清除一条记忆路线(项.id); };
+      li.append(文, 钮);
+      列表.appendChild(li);
+    });
+  }
   function 刷新记忆生成线路() {
     var 行 = document.getElementById("记忆生成线路");
     if (!行) return;
+    同步改动可见性();
     var 方式 = 读取生图方式();
-    if (!生图方式用户自选) 写入生图方式单选(方式);
+    if (记忆已开() && !生图方式用户自选) 写入生图方式单选(方式);
     var 记忆段 = 记忆已开() ? "记忆续生" : "记忆关闭·直出";
     var 平台 = 当前平台线路名();
     var 参考 = 有参考图() ? (本轮使用参考图() ? "带参考图" : "有参考图·本轮忽略") : "无参考图";
-    行.textContent = "记忆线路：" + 记忆段 + " · " + 平台 + " · " + 参考 + " · " + 方式;
+    行.textContent = "记忆线路：" + 记忆段 + " · " + 平台 + " · " + 参考 + " · " + 方式 + (记忆已开() && 记忆路线.length ? (" · " + 记忆路线.length + " 步") : "");
+    刷新记忆路线列表();
   }
   function 清除记忆线路() {
-    if (!window.confirm("清除本角色当前记忆线路（对话与摘要）？不影响记忆开关与其它数据。")) return;
+    if (!window.confirm("清除本角色全部记忆线路（对话、摘要与每次生成描述）？不影响记忆开关与其它数据。")) return;
     对话历史 = [];
     try { 对话抢出通道 = ""; } catch (e0) {}
     写记忆摘要("");
+    记忆路线 = [];
+    保存记忆路线();
     保存对话历史();
     try { 渲染对话(); } catch (e1) {}
     刷新记忆生成线路();
@@ -1380,11 +1499,16 @@
   window.读取生图方式 = 读取生图方式;
   window.切换生图方式 = 切换生图方式;
   window.同步生图方式默认 = 同步生图方式默认;
+  window.同步改动可见性 = 同步改动可见性;
   window.本轮使用参考图 = 本轮使用参考图;
   window.应用局部改图 = 应用局部改图;
   window.刷新记忆生成线路 = 刷新记忆生成线路;
+  window.刷新记忆路线列表 = 刷新记忆路线列表;
+  window.追加记忆路线 = 追加记忆路线;
+  window.清除一条记忆路线 = 清除一条记忆路线;
   window.清除记忆线路 = 清除记忆线路;
   window.清除本记忆 = 清除本记忆;
+  window.载入记忆路线 = 载入记忆路线;
   function 记忆模式值() {
     try {
       var v = localStorage.getItem(记忆模式键()) || "long";
@@ -1405,6 +1529,11 @@
       localStorage.setItem(记忆开键(), 值 === "off" ? "0" : "1");
     } catch (e) {}
     载入记忆开关();
+    if (值 === "off") {
+      生图方式用户自选 = false;
+      写入生图方式单选("重新生成");
+    }
+    同步改动可见性();
     刷新记忆生成线路();
   }
   function 载入记忆摘要() {
@@ -2093,8 +2222,8 @@
     var 强制 = false;
     try { 强制 = 读取生图方式() === "改动" && 本轮使用参考图(); } catch (eForce) { 强制 = false; }
     if (!强制 && !是局部改图核心(核心 || 文本)) return 文本;
-    if (/keep the same person identity|apply ONLY the stated local change|do not redraw the whole scene/i.test(文本)) return 文本;
-    return "Keep the same person identity, face, hairstyle, body, clothing, background, lighting, camera angle, crop, and composition as the reference image, do not redraw the whole scene, apply ONLY the stated local change, everything else must stay the same, high fidelity to the reference photo" + (文本 ? ", " + 文本 : "");
+    if (/keep the (?:EXACT )?same person identity|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(文本)) return 文本;
+    return "Keep the EXACT same person identity, face, hairstyle, body proportions, clothing, accessories, background, lighting, camera angle, crop, framing, and composition as the reference image, do NOT redraw, recompose, restyle, or invent a new scene, apply ONLY the stated local change, leave every other region unchanged, high fidelity lock to the reference photo" + (文本 ? ", " + 文本 : "");
   }
 
   function 补换背景英文(英文) {
@@ -2215,8 +2344,10 @@
   function 清空参考图() {
     var 地址 = document.getElementById("参考图地址");
     var 文件框 = document.getElementById("参考图文件");
+    var 种子 = document.getElementById("参考图种子");
     if (地址) 地址.value = "";
     if (文件框) 文件框.value = "";
+    if (种子) 种子.value = "";
     预览参考图();
     同步生图方式默认(false);
     设图生图状态("已清除参考图，将按文生图。");
@@ -3513,7 +3644,7 @@
         body: JSON.stringify({
           k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
           width: 尺寸.宽, height: 尺寸.高,
-          strength: ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number((强度框 && 强度框.value) || 0.52) > 0.35) ? 0.32 : Number((强度框 && 强度框.value) || 0.52), seed: 基础种子 + 序号 * 97,
+          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.22 : 0.26; return base > cap ? cap : base; })(), seed: (function () { var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
           style: "real"
         })
       }, 95_000);
@@ -3714,7 +3845,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.62" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.63" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4197,6 +4328,45 @@
     color: var(--淡色);
     word-break: break-word;
   }
+  .记忆路线列表 {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    max-height: 160px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .记忆路线项 {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--边框);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .记忆路线文 {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--淡色);
+    word-break: break-word;
+  }
+  .记忆路线空 {
+    font-size: 11px;
+    color: var(--淡色);
+    opacity: 0.8;
+    padding: 2px 0;
+  }
+  .清除单条记忆钮 {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
   .记忆线路操作 {
     display: flex;
     flex-wrap: wrap;
@@ -4575,15 +4745,15 @@
   }
 
   .画廊 {
-    max-height: 92vh;
+    max-height: 78vh;
     overflow: auto;
     display: grid;
     grid-template-columns:
-      repeat(auto-fit, minmax(300px, 1fr));
-    gap: 18px;
+      repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
     flex: 1;
     align-content: start;
-    min-height: 42vh;
+    min-height: 32vh;
   }
 
   .画廊 img,
@@ -4592,6 +4762,9 @@
     width: 100% !important;
     max-width: 100%;
     height: auto !important;
+    max-height: 62vh;
+    object-fit: contain;
+    object-position: center top;
     border: 0;
     border-radius: 17px;
     background: #FFFFFF;
@@ -5017,16 +5190,18 @@
     }
 
     .画廊 {
-    max-height: 92vh;
+    max-height: 72vh;
     overflow: auto;
       grid-template-columns: 1fr;
-      min-height: 48vh;
+      min-height: 34vh;
     }
 
     .画廊 img,
     .画廊 iframe {
       border-radius: 12px;
-      min-height: min(52vh, 420px);
+      min-height: 0;
+      max-height: min(58vh, 480px);
+      object-fit: contain;
     }
 
     .画面说明 {
@@ -5101,21 +5276,32 @@
     }
 
     .画廊 {
-      min-height: 72vh;
-      gap: 24px;
-      grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
+      min-height: 48vh;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
       flex: 1 1 auto;
+      max-height: 78vh;
     }
 
     .画廊 img,
     .画廊 iframe {
-      min-height: 600px;
+      min-height: 0;
+      max-height: min(64vh, 720px);
+      width: 100% !important;
+      height: auto !important;
       object-fit: contain;
+      object-position: center top;
       background: #FFFFFF;
     }
 
     .生图卡片 {
       min-height: 0;
+      aspect-ratio: auto;
+    }
+
+    .生图卡片 img {
+      max-height: min(64vh, 720px);
+      object-fit: contain;
     }
 
     .对话列表 {
