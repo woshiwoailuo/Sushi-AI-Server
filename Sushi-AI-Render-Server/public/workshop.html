@@ -80,6 +80,13 @@
         </label>
         <input id="备用引擎" type="hidden" value="perchance">
 
+        <label class="换背景行 对勾行" id="记忆模式对勾行">
+          <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
+          <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
+          <span>记忆模式</span>
+        </label>
+        <p id="记忆开关说明" class="说明文字">默认开启：对话与出图会参考本机记忆；改写核心描述后以最新核心为准，记忆仅补充。</p>
+
         <div class="核心操作">
 
           <button
@@ -378,13 +385,8 @@
           <select id="AI通道" onchange="对话通道已改()"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
           <span id="对话通道状态" class="说明文字" role="status">使用所选对话通道，失败时不会自动更换。</span>
         </label>
-        <label class="换背景行 对勾行" id="记忆模式对勾行">
-          <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
-          <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
-          <span>记忆模式</span>
-        </label>
         <label>
-          记忆模式
+          记忆长度
           <select id="记忆模式" onchange="切换记忆模式(this.value)">
             <option value="short">短记忆 · 最近约 12 轮</option>
             <option value="long" selected>长记忆 · 大数据（本机保存大量历史+摘要）</option>
@@ -471,6 +473,7 @@
 
 <script>
   var 成人主题已开启 = true;
+  try { window.成人主题已开启 = true; } catch (eAdult0) {}
   var 正在生成图片 = false;
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
@@ -773,6 +776,7 @@
 
   function 设置成人主题状态(开启) {
     成人主题已开启 = 开启;
+    try { window.成人主题已开启 = 成人主题已开启; } catch (e0) {}
 
     var 标签 =
       document.getElementById("成人状态标签");
@@ -1271,6 +1275,7 @@
     } catch (e) {}
     载入记忆模式();
   }
+  window.切换记忆 = 切换记忆;
   function 记忆模式值() {
     try {
       var v = localStorage.getItem(记忆模式键()) || "long";
@@ -1888,7 +1893,10 @@
       .replace(/\s{2,}/g, " ")
       .trim();
     if (!文) 文 = "photorealistic RAW photo of a fictional adult, natural light, DSLR";
-    var 头 = "photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture";
+    var 裸露 = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(文);
+    var 头 = 裸露
+      ? "photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores"
+      : "photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture";
     if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(文)) {
       文 = 头 + ", " + 文;
     } else if (!/^\s*photoreal/i.test(文)) {
@@ -3374,7 +3382,7 @@
     用官方插件出图(false);
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.51" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.52" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4376,6 +4384,8 @@
     margin: 0;
     transform: translateY(-50%);
     opacity: 0;
+    z-index: 2;
+    cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
   }
@@ -4390,6 +4400,7 @@
     border-radius: 6px;
     border: 2px solid #111827;
     background: #ffffff;
+    pointer-events: none;
   }
 
   .对勾盒 .对勾符 {
