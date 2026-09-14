@@ -9,6 +9,7 @@ const {
   assembleStructuredPrompt,
   heuristicStructureFromText,
   buildStructureMessages,
+  STRUCTURE_SYSTEM,
   isLocalEditCore,
   applyLocalEditOutbound,
   preferLocalEditStrength,
@@ -48,7 +49,7 @@ test('workshop client structures before gen and shows wake copy', () => {
   assert.match(gen, /reportImageFailure/);
   assert.match(html, /历史只持久化缩略图|只缓存缩略图/);
   assert.match(html, /__sushiHistFull/);
-  assert.match(html, /workshop-generation\.js\?v=1\.1\.66/);
+  assert.match(html, /workshop-generation\.js\?v=1\.1\.67/);
   // 核心描述 must remain source of truth in structure step comments/code
   assert.match(gen, /Never overwrite 角色描述|never overwrite 角色描述|Keep visible/);
 });
@@ -62,6 +63,7 @@ test('heuristic preserves East Asian and 全身 framing', () => {
   assert.match(east.promptEn, /East Asian/i);
   const msgs = buildStructureMessages('韩国女性全身', { anime: false });
   assert.match(msgs[0].content, /PRESERVE ethnicity|East Asian|NEVER invent blonde/i);
+  assert.match(STRUCTURE_SYSTEM, /do NOT invent nudity|unless the core explicitly describes/i);
 });
 
 test('img2img local-edit detection and keep-rest outbound', () => {
