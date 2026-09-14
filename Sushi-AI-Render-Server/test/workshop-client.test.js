@@ -2200,3 +2200,121 @@ test('explicit 改动 keeps soft-adopted ref; clear last memory step clears gen 
   assert.equal(f.w.document.getElementById('参考图种子').value, '');
 });
 
+test('改动 uses max-numbered memory step (1…N) as source; softThumb base64 materialize', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.改动参照源图, 'function');
+  assert.equal(typeof f.w.最大编号记忆路线项, 'function');
+  assert.equal(typeof f.w.ensureEditSourceBase64, 'function');
+  f.w.切换记忆(true);
+  const step1 = f.w.追加记忆路线('第一步描述', { image: 'https://example.com/step1.jpg', thumb: PNG + '1'.slice(0, 0) || PNG, seed: '1' });
+  // distinct thumbs: reuse PNG for both (materialize already data)
+  const thumb2 = PNG;
+  const step2 = f.w.追加记忆路线('第二步描述', { image: 'https://example.com/step2.jpg', thumb: thumb2, seed: '2' });
+  const step3 = f.w.追加记忆路线('第三步描述', { image: 'https://example.com/step3.jpg', thumb: PNG, seed: '3' });
+  assert.equal(f.w.记忆路线.length, 3);
+  // Activate older step 1 — 改动仍应取最大编号 3
+  f.w.激活记忆路线项(step1.id, { 展示: false });
+  const max = f.w.最大编号记忆路线项();
+  assert.equal(max.步, 3);
+  assert.match(String(max.image || ''), /step3/);
+  const ref = f.w.改动参照源图();
+  assert.equal(ref.step, 3);
+  assert.match(String(ref.url || ''), /step3/);
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  f.w.document.getElementById('参考图地址').value = '';
+  f.w.document.getElementById('参考图地址').dataset.softAdopted = '1';
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.切换生图方式('改动');
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.ok(body.source_image, '改动应从最大编号步 materialize 出 base64');
+  assert.equal(f.w.document.getElementById('角色描述').value, '图中人物抬起左手', '可见核心不改写');
+});
+
+test('改动 falls back to softThumb base64 when http source cannot materialize', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.切换记忆(true);
+  f.w.document.getElementById('角色描述').value = '图中人物微笑';
+  const addr = f.w.document.getElementById('参考图地址');
+  addr.value = 'https://blocked.example/no-cors.jpg';
+  addr.dataset.softAdopted = '1';
+  addr.dataset.softThumb = PNG;
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.切换生图方式('改动');
+  // stub materialize to fail on http, succeed path via softThumb
+  const orig = f.w.materializeSourceImage;
+  f.w.materializeSourceImage = async (src) => {
+    if (String(src || '').indexOf('data:image') === 0) return src;
+    return '';
+  };
+  const got = await f.w.ensureEditSourceBase64(addr.value);
+  assert.equal(got, PNG);
+  await f.w.开始生成();
+  const body = imagePayload(f.calls);
+  assert.ok(body.source_image, 'softThumb 应作为改动 base64');
+  f.w.materializeSourceImage = orig;
+});
+
+test('random invented core forces ordinary clothing; no lingerie/nude defaults', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  assert.equal(typeof f.w.扩写随机核心, 'function');
+  const bare = f.w.扩写随机核心('窗边的虚构成年女人', 'fictional adult woman by a window');
+  assert.match(bare.核心, /普通日常服装|衣着整齐/);
+  assert.match(bare.核心, /非内衣非暴露|非内衣/);
+  assert.doesNotMatch(bare.核心, /(?<!非)(内衣|裸体|全裸|暴露|性感)/);
+  assert.match(bare.详英, /ordinary everyday clothing|fully clothed/i);
+  assert.match(bare.详英, /not lingerie|not nude/i);
+  assert.doesNotMatch(bare.详英.replace(/not (?:lingerie|nude|revealing)/gi, ''), /\bnude\b|\blingerie\b|\bnaked\b/i);
+  const clothed = f.w.扩写随机核心('穿红毛衣的虚构成年男人', 'fictional adult man in a red sweater');
+  assert.match(clothed.核心, /非内衣|非裸体|衣着整齐/);
+  assert.doesNotMatch(clothed.详英.replace(/not (?:lingerie|nude)/gi, ''), /\bnude\b|\blingerie\b/i);
+  const item = f.w.本地随机一项();
+  assert.ok(item && item.核心);
+  assert.doesNotMatch(item.详英 || '', /\bnude\b|\bnaked\b|\blingerie\b/i);
+  assert.doesNotMatch(item.核心, /(?<!非)(全裸|裸体)/);
+  // 随机详英出站加日常着装；可见核心保持本地项原文
+  f.w.本地随机一项 = () => ({
+    中文: '公园里的虚构成年人',
+    英文: 'fictional adult in a park',
+    核心: '公园里的虚构成年人，全身正面',
+    详英: 'fictional adult in a park, full-body front view'
+  });
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始随机生成();
+  assert.equal(f.w.document.getElementById('角色描述').value, '公园里的虚构成年人，全身正面', '可见核心不被随机着装回写改写');
+  const body = imagePayload(f.calls);
+  const prompt = String(body.prompt || '');
+  assert.match(prompt, /ordinary everyday clothing|fully clothed|clothing matching the core/i);
+  assert.doesNotMatch(prompt.split(/adult mode enabled/i)[0] || prompt, /\blingerie\b|\bnude\b|\bnaked\b|skimpy|cleavage/i);
+});
+
+test('#99 non-改动 still clears soft-adopted; 改动 rehydrates max step', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.切换记忆(true);
+  f.w.追加记忆路线('甲', { image: 'https://example.com/a.jpg', thumb: PNG, seed: '10' });
+  f.w.追加记忆路线('乙', { image: 'https://example.com/b.jpg', thumb: PNG, seed: '20' });
+  f.w.document.getElementById('角色描述').value = '一位东亚女性站在雨夜街头';
+  f.w.document.getElementById('参考图地址').value = PNG;
+  f.w.document.getElementById('参考图地址').dataset.softAdopted = '1';
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  f.w.切换生图方式('重新生成');
+  await f.w.开始生成();
+  const body1 = imagePayload(f.calls);
+  assert.equal(!!body1.source_image, false, '全文生图不应带软采用 source');
+  f.calls.length = 0;
+  f.w.document.getElementById('参考图地址').value = '';
+  f.w.切换生图方式('改动');
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
+  f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
+  await f.w.开始生成();
+  const body2 = imagePayload(f.calls);
+  assert.ok(body2.source_image, '改动应回填最大编号记忆步为 base64');
+  const ref = f.w.改动参照源图();
+  assert.equal(ref.step, f.w.记忆路线.length, '改动参照应为当前最大编号步');
+  assert.ok(ref.step >= 2);
+});

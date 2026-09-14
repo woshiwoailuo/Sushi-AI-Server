@@ -1979,16 +1979,28 @@
     var censoredRetries = 0;
     var maxCensoredRetries = 3;
     var rateRetries = 0;
-    if (run.payload && run.payload.sourceImage) {
+    if (run.localEdit || (run.payload && run.payload.sourceImage) || run.needsEditSourceBase64) {
       try {
-        run.payload.sourceImage = await materializeSourceImage(run.payload.sourceImage);
-      } catch (eMat) {
-        if (run.localEdit) throw new Error('改动参考图无法读取，请重新点选记忆路线图片或插入参考图');
+        var preferred = (run.payload && run.payload.sourceImage) || run.editSourcePreferred || '';
+        var asBase64 = await ensureEditSourceBase64(preferred);
+        if (asBase64) {
+          run.payload.sourceImage = asBase64;
+        } else if (run.payload && run.payload.sourceImage) {
+          try {
+            run.payload.sourceImage = await materializeSourceImage(run.payload.sourceImage);
+          } catch (eMat) {
+            if (run.localEdit) run.payload.sourceImage = '';
+          }
+        }
+      } catch (eMatAll) {
+        if (run.localEdit) {
+          throw new Error('改动参考图无法读取，请点选记忆路线最大编号步图片或插入参考图');
+        }
       }
       if (run.localEdit) {
         var srcNow = String(run.payload.sourceImage || '');
         if (!/^data:image\//i.test(srcNow)) {
-          throw new Error('改动需要可用的参考图（base64），当前源图无法用于 img2img');
+          throw new Error('改动需要可用的参考图（base64）。请先生成至少一张图，或点记忆路线最大编号（末步）后再改动');
         }
       }
     }
@@ -2406,6 +2418,7 @@
         var dataUrl = await new Promise(function (resolve, reject) {
           var img = new Image();
           img.crossOrigin = 'anonymous';
+          img.referrerPolicy = 'no-referrer';
           img.onload = function () {
             try {
               var maxSide = 768;
@@ -2425,9 +2438,92 @@
         });
         return dataUrl;
       } catch (eImg) {
-        return text;
+        return '';
       }
     }
+  }
+
+  /** Collect candidate source URLs for 改动：最大编号记忆步 / 软缩略 / 画廊 / 历史。 */
+  function collectEditSourceCandidates(preferred) {
+    var out = [];
+    function push(u, why) {
+      var s = String(u || '').trim();
+      if (!s) return;
+      if (out.indexOf(s) >= 0) return;
+      out.push(s);
+      try { if (why) console.info('[改动] candidate', why, s.slice(0, 48)); } catch (eL) {}
+    }
+    push(preferred, 'preferred');
+    try {
+      var addr = $('参考图地址');
+      if (addr) {
+        push(addr.dataset && addr.dataset.softThumb, 'softThumb');
+        push(addr.value, '参考图地址');
+      }
+    } catch (eA) {}
+    try {
+      if (typeof window.改动参照源图 === 'function') {
+        var ref = window.改动参照源图();
+        if (ref) {
+          push(ref.thumb, 'maxStep-thumb');
+          push(ref.url, 'maxStep-url');
+        }
+      }
+    } catch (eR) {}
+    try {
+      if (typeof window.最大编号记忆路线项 === 'function') {
+        var mem = window.最大编号记忆路线项();
+        if (mem) {
+          push(mem.thumb, 'memory-thumb');
+          push(mem.image, 'memory-image');
+        }
+      }
+    } catch (eM) {}
+    try {
+      var gallery = $('图像输出');
+      if (gallery) {
+        var nodes = gallery.querySelectorAll('[data-thumb-url], [data-full-url]');
+        for (var i = nodes.length - 1; i >= 0; i -= 1) {
+          push(nodes[i].getAttribute('data-thumb-url'), 'gallery-thumb');
+          push(nodes[i].getAttribute('data-full-url'), 'gallery-full');
+        }
+      }
+    } catch (eG) {}
+    return out;
+  }
+
+  /** Materialize first usable base64 among candidates; update 参考图地址 when found. */
+  async function ensureEditSourceBase64(preferred) {
+    var cands = collectEditSourceCandidates(preferred);
+    var i = 0;
+    for (; i < cands.length; i += 1) {
+      var raw = cands[i];
+      if (/^data:image\//i.test(raw)) {
+        try {
+          var addrOk = $('参考图地址');
+          if (addrOk && addrOk.value !== raw) {
+            // Keep http in value if already set; stash usable base64 on softThumb
+            if (!addrOk.value) addrOk.value = raw;
+            try { addrOk.dataset.softThumb = raw; } catch (eSt) {}
+          } else if (addrOk) {
+            try { addrOk.dataset.softThumb = raw; } catch (eSt2) {}
+          }
+        } catch (eSet) {}
+        return raw;
+      }
+      var got = await materializeSourceImage(raw);
+      if (got && /^data:image\//i.test(got)) {
+        try {
+          var addr = $('参考图地址');
+          if (addr) {
+            addr.value = got;
+            try { addr.dataset.softThumb = got; } catch (eT) {}
+          }
+        } catch (eUp) {}
+        return got;
+      }
+    }
+    return '';
   }
 
   async function execute(run, restored) {
@@ -2520,6 +2616,16 @@
                 seedEl.value = (sk !== '' && sk != null && String(sk) !== '-1') ? String(sk) : (seedEl.value || '');
               }
               try { if (typeof window.预览参考图 === 'function') window.预览参考图(); } catch (ePrev) {}
+              // 异步缓存 base64（仅挂 dataset，不写巨大 thumb 进 localStorage 记忆路线）
+              try {
+                makeThumbnailDataUrl(gotUrl, 768, 0.88).then(function (thumbBig) {
+                  if (!thumbBig || !/^data:image\//i.test(thumbBig)) return;
+                  try {
+                    var a2 = $('参考图地址');
+                    if (a2 && a2.dataset && a2.dataset.softAdopted === '1') a2.dataset.softThumb = thumbBig;
+                  } catch (eTh) {}
+                });
+              } catch (eThumbSoft) {}
             } catch (eAdopt) {}
           }
         } catch (eRouteImg) {}
@@ -2568,15 +2674,17 @@
 
     // 每次生图清除上一次工作缓存（软采用参考图 / pending / 过期英文）。
     // 记忆路线仍可保存；用户显式勾选「改动」或非软采用参考图则保留参考图。
-    // 六张生成历史不在此清除。
+    // 六张生成历史不在此清除。改动必须保留/回填最大编号步源图。
     try {
       if (typeof window.清除生图工作缓存 === 'function') {
         var editEl = $('生图方式改动');
         var addrEl = $('参考图地址');
         var soft = !!(addrEl && addrEl.dataset && addrEl.dataset.softAdopted === '1');
-        var userEdit = !!(typeof window.生图方式已自选 === 'function' && window.生图方式已自选()
-          && typeof window.记忆已开 === 'function' && window.记忆已开()
-          && editEl && editEl.checked);
+        var editChecked = !!(editEl && editEl.checked);
+        var memOn = !!(typeof window.记忆已开 === 'function' && window.记忆已开());
+        var userPicked = !!(typeof window.生图方式已自选 === 'function' && window.生图方式已自选());
+        // 显式勾选改动（已自选）时保留；自动默认勾选不保留（#99 清软采用）
+        var userEdit = !!(userPicked && memOn && editChecked);
         var intentionalRef = !!(addrEl && String(addrEl.value || '').trim() && !soft);
         window.清除生图工作缓存({ 保留参考图: userEdit || intentionalRef });
       }
@@ -2602,7 +2710,10 @@
     if (typeof window.标记核心已用于生成 === 'function') window.标记核心已用于生成();
     resetDisabledEnginesForNewRun();
     try { if (typeof window.同步生图方式默认 === 'function') window.同步生图方式默认(false); } catch (eSync) {}
-    try { if (typeof window.确保改动参考图 === 'function') window.确保改动参考图(); } catch (eRefMem) {}
+    try {
+      var modeNow = typeof window.读取生图方式 === 'function' ? String(window.读取生图方式() || '') : '';
+      if (modeNow === '改动' && typeof window.确保改动参考图 === 'function') window.确保改动参考图();
+    } catch (eRefMem) {}
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
     run.coreSource = String(value('角色描述') || description || '');
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);
@@ -2721,12 +2832,30 @@
       }
     }
     var sourceForRun = '';
-    if (useRef || run.localEdit) {
+    if (useRef || run.localEdit || genMode === '改动') {
       sourceForRun = value('参考图地址') || memSrc || '';
+      try {
+        if ((!sourceForRun || genMode === '改动') && typeof window.改动参照源图 === 'function') {
+          var maxRef = window.改动参照源图();
+          if (maxRef && (maxRef.url || maxRef.thumb)) {
+            sourceForRun = maxRef.url || maxRef.thumb || sourceForRun;
+            if (maxRef.thumb && /^data:image\//i.test(maxRef.thumb)) {
+              try {
+                var aSoft = $('参考图地址');
+                if (aSoft) aSoft.dataset.softThumb = maxRef.thumb;
+              } catch (eSoft) {}
+            }
+            try {
+              var aSet = $('参考图地址');
+              if (aSet && sourceForRun) aSet.value = sourceForRun;
+            } catch (eSetAddr) {}
+          }
+        }
+      } catch (eMax) {}
     }
     if (run.localEdit && !sourceForRun) {
       try { console.warn('[改动] 勾选改动但无 source_image/参考图，回退全文生图'); } catch (eNoSrc) {}
-      try { status('改动需要参考图', '未找到源图，本轮将改走全文生图。请点记忆路线某步或插入参考图后再改动。', false); } catch (eSt) {}
+      try { status('改动需要参考图', '未找到源图，本轮将改走全文生图。请点记忆路线最大编号步或插入参考图后再改动。', false); } catch (eSt) {}
       run.localEdit = false;
       useRef = false;
     } else if (run.localEdit) {
@@ -2741,6 +2870,11 @@
       negativePrompt: negative, seed: value('随机种子'), cfgScale: Number(value('引导强度')) || 7,
       sourceImage: (useRef || run.localEdit) ? sourceForRun : '', strength: Number(value('图生图强度')) || 0.6
     };
+    // 改动：挂上候选，供 Horde materialize 时回填最大编号步 base64
+    if (run.localEdit) {
+      run.editSourcePreferred = sourceForRun;
+      run.needsEditSourceBase64 = true;
+    }
     if (run.localEdit) {
       var poseEdit = isPoseGestureEdit(run.coreSource || description);
       run.payload.strength = preferLocalEditStrength(run.payload.strength, run.coreSource || description);
@@ -2798,6 +2932,22 @@
     var simpleEn = item.英文 || '';
     var core = item.核心 || simpleZh;
     var richEn = item.详英 || simpleEn;
+    // 随机发明着装已在 扩写随机核心 / 本地池写入；此处仅净化详英出站，不改写可见核心。
+    try {
+      var inventSrc = String(core || '') + ' ' + String(richEn || '');
+      var hasExp = typeof hasExposureIntent === 'function' ? hasExposureIntent(inventSrc) : /lingerie|nude|naked|内衣|裸体|暴露|性感/i.test(inventSrc);
+      if (!hasExp) {
+        if (typeof stripExposureBiasDefaults === 'function') {
+          richEn = stripExposureBiasDefaults(richEn, core);
+        }
+        if (!/ordinary everyday clothing|fully clothed|clothing matching the core/i.test(richEn)
+            && !(typeof hasClothingCue === 'function' ? hasClothingCue(core) : /衣|衫|sweater|coat|wearing|针织|围裙/i.test(core))) {
+          richEn = String(richEn || '') + ', wearing ordinary everyday clothing, fully clothed, modest attire, not lingerie, not nude';
+        } else if (!/not lingerie|not nude|fully clothed/i.test(richEn)) {
+          richEn = String(richEn || '') + ', fully clothed as described, not lingerie, not nude';
+        }
+      }
+    } catch (eClothRand) {}
     randomPair = {
       chinese: core,
       english: richEn,
@@ -2849,12 +2999,15 @@
   window.resolveLocalEditSeed = resolveLocalEditSeed;
   window.resolveImg2imgEngine = resolveImg2imgEngine;
   window.materializeSourceImage = materializeSourceImage;
+  window.ensureEditSourceBase64 = ensureEditSourceBase64;
+  window.collectEditSourceCandidates = collectEditSourceCandidates;
   window.采用参考图地址 = function (url, seed) {
     var addr = $('参考图地址');
     var seedEl = $('参考图种子');
     if (addr && url) {
       addr.value = String(url);
       try { delete addr.dataset.softAdopted; } catch (eIntent) {}
+      try { delete addr.dataset.softThumb; } catch (eThumbClr) {}
     }
     if (seedEl) seedEl.value = (seed !== '' && seed != null && String(seed) !== '-1') ? String(seed) : '';
     try { if (typeof window.预览参考图 === 'function') window.预览参考图(); } catch (e) {}
