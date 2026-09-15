@@ -2307,10 +2307,20 @@
   }
 
   async function perchanceOfficialJson(url, signal) {
-    var response = await fetch(url, { method: 'GET', cache: 'no-store', signal: signal });
+    var response;
+    try {
+      response = await fetch(url, { method: 'GET', cache: 'no-store', signal: signal });
+    } catch (fetchError) {
+      if (fetchError && fetchError.name === 'AbortError') throw fetchError;
+      var networkError = new Error('Perchance 官方接口连接失败，未更换平台');
+      networkError.code = 'PERCH_NETWORK';
+      throw networkError;
+    }
+    var challenged = response.status === 403
+      && response.headers && /challenge/i.test(String(response.headers.get('cf-mitigated') || ''));
     var text = await response.text();
-    if (!text || text.trim().charAt(0) === '<' || /Just a moment|cf-mitigated|cloudflare/i.test(text)) {
-      var blocked = new Error('官方出图接口被拦截，未转接其他平台');
+    if (challenged || !text || text.trim().charAt(0) === '<' || /Just a moment|cf-mitigated|cloudflare/i.test(text)) {
+      var blocked = new Error('Perchance 官方接口要求 Cloudflare 验证（HTTP 403），未更换平台');
       blocked.code = 'PERCH_CF';
       blocked.status = response.status;
       throw blocked;
@@ -2339,17 +2349,12 @@
       '按所选 Perchance 通道出图，失败不更换平台。',
       true
     );
-    var key = '';
-    try {
-      var verified = await perchanceOfficialJson(
-        'https://image-generation.perchance.org/api/verifyUser?thread=0&__cacheBust=' + Math.random(),
-        signal
-      );
-      key = (verified && verified.userKey) || '';
-    } catch (error) {
-      ensureActive(run);
-      if (run.cancelled || (error && error.name === 'AbortError')) throw error;
-    }
+    var verified = await perchanceOfficialJson(
+      'https://image-generation.perchance.org/api/verifyUser?thread=0&__cacheBust=' + Math.random(),
+      signal
+    );
+    var key = (verified && verified.userKey) || '';
+    if (!key) throw new Error('Perchance 官方校验未返回 userKey，未更换平台');
     var params = new URLSearchParams({
       prompt: String(prompt || ''),
       negativePrompt: String((run.payload && run.payload.negativePrompt) || ''),
@@ -2387,7 +2392,7 @@
 
   async function generatePerchance(run, prompt, index, providerSignal) {
     // Do not embed perchance.org. Do not window.open. Opening official site limits first usually does NOT unlock in-app embed (session/cookies do not transfer into iframe).
-    // Try official generate first; if the official host blocks this origin, in-app photoreal still displays.
+    // Perchance remains an exclusive route: never disguise another provider as Perchance.
     if (typeof window.update === 'function' && !(run.payload && run.payload.sourceImage)) {
       try {
         return await generatePerchancePlugin(run, prompt, index, 5000);
@@ -2397,7 +2402,9 @@
       }
     }
     var parent = providerSignal || (run && run.controller && run.controller.signal);
-    var officialSignal = signalWithTimeout(parent, 1200);
+    // 1.2 seconds aborted healthy official generations before they could return.
+    // Keep the user's 30-second provider budget while still allowing cancellation.
+    var officialSignal = signalWithTimeout(parent, 30000);
     try {
       var official = await generatePerchanceOfficial(run, prompt, index, officialSignal);
       if (officialSignal.__clearTimeout) officialSignal.__clearTimeout();
@@ -2407,13 +2414,12 @@
       var officialMsg = String(error && error.message || error || '');
       if (!error || /已取消生成|lost-race/.test(officialMsg)) throw error;
       if (parentAborted(parent, run)) throw error;
-      status(
-        '正在出图 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
-        '应用内直出，有结果立即显示。',
-        true
-      );
-      var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
-      return { url: result.url, engine: 'perchance' };
+      if (error && error.name === 'AbortError') {
+        var timeoutError = new Error('Perchance 官方接口 30 秒内未返回图片，未更换平台');
+        timeoutError.code = 'PERCH_TIMEOUT';
+        throw timeoutError;
+      }
+      throw error;
     }
   }
 
