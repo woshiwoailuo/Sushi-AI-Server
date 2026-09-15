@@ -19,14 +19,16 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   });
   const realFetch = global.fetch;
   let upstreamMode = 'done', upstreamCalls = 0;
+  const upstreamBodies = [];
   global.fetch = async (url, options) => {
     assert.ok(url.startsWith('https://aihorde.net/api/v2/'), 'only the provider adapter is mocked');
     upstreamCalls++;
+    if (options && options.body) upstreamBodies.push(JSON.parse(options.body));
     if (upstreamMode === 'offline') throw new Error('offline');
     let data = {};
     if (url.endsWith('/async')) data = { id: 'mock-upstream-' + upstreamCalls };
     else if (url.includes('/check/')) data = { done: upstreamMode === 'done', is_possible: true, queue_position: 9, wait_time: 90 };
-    else if (options.method === 'GET') data = { generations: [{ img: 'https://images.example/result.png', seed: '1', model: 'test-worker' }] };
+    else if (url.includes('/status/') || options.method === 'GET') data = { generations: [{ img: 'https://images.example/result.png', seed: '1', model: 'test-worker' }] };
     return new Response(JSON.stringify(data), { status: url.endsWith('/async') ? 202 : 200 });
   };
   const { main } = require('../server');
@@ -63,6 +65,15 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   assert.match(bridge.headers.get('set-cookie'), /HttpOnly/);
   const cookie = { Cookie: bridge.headers.get('set-cookie').split(';')[0] };
   assert.equal((await request('/api/images/config', 'GET', undefined, cookie)).status, 200);
+  const proxyImage = await request('/api/workshop/horde-image', 'POST', {
+    prompt: 'a ceramic cup on a wooden table', width: 512, height: 512,
+    style: 'real', enrichPrompt: false,
+  }, cookie);
+  assert.equal(proxyImage.status, 200);
+  assert.equal((await proxyImage.json()).url, 'https://images.example/result.png');
+  const proxySubmit = upstreamBodies.find(body => body && body.prompt && /ceramic cup/.test(body.prompt));
+  assert.ok(proxySubmit, 'same-origin Horde proxy submits upstream');
+  assert.doesNotMatch(proxySubmit.prompt, /photorealistic RAW photo|shot on DSLR|natural skin pores/i);
   const quota = async () => (await (await request('/api/me/quota', 'GET', undefined, cookie)).json()).used;
   assert.equal(await quota(), 0);
   const created = await request('/api/images', 'POST', { prompt: 'A cat by a window' }, cookie);
