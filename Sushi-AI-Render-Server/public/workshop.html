@@ -58,7 +58,7 @@
           <span class="核心标题左">
             <b>01 · 核心描述</b>
             <button type="button" class="文字钮" id="清空描述按钮" onclick="清空描述()" title="清空核心描述与相关出图描述">清空描述</button>
-            <button type="button" class="文字钮" id="智能修饰按钮" onclick="智能修饰()" title="智能追加写实/画风修饰到出图层（不改核心描述原文）；再点替换上一版，词库用尽后可 AI 生成">智能修饰</button>
+            <button type="button" class="文字钮" id="智能修饰按钮" onclick="智能修饰()" title="按核心内容智能补充画面细节，不改写核心描述；再点可换一版">智能修饰</button>
           </span>
           <span>必填</span>
         </div>
@@ -2744,86 +2744,27 @@
     return 项;
   }
 
-  function 随机核心已有暴露意图(文) {
-    return /裸体|全裸|裸露|无衣|暴露|性感|内衣|胸罩|内裤|比基尼|nude|naked|lingerie|underwear|\bbra\b|panties|cleavage|skimpy|seductive|sexy|revealing/i.test(String(文 || ""));
-  }
-  function 随机核心已有着装(文) {
-    return /衣|裙|衫|外套|毛衣|大衣|风衣|夹克|裤|帽|鞋|袜|靴|围巾|袍|西装|制服|围裙|hoodie|sweater|coat|dress|shirt|blouse|jacket|pants|jeans|outfit|clothing|wearing|dressed|uniform|suit|skirt|apron|穿着|身穿|针织/i.test(String(文 || ""));
-  }
   function 扩写随机核心(简中, 简英) {
-    // 随机发明的核心：无暴露意图时强制日常着装（非内衣/裸体）；不改用户手写核心。
-    var 着装中 = "";
-    var 着装英 = "";
-    if (!随机核心已有暴露意图(简中 + " " + 简英) && !随机核心已有着装(简中 + " " + 简英)) {
-      着装中 = "身穿普通日常服装，衣着整齐得体，非内衣非暴露；";
-      着装英 = ", wearing ordinary everyday clothing, fully clothed, modest attire, not lingerie, not nude, not revealing";
-    } else if (!随机核心已有暴露意图(简中 + " " + 简英) && 随机核心已有着装(简中 + " " + 简英)) {
-      着装中 = "衣着整齐得体，非内衣非裸体；";
-      着装英 = ", fully clothed as described, not lingerie, not nude";
-    }
+    // 随机功能只补画面质量与构图，不决定衣着或暴露程度。
+    // 若调用方传入了衣着事实，它仍作为原始核心的一部分原样保留。
     var 核心 = 简中 +
-      "。虚构成年角色，" + 着装中 + "五官与发型清晰，皮肤质感自然；全身正面构图，平视镜头、面向镜头，从头到脚完整入画；浅景深；主光明确、辅光柔和，阴影层次清楚；服装面料与场景材质可辨；无未成年人。";
-    var 详英 = 简英 + 着装英 +
-      ", detailed facial features and hair, natural skin texture, full-body front view framing, eye-level facing camera, full figure visible head to toe, shallow depth of field, clear key light with soft fill, readable fabric and environment materials, cinematic composition, fictional consenting adults 18+ only, no minors";
+      "。虚构成年角色，五官与发型清晰，皮肤质感自然；构图完整，主光明确、辅光柔和，阴影层次清楚；场景材质可辨；无未成年人。";
+    var 详英 = 简英 +
+      ", detailed facial features and hair, natural skin texture, complete composition, clear key light with soft fill, readable environment materials, fictional consenting adults 18+ only, no minors";
     return 丰富随机项(简中, 简英, 核心, 详英);
   }
 
   function 本地随机一项() {
     var 池 = [
-      丰富随机项(
-        "黄昏窗边的成年女人，写实照片",
-        "photoreal photo of a fictional adult woman by a dusk window",
-        "黄昏窗边的虚构成年女人，身穿普通针织衫与长裤，衣着整齐非暴露，正面平视面向镜头，窗外暖橙余晖；全身构图，从头到脚入画，浅景深虚化室内；窗边轮廓光勾勒发丝与肩线，室内有一盏柔和补光；针织衫纹理清晰，皮肤与眼神自然写实；无未成年人。",
-        "photoreal photo of a fictional adult woman by a dusk window, wearing an ordinary knit sweater and long pants, fully clothed modest attire, front view eye-level facing camera, warm orange rim light on hair and shoulders, soft indoor fill, full-body framing head to toe, shallow depth of field, visible knitwear texture, natural skin detail, cinematic still, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "雨夜街道上的成年男人，电影感",
-        "cinematic photoreal photo of a fictional adult man on a rainy night street",
-        "雨夜街道上的虚构成年男人，湿润沥青反光，霓虹冷暖交织；全身正面平视面向镜头；街灯作主光，雨丝与积水高光清楚；风衣面料微湿，面部轮廓锐利写实；无未成年人。",
-        "cinematic photoreal photo of a fictional adult man on a rainy night street, wet asphalt reflections, mixed neon key light, visible rain streaks, full-body front view eye-level facing camera, damp coat fabric detail, sharp facial structure, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "两名成年人在暖光室内对视",
-        "photoreal photo of two fictional adults facing each other in warm indoor light",
-        "两名虚构成年人在暖光室内并肩站立，正面平视面向镜头，各自身穿普通日常服装（毛衣/衬衫等），衣着整齐非暴露；双人全身构图，从头到脚入画，浅景深；钨丝暖黄主光从侧前方打来，背景墙面柔和虚化；表情自然，服装与皮肤质感清晰；无未成年人。",
-        "photoreal photo of two fictional adults standing side by side in warm indoor light, each wearing ordinary everyday clothing such as sweater or shirt, fully clothed modest attire, front view eye-level facing camera, full-body two-shot head to toe, tungsten key from front-side, shallow depth of field, natural expressions, clear clothing and skin texture, fictional consenting adults 18+ only, no minors"
-      ),
-      丰富随机项(
-        "旧沙发上的成年女人，胶片质感",
-        "film-look photoreal photo of a fictional adult woman sitting on an old sofa",
-        "旧沙发上的虚构成年女人正面坐姿面向镜头，身穿普通针织上衣与长裤，衣着整齐非暴露；全身构图，从头到脚入画，轻微胶片颗粒；落地窗柔光作主光，室内阴影偏冷；沙发绒面与针织纹理清楚，表情放松自然；无未成年人。",
-        "film-look photoreal photo of a fictional adult woman sitting on an old sofa, wearing an ordinary knit top and long pants, fully clothed modest attire, front view eye-level facing camera, full-body framing head to toe, gentle film grain, soft window key light with cooler shadow, visible sofa velvet and knit texture, relaxed natural expression, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "靠在车门边的成年男人，黄金时刻",
-        "golden hour photoreal photo of a fictional adult man leaning on a car door",
-        "黄金时刻靠在车门边的虚构成年男人，手臂搭在车顶；全身正面平视面向镜头，逆光勾边；阳光拉长影子，车漆反光清楚；衬衫微皱，面部高光自然；无未成年人。",
-        "golden hour photoreal photo of a fictional adult man leaning on a car door, arm on roof, full-body front view eye-level facing camera, backlight rim, long shadows, clear car-paint reflections, slightly wrinkled shirt, natural facial highlights, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "厨房里忙碌的成年女人，纪实摄影",
-        "documentary photoreal photo of a fictional adult woman stir-frying in a kitchen with steam",
-        "厨房里忙碌的虚构成年女人正在翻炒，蒸汽升腾，身穿家居服与围裙，衣着整齐非暴露；纪实抓拍全身正面面向镜头，略带运动感；顶灯与窗光混合，不锈钢锅具有高光；围裙与食材细节清楚，表情专注；无未成年人。",
-        "documentary photoreal photo of a fictional adult woman stir-frying tossing food in wok mid-motion in a kitchen, wearing home clothes and an apron, fully clothed modest attire, visible rising steam vapor, candid full-body front view facing camera with slight motion, mixed overhead and window light, stainless steel wok with specular highlights, apron and ingredients clearly visible, focused expression, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "图书馆窗边读书的成年男人",
-        "photoreal photo of a fictional adult man reading by a library window",
-        "图书馆窗边读书的虚构成年男人，手持书本；全身正面平视面向镜头，书架虚化；冷白窗光为主，室内暖台灯为辅；纸张纤维与毛衣纹理清楚，神情安静；无未成年人。",
-        "photoreal photo of a fictional adult man reading by a library window, full-body front view eye-level facing camera, soft bookshelf bokeh, cool window key with warm desk-lamp fill, visible paper fiber and sweater knit, calm expression, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "海边栈道上的成年女人，自然光",
-        "photoreal photo of a fictional adult woman on a seaside boardwalk, natural light",
-        "海边栈道上的虚构成年女人迎风而立面向镜头，发丝轻扬，身穿休闲外套与长裤，衣着整齐非暴露；全身正面远中景，地平线偏低；阴天柔和自然光，海面与木板纹理清楚；休闲外套质感写实，表情轻松；无未成年人。",
-        "photoreal photo of a fictional adult woman on a seaside boardwalk in natural light, wind-lifted hair, wearing a casual jacket and long pants, fully clothed modest attire, full-body front view mid-distance framing facing camera, low horizon, overcast soft daylight, clear wood plank and sea texture, casual jacket detail, relaxed expression, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "三名成年人站在一起的全身正面写实照",
-        "photoreal full-body front-view photo of three fictional adults standing together",
-        "三名虚构成年人并肩全身站立面向镜头，间距自然，各自身穿普通日常服装，衣着整齐非内衣非暴露；水平机位、轻微广角，从头到脚入画；均匀影棚柔光，背景干净浅灰；各自发型服装可辨，表情自然互动；无未成年人。",
-        "photoreal full-body front-view photo of three fictional adults standing together, each wearing ordinary everyday clothing, fully clothed modest attire, even spacing, eye-level slight wide framing head to toe, soft studio key light, clean light-gray backdrop, distinct hairstyles and outfits, natural interaction, fictional adults 18+ only, no minors"
-      )
+      扩写随机核心("黄昏窗边的成年女人，写实照片", "photoreal photo of a fictional adult woman by a dusk window"),
+      扩写随机核心("雨夜街道上的成年男人，电影感", "cinematic photoreal photo of a fictional adult man on a rainy night street"),
+      扩写随机核心("两名成年人在暖光室内对视", "photoreal photo of two fictional adults facing each other in warm indoor light"),
+      扩写随机核心("旧沙发上的成年女人，胶片质感", "film-look photoreal photo of a fictional adult woman sitting on an old sofa"),
+      扩写随机核心("靠在车门边的成年男人，黄金时刻", "golden hour photoreal photo of a fictional adult man leaning on a car door"),
+      扩写随机核心("厨房里忙碌的成年女人，纪实摄影", "documentary photoreal photo of a fictional adult woman stir-frying in a kitchen with steam"),
+      扩写随机核心("图书馆窗边读书的成年男人", "photoreal photo of a fictional adult man reading by a library window"),
+      扩写随机核心("海边栈道上的成年女人，自然光", "photoreal photo of a fictional adult woman on a seaside boardwalk, natural light"),
+      扩写随机核心("三名成年人站在一起的全身正面写实照", "photoreal full-body front-view photo of three fictional adults standing together")
     ];
     return 池[Math.floor(Math.random() * 池.length)];
   }
@@ -4283,7 +4224,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.76" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.77" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {

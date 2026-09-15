@@ -681,6 +681,7 @@ function imageRoute(handler) {
 app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
   res.json({
     provider: 'horde',
+    authenticatedHorde: !!process.env.HORDE_API_KEY && process.env.HORDE_API_KEY !== '0000000000',
     free: true,
     maxWaitSeconds: 600,
     race: ['perchance'],
@@ -1824,6 +1825,7 @@ app.post('/api/workshop/horde-image', async (req, res) => {
       width,
       height,
       style: isAnime ? 'anime' : 'real',
+      enrichPrompt: req.body && req.body.enrichPrompt !== false,
       seed: seed === undefined ? '' : String(seed),
     });
     hordePrompt = built.prompt;

@@ -1999,6 +1999,22 @@
     }
   }
 
+  async function generateHordeViaServer(run, prompt, index, signal, engineName) {
+    var reported = engineName === 'perchance' ? 'perchance' : (engineName === 'horde-anime' ? 'horde-anime' : 'horde-real');
+    var seed = run.payload && run.payload.seed;
+    var body = Object.assign({}, run.payload || {}, {
+      prompt: String(prompt || '').slice(0, 1600),
+      style: reported === 'horde-anime' ? 'anime' : 'real',
+      enrichPrompt: run.enrichPrompt !== false
+    });
+    if (seed !== '' && seed != null) body.seed = String(Number(seed) + (index || 0));
+    run.job = await api('', { method: 'POST', body: body, signal: signal });
+    ensureActive(run);
+    var done = await poll(run, run.job, signal);
+    if (!done || !done.image || !done.image.url) throw new Error('服务器生图通道没有返回图片');
+    return { url: done.image.url, engine: reported };
+  }
+
   async function generateHorde(run, prompt, index, providerSignal, engineName) {
     var reported = engineName === 'perchance' ? 'perchance' : (engineName === 'horde-anime' ? 'horde-anime' : 'horde-real');
     var styleName = reported === 'horde-anime' ? 'anime' : 'real';
@@ -2041,6 +2057,18 @@
         if (!/^data:image\//i.test(String(run.payload.sourceImage || ''))) {
           throw new Error('改动需要可用的参考图（base64）。请先生成至少一张图，或点记忆路线最大编号（末步）后再改动');
         }
+      }
+    }
+    // Prefer the same-origin proxy: it uses the configured Horde account and
+    // avoids the several-minute anonymous queue. If that proxy is unavailable,
+    // remain on the same Horde/Perch route and fall back to direct anonymous use.
+    if (SERVER_HORDE_AVAILABLE && !(run.localEdit || (run.payload && run.payload.sourceImage))) {
+      try {
+        return await generateHordeViaServer(run, prompt, index, signal, reported);
+      } catch (serverError) {
+        lastError = serverError;
+        if (run.cancelled || (serverError && serverError.name === 'AbortError')) throw serverError;
+        status('服务器通道暂时未完成，继续同平台生成', '不会更换你选择的出图平台。', true);
       }
     }
     for (var attempt = 0; attempt < 8; attempt += 1) {
@@ -2133,9 +2161,10 @@
   var REAL_RACE_ENGINES = ['perchance'];
   var ANIME_RACE_ENGINES = [];
   var FREE_RACE_ENGINES = REAL_RACE_ENGINES;
+  var SERVER_HORDE_AVAILABLE = false;
 
   function applyImageConfig(cfg) {
-    void cfg;
+    SERVER_HORDE_AVAILABLE = !!(cfg && cfg.authenticatedHorde);
     var glmOpt = document.querySelector('#出图引擎 option[value="glm"]');
     var glmAdmin = document.querySelector('#管理默认平台 option[value="glm"]');
     if (glmOpt && glmOpt.parentNode) glmOpt.parentNode.removeChild(glmOpt);
@@ -3047,22 +3076,7 @@
     var simpleEn = item.英文 || '';
     var core = item.核心 || simpleZh;
     var richEn = item.详英 || simpleEn;
-    // 随机发明着装已在 扩写随机核心 / 本地池写入；此处仅净化详英出站，不改写可见核心。
-    try {
-      var inventSrc = String(core || '') + ' ' + String(richEn || '');
-      var hasExp = typeof hasExposureIntent === 'function' ? hasExposureIntent(inventSrc) : /lingerie|nude|naked|内衣|裸体|暴露|性感/i.test(inventSrc);
-      if (!hasExp) {
-        if (typeof stripExposureBiasDefaults === 'function') {
-          richEn = stripExposureBiasDefaults(richEn, core);
-        }
-        if (!/ordinary everyday clothing|fully clothed|clothing matching the core/i.test(richEn)
-            && !(typeof hasClothingCue === 'function' ? hasClothingCue(core) : /衣|衫|sweater|coat|wearing|针织|围裙/i.test(core))) {
-          richEn = String(richEn || '') + ', wearing ordinary everyday clothing, fully clothed, modest attire, not lingerie, not nude';
-        } else if (!/not lingerie|not nude|fully clothed/i.test(richEn)) {
-          richEn = String(richEn || '') + ', fully clothed as described, not lingerie, not nude';
-        }
-      }
-    } catch (eClothRand) {}
+    // 随机生成不决定衣着或暴露程度；只保留随机项自身明确写出的核心事实。
     randomPair = {
       chinese: core,
       english: richEn,
