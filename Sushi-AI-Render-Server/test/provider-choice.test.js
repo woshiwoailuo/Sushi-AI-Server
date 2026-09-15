@@ -30,12 +30,12 @@ test('Perch uses official generate without Horde relay',async()=>{
  const result=await ctx.generatePerchance({payload:{},completed:0,total:1},'landscape',0);
  assert.deepEqual(calls,['official']);assert.equal(result.engine,'perchance');
 });
-test('blocked official Perch uses in-app photoreal',async()=>{
+test('blocked official Perch reports failure without relaying Horde',async()=>{
  const calls=[];
  const ctx={window:{},status:()=>{},signalWithTimeout:(p)=>p||{aborted:false},parentAborted:()=>false,generatePerchanceOfficial:async()=>{calls.push('official');throw Object.assign(new TypeError('Load failed'),{name:'TypeError'})},generateHorde:async()=>{calls.push('horde');return {url:'https://example.com/h.png',engine:'perchance'}}};
  vm.createContext(ctx);vm.runInContext(extract(generation,'generatePerchance'),ctx);
- const result=await ctx.generatePerchance({payload:{},completed:0,total:1},'landscape',0);
- assert.deepEqual(calls,['official','horde']);assert.equal(result.engine,'perchance');
+ await assert.rejects(ctx.generatePerchance({payload:{},completed:0,total:1},'landscape',0),/Load failed/);
+ assert.deepEqual(calls,['official']);
 });
 test('unsupported reference image remains on selected provider',async()=>{
  const ctx={hasSmartModifier:()=>false,minimalOutboundPrompt:p=>p,ensureNoTextOnImage:p=>p,forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:p=>p,stripInjectedFemaleDefaults:(p)=>p,applyMaleGenderLocks:(p)=>p,stripExposureBiasDefaults:(p)=>p,applyClothingFidelityLocks:(p)=>p,applyCoreActionCoverage:(p)=>p,finalizeOutboundCoreLocks:(p)=>p,applyCoreFidelityLead:(p)=>p,withAdultDirective:p=>p,applyLocalEditOutbound:p=>p,engineFamily:()=>'real',value:()=>''};vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
