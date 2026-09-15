@@ -435,7 +435,7 @@ test('failed Perchance page plugin uses official generate without Horde', async 
   assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
-test('Perch official Load failed uses in-app photoreal', async t => {
+test('Perch official Load failed stays on Perchance and reports the failure', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
   const inner = f.w.fetch;
@@ -449,9 +449,31 @@ test('Perch official Load failed uses in-app photoreal', async t => {
   f.w.open = (url) => { opened.push(String(url)); return null; };
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must never open perchance.org');
-  assert.ok(f.calls.filter(isImageSubmit).length >= 1, 'blocked official uses in-app photoreal');
-  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
-  assert.doesNotMatch(f.text(), /Load failed/);
+  assert.equal(f.calls.filter(isImageSubmit).length, 0, 'must not relay Horde under the Perchance label');
+  assert.equal(f.w.document.querySelector('#图像输出 img'), null);
+  assert.match(f.text(), /Perchance 官方接口连接失败/);
+});
+
+test('Perchance Cloudflare challenge stops after verification and never submits another provider', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('出图引擎').value = 'perchance';
+  const inner = f.w.fetch;
+  f.w.fetch = (url, options) => {
+    if (/image-generation\.perchance\.org\/api\/verifyUser/.test(String(url))) {
+      return Promise.resolve({
+        ok: false,
+        status: 403,
+        headers: { get: name => String(name).toLowerCase() === 'cf-mitigated' ? 'challenge' : '' },
+        text: async () => '<!DOCTYPE html><title>Just a moment...</title>'
+      });
+    }
+    return inner(url, options);
+  };
+  await f.w.开始生成();
+  assert.equal(f.calls.filter(isImageSubmit).length, 0);
+  assert.equal(f.calls.filter(isPerchOfficial).length, 0, 'generate endpoint is not retried with an empty userKey');
+  assert.match(f.text(), /Cloudflare.*403/);
+  assert.equal(f.w.document.getElementById('出图引擎').value, 'perchance');
 });
 
 test('photorealPrompt enriches by default but style-keyword bypass keeps anime/二次元/插画', async t => {
