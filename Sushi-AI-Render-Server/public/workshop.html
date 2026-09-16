@@ -18,6 +18,9 @@
     </div>
 
     <div class="顶栏右侧">
+      <!-- 成人主题默认开启，无顶栏对勾 UI（勿恢复复刻警告弹窗） -->
+      <input id="成人模式对勾" type="checkbox" checked hidden>
+      <span id="成人状态标签" class="状态标签 已开启" hidden>18+</span>
       <button
         type="button"
         class="次按钮 顶栏操作"
@@ -55,7 +58,7 @@
           <span class="核心标题左">
             <b>01 · 核心描述</b>
             <button type="button" class="文字钮" id="清空描述按钮" onclick="清空描述()" title="清空核心描述与相关出图描述">清空描述</button>
-            <button type="button" class="文字钮" id="智能修饰按钮" onclick="智能修饰()" title="智能追加写实或画风修饰词到核心描述；再点可换一版">智能修饰</button>
+            <button type="button" class="文字钮" id="智能修饰按钮" onclick="智能修饰()" title="按核心内容智能补充画面细节，不改写核心描述；再点可换一版">智能修饰</button>
           </span>
           <span>必填</span>
         </div>
@@ -73,32 +76,29 @@
 
         <label>
           生图平台
-          <select id="出图引擎" name="出图引擎">
-            <option value="auto" selected>
-              自动抢出 · 全平台
-            </option>
-            <option value="turbo">
-              Turbo · 极速
-            </option>
-            <option value="horde">
-              Horde · 免费共享算力
-            </option>
-            <option value="flux">
-              Flux · 通用高质量
-            </option>
-            <option value="flux-realism">
-              Flux写实 · 人像优先
-            </option>
-            <option value="sana">
-              Sana · 中文友好
-            </option>
-            <option value="perchance">
-              Perch / Perchance · 应用内生成
-            </option>
-          </select>
+          <select id="出图引擎" onchange="保存默认平台(this.value, true); 设平台提示(this.value)"><option value="perchance">Perchance</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
         </label>
-        <input id="备用引擎" type="hidden" value="turbo">
+        <input id="备用引擎" type="hidden" value="perchance">
 
+        <label class="换背景行 对勾行" id="记忆模式对勾行">
+          <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
+          <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
+          <span>记忆模式</span>
+        </label>
+        <div id="记忆线路区" class="记忆线路区">
+          <p id="记忆生成线路" class="记忆生成线路" role="status">记忆线路：加载中…</p>
+          <ul id="记忆路线列表" class="记忆路线列表" aria-label="记忆模式生成描述历史"></ul>
+          <div class="记忆线路操作" role="group" aria-label="生图方式与清除记忆">
+            <div class="生图方式行" id="生图方式行" role="group" aria-label="改动或全文生图">
+              <label class="换背景行 对勾行 生图方式项" id="生图方式改动行" hidden>
+                <input type="checkbox" id="生图方式改动" value="改动" onchange="切换生图方式(this.checked ? '改动' : '重新生成')">
+                <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
+                <span class="生图方式文案"><b>改动</b><small>勾选=参考图局部改；不勾=全文生图（仅记忆模式）</small></span>
+              </label>
+            </div>
+            <button type="button" class="次按钮 清除本记忆钮" id="清除记忆线路按钮" onclick="清除记忆线路()">清除全部记忆线路</button>
+          </div>
+        </div>
         <div class="核心操作">
 
           <button
@@ -124,26 +124,21 @@
         <div id="管理面板" class="分区" hidden>
           <div class="分区标题"><b>管理员</b><span>已解锁</span></div>
           <label>默认平台
-            <select id="管理默认平台" onchange="保存默认平台(this.value, true)">
-              <option value="perchance" selected>Perch / Perchance · 应用内优先</option>
-              <option value="turbo">Turbo</option>
-              <option value="horde">Horde</option>
-              <option value="flux">Flux</option>
-              <option value="flux-realism">Flux写实</option>
-              <option value="sana">Sana</option>
-              <option value="perchance">Perch / Perchance · 应用内</option>
-            </select>
+            <select id="管理默认平台" onchange="保存默认平台(this.value, true)"><option value="perchance">Perchance</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
           </label>
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input id="调试开关" type="checkbox" onchange="切换调试(this.checked)">
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>显示调试信息</span>
           </label>
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input id="显示图生图" type="checkbox" checked onchange="切换区块('图生图区', this.checked)">
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>显示图生图</span>
           </label>
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input id="显示问答" type="checkbox" checked onchange="切换区块('问答区', this.checked)">
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>显示AI问答</span>
           </label>
           <p id="失败原因" class="说明文字">失败原因：暂无</p>
@@ -314,7 +309,7 @@
               id="负面提示"
               name="负面提示"
               rows="4"
-            >低清晰度，模糊，失焦，错误解剖，多头，双头，三头，身体融合，多余手臂，多余腿，缺失手臂，缺失腿，手脚数量不对，三只手，三只腿，多余手指，缺失手指，畸形手部，重复肢体，扭曲五官，模糊脸，变形脸，五官错位，塑料皮肤，蜡像感，卡通，动漫，插画，数字绘画，二次元，漫画，儿童，未成年人，真实名人，电脑界面，文字，水印, anime, manga, cartoon, illustration, cel shading</textarea>
+            >lowres, blurry, out of focus, bad anatomy, multiple heads, fused bodies, extra arms, extra legs, missing arms, missing legs, wrong number of limbs, extra fingers, missing fingers, malformed hands, duplicated limbs, distorted face, blurry face, deformed face, misplaced facial features, plastic skin, wax figure, cartoon, anime, illustration, digital painting, manga, child, minor, underage, real celebrity, UI, text, watermark, pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature, anime, manga, cartoon, illustration, cel shading</textarea>
           </label>
 
         </div>
@@ -325,7 +320,7 @@
         id="成人功能状态"
         name="成人功能状态"
         type="hidden"
-        value="adult mode enabled; NSFW allowed; nudity and adult sexual content allowed; follow the core description literally; do not add clothes if described as nude; fictional consenting adults 18+"
+        value="adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing, revealing outfits, lingerie, cleavage, skimpy clothes, seductive posing, or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors"
       >
 
       <details id="图生图区" class="分区">
@@ -353,22 +348,25 @@
             type="hidden"
             value=""
           >
-          <label class="换背景行">
+          <input id="参考图种子" name="参考图种子" type="hidden" value="">
+          <label class="换背景行 对勾行">
             <input
               id="只换背景"
               type="checkbox"
               checked
               onchange="同步换背景强度()"
             >
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>只换背景，人物、衣服、姿势尽量保持原图</span>
           </label>
 
-          <label class="换背景行">
+          <label class="换背景行 对勾行">
             <input
               id="纯背景出图"
               type="checkbox"
               onchange="同步纯背景()"
             >
+            <span class="对勾盒" aria-hidden="true"><span class="对勾符">✓</span></span>
             <span>纯场景 / 插图生背景（不要人物，只画环境）</span>
           </label>
           <label>
@@ -382,10 +380,7 @@
           </label>
           <label>
             图生图平台
-            <select id="图生图平台" name="图生图平台" onchange="保存图生图平台(this.value)">
-              <option value="aihorde" selected>AI Horde · 真实图生图</option>
-              <option value="server-auto">服务器自动选择（当前 AI Horde）</option>
-            </select>
+            <select id="图生图平台" onchange="保存图生图平台(this.value)"><option value="perchance">Perchance</option><option value="horde-real">AI Horde · 写实</option><option value="horde-anime">AI Horde · 动漫</option><option value="sana">Sana</option></select>
           </label>
           <div class="核心操作">
             <button type="button" class="次按钮" onclick="document.getElementById('参考图文件').click()">插入图片</button>
@@ -396,32 +391,21 @@
         </div>
       </details>
 
-      <details id="问答区" class="分区" open>
+      <details id="问答区" class="分区">
         <summary>AI 对话</summary>
           <label>
-            回答通道（选定后只用这一路；自动抢答才多路赛跑）
-          <select id="AI通道" onchange="对话通道已改()">
-            <option value="auto" selected>自动抢答 · 推荐</option>
-            <option value="openai">OpenAI 兼容模型</option>
-            <option value="openai-fast">快速模型</option>
-            <option value="deepseek">DeepSeek · 需配置密钥</option>
-            <option value="turbo">Turbo 备用</option>
-            <option value="horde">Horde</option>
-          </select>
-        </label>
-        <label class="换背景行">
-          <input id="记忆开关" type="checkbox" checked onchange="切换记忆(this.checked)">
-          <span>启用记忆</span>
+            回答通道
+          <select id="AI通道" onchange="对话通道已改()"><option value="glm">GLM</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option><option value="grok">Grok</option><option value="horde">AI Horde</option><option value="openai">OpenAI</option><option value="openai-fast">OpenAI Fast</option></select>
+          <span id="对话通道状态" class="说明文字" role="status">使用所选对话通道，失败时不会自动更换。</span>
         </label>
         <label>
-          记忆模式
+          记忆长度
           <select id="记忆模式" onchange="切换记忆模式(this.value)">
             <option value="short">短记忆 · 最近约 12 轮</option>
             <option value="long" selected>长记忆 · 大数据（本机保存大量历史+摘要）</option>
             <option value="off">关闭记忆</option>
           </select>
         </label>
-        <p id="记忆说明" class="说明文字">默认长记忆：对话与摘要保存在本机 localStorage（单域约数 MB）。服务端 SQLite 在 Vercel 上会重置，故跨设备不以服务端为准。</p>
         <div id="对话列表" class="对话列表" aria-live="polite"></div>
         <div class="对话输入行">
           <textarea id="AI问题" rows="2" placeholder="输入想问的话…"></textarea>
@@ -430,17 +414,6 @@
         <div class="核心操作">
           <button type="button" class="次按钮" onclick="清空对话()">清空对话</button>
         </div>
-      </details>
-
-      <details id="工具区" class="分区">
-        <summary>实用小工具</summary>
-        <div class="核心操作">
-          <button type="button" class="次按钮" onclick="生成随机种子()">生成随机种子</button>
-          <button type="button" class="次按钮" onclick="复制当前提示()">复制当前提示</button>
-          <button type="button" class="次按钮" onclick="清理当前提示()">清理提示词</button>
-          <button type="button" class="次按钮" onclick="重置生成参数()">重置参数</button>
-        </div>
-        <p id="工具状态" class="说明文字">可快速生成种子、复制英文提示和恢复默认参数。</p>
       </details>
 
 
@@ -482,12 +455,12 @@
       <div id="图像输出" class="画廊"></div>
       <div id="抢出备用" class="画廊" hidden></div>
       <div id="抢出探测" hidden></div>
-      <p id="平台提示" class="平台提示">生图平台：自动抢出 · 全平台先到先得</p>
+      <p id="平台提示" class="平台提示">生图平台：Perchance · 按所选通道</p>
 
       <article id="画面说明" class="画面说明">
         <span>当前画面描述</span>
         <h3 id="说明标题">当前画面</h3>
-        <p id="说明中文">用中文写下人物、服装、动作和场景。</p>
+        <p id="说明中文" hidden></p>
         <p id="说明英文" class="说明英文"></p>
       </article>
 
@@ -497,7 +470,7 @@
 
   <footer class="页脚">
     联系邮箱
-    <a href="mailto:sjdwukai2@qq.com">sjdwukai2@qq.com</a>
+    <a href="mailto:sjdwukai2@163.com">sjdwukai2@163.com</a>
   </footer>
 
   <div class="手机底栏" role="group" aria-label="图片操作">
@@ -511,12 +484,13 @@
 </div>
 
 <script>
-  var 成人主题已开启 = false;
+  var 成人主题已开启 = true;
+  try { window.成人主题已开启 = true; } catch (eAdult0) {}
   var 正在生成图片 = false;
   var 出图令牌 = 0;
   var 当前出图令牌 = 0;
   var 正在执行分类 = false;
-  var 引擎顺序 = ["perchance", "auto", "turbo", "flux", "flux-realism", "sana", "horde"];
+  var 引擎顺序 = ["perchance"];
   var 走备用线路 = false;
   var 本引擎已出张数 = 0;
   var 本轮已试引擎 = [];
@@ -525,7 +499,7 @@
   var 十八禁点击 = 0;
   var 十八禁行已开 = false;
   var 用户选定平台 = "perchance";
-  var 用户选定图生图平台 = "aihorde";
+  var 用户选定图生图平台 = "perchance";
   var 本轮胜出 = "";
   var 管理员已解锁 = false;
   var 管理员口令 = "我是小笨蛋哦哦";
@@ -582,12 +556,14 @@
       for (i = 0; i < 节点.length; i++) {
         var el = 节点[i];
         if (根 && d === document && (el === 根 || 根.contains(el))) continue;
+        if (el.closest && el.closest("[role='dialog'], .对勾行, .对勾盒, #记忆模式对勾行")) continue;
         var 字 = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
         var 址 = String(el.getAttribute("href") || "").toLowerCase();
         var 类名 = "";
         try { 类名 = typeof el.className === "string" ? el.className : (el.className && el.className.baseVal) || ""; } catch (e4) {}
         var 名 = String(el.id || "") + " " + 类名 + " " + String(el.getAttribute("title") || "") + " " + String(el.getAttribute("aria-label") || "");
-        if (字 === "edit" || 字 === "编辑" || 字 === "🛠️" || 址.indexOf("#edit") !== -1 || /headerButton|minimizedHeader|minimalMode|menuBarEl|perchance/i.test(名)) {
+        if (/危险内容|成人提示|年满 18|allow adult|okaytoshow|nsfw warning|content warning/i.test(字 + " " + 名)) continue;
+        if (字 === "edit" || 字 === "编辑" || 字 === "🛠️" || 址.indexOf("#edit") !== -1 || /headerButton|minimizedHeader|minimalMode|menuBarEl/i.test(名)) {
           藏站点元素(el, 根);
           continue;
         }
@@ -603,7 +579,10 @@
 
 
 
-  document.addEventListener("DOMContentLoaded", function () {
+  var 工坊已启动 = false;
+  function 启动工坊界面() {
+    if (工坊已启动) return;
+    工坊已启动 = true;
     恢复成人主题状态();
     绑定贴图();
     藏编辑钮();
@@ -625,28 +604,11 @@
     填入待用提示();
     载入记忆开关();
     载入图生图平台();
-    var 平台框 = document.getElementById("出图引擎");
-    if (平台框) {
-      if (!平台框.value) 平台框.value = "auto";
-      用户选定平台 = 平台框.value || "auto";
-      平台框.addEventListener("change", function () {
-        用户选定平台 = 平台框.value || "perchance";
-        保存默认平台(用户选定平台, true);
-        本引擎已出张数 = 0;
-        本平台成功 = 0;
-        本平台失败 = 0;
-        var 提示 = document.getElementById("分类状态");
-        if (提示) 提示.textContent = 用户选定平台 === "auto"
-          ? "自动抢出：各路一起跑，先出的留下。"
-          : ("已选定 " + 引擎名称(用户选定平台) + "，本轮只用这一路。");
-      });
-    }
-    var 对话框 = document.getElementById("AI通道");
-    if (对话框) {
-      对话框.addEventListener("change", function () {
-        保存对话通道(对话框.value || "auto", true);
-      });
-    }
+    载入已配置通道();
+    try {
+      保存默认平台(localStorage.getItem("角色生成器_默认平台") || "perchance", false);
+      保存对话通道(localStorage.getItem("角色生成器_对话通道") || "glm", false);
+    } catch (e) {}
     var 核心 = document.getElementById("角色描述");
     var 英文 = document.getElementById("英文描述");
     var 中文 = document.getElementById("中文译文");
@@ -661,10 +623,22 @@
     载入对话();
     载入记忆摘要();
     载入记忆模式();
+    载入记忆路线();
+    同步生图方式默认(false);
+    同步改动可见性();
+    刷新记忆生成线路();
     var 核框 = document.getElementById("角色描述");
     if (核框) {
       核框.addEventListener("input", function () {
         try { localStorage.setItem("角色生成器_上次描述", 核框.value || ""); } catch (e) {}
+        // 记忆开启且核心被改写：不清空历史，仅让后续生成以新核心为准（英文旧稿下次出图会重译）
+        if (记忆已开()) {
+          var 英文框 = document.getElementById("英文描述");
+          // 核心改写后旧英文不再可信，留空以便出图路径重译
+          if (英文框 && 核心描述已更新()) {
+            try { 英文框.dataset.staleFromCore = "1"; } catch (e2) {}
+          }
+        }
       });
     }
     var 问框 = document.getElementById("AI问题");
@@ -676,8 +650,9 @@
         }
       });
     }
-
-  });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", 启动工坊界面);
+  else 启动工坊界面();
 
   function 刷新出图进度(已完成, 成功) {
     进度已报 = Number(已完成) || 0;
@@ -688,6 +663,17 @@
     }
   }
 
+  function 像拼音串(文) {
+    var t = String(文 || "").replace(/\s+/g, " ").trim();
+    if (!t || /[\u4e00-\u9fff]/.test(t)) return false;
+    // 无实义英文词、多为音节空格串时视为拼音误显（如 yi wei dong ya nv xing）
+    if (!/\b(the|a|an|of|in|on|with|and|photo|woman|man|girl|boy|adult|standing|sitting|full|body|street|park|window)\b/i.test(t)) {
+      var parts = t.toLowerCase().split(/[^a-zA-Z]+/).filter(Boolean);
+      if (parts.length >= 3 && parts.every(function (p) { return p.length <= 6; })) return true;
+    }
+    if (/[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜü]/i.test(t)) return true;
+    return false;
+  }
   function 刷新画面说明() {
     var 标题 = document.getElementById("说明标题");
     var 中文区 = document.getElementById("说明中文");
@@ -699,6 +685,8 @@
     var 展示中文 = 去重描述(含中文(中文) ? 中文 : (含中文(核心) ? 核心 : ""));
     if (!英文 && 核心 && !含中文(核心)) 英文 = 核心;
     英文 = 只留英文(去掉方括号(英文));
+    // 有中文核心时，勿把拼音误当成英文说明展示
+    if (展示中文 && 像拼音串(英文)) 英文 = "";
     if (标题) 标题.textContent = 展示中文 || "当前画面";
     if (中文区) {
       中文区.textContent = "";
@@ -723,14 +711,9 @@
   }
 
   function 恢复成人主题状态() {
-    try {
-      localStorage.setItem("角色生成器_成人主题", "enabled");
-      localStorage.setItem("角色生成器_十八禁行", "0");
-    } catch (错误) {}
+    // 无顶栏开关：成人主题始终默认开启；测试仍可调用 切换成人对勾 临时关闭
     设置成人主题状态(true);
-    十八禁行已开 = false;
-    var 行 = document.getElementById("十八禁开关行");
-    if (行) 行.hidden = true;
+    try { localStorage.setItem("角色生成器_成人主题", "enabled"); } catch (错误) {}
   }
 
   function 读取是否用户选过平台() {
@@ -740,36 +723,29 @@
     try { return localStorage.getItem("角色生成器_用户选过对话") === "1"; } catch (e) { return false; }
   }
   function 规范化出图平台(值, 用户选过) {
-    值 = String(值 || "").trim();
-    if (值 === "官方" || 值 === "perch") 值 = "perchance";
-    var 可用 = ["auto", "turbo", "horde", "flux", "flux-realism", "sana", "perchance"];
-    if (用户选过 && 可用.indexOf(值) >= 0) return 值;
-    if (!用户选过 && (!值 || 值 === "auto")) return "auto";
-    return 可用.indexOf(值) >= 0 ? 值 : "auto";
+    return ["perchance", "horde-real", "horde-anime", "sana"].indexOf(值) >= 0 ? 值 : "perchance";
   }
 
   function 图生图平台键() {
     var 邮箱 = (window.当前用户邮箱 || window.登录邮箱 || "").toString().trim().toLowerCase();
     return "苏轼AI_图生图平台" + (邮箱 ? "_" + 邮箱 : "");
   }
+  function 规范化图生图平台(值) {
+    return 规范化出图平台(值, true);
+  }
   function 载入图生图平台() {
-    var 值 = "aihorde";
+    var 值 = "perchance";
     try { 值 = localStorage.getItem(图生图平台键()) || 值; } catch (e) {}
-    用户选定图生图平台 = 值 === "server-auto" ? "server-auto" : "aihorde";
-    var 框 = document.getElementById("图生图平台");
-    if (框) 框.value = 用户选定图生图平台;
+    保存图生图平台(值);
   }
   function 保存图生图平台(值) {
-    用户选定图生图平台 = 值 === "server-auto" ? "server-auto" : "aihorde";
+    用户选定图生图平台 = 规范化图生图平台(值);
+    var 框 = document.getElementById("图生图平台");
+    if (框) { 框.value = 用户选定图生图平台; 框.disabled = false; }
     try { localStorage.setItem(图生图平台键(), 用户选定图生图平台); } catch (e) {}
-    var 状态 = document.getElementById("工具状态");
-    if (状态) 状态.textContent = "图生图平台已保存：" + (用户选定图生图平台 === "server-auto" ? "服务器自动选择（当前 AI Horde）" : "AI Horde");
   }
   function 规范化对话通道(值, 用户选过) {
-    值 = String(值 || "").trim();
-    if (!值) return "auto";
-    if (!用户选过 && (值 === "perchance" || 值 === "官方")) return "auto";
-    return 值;
+    return ["glm","deepseek","groq","gemini","openrouter","grok","horde","openai","openai-fast"].indexOf(值) >= 0 ? 值 : "glm";
   }
 
 
@@ -806,76 +782,30 @@
       var 框 = document.getElementById("角色描述");
       var 旧 = localStorage.getItem("角色生成器_上次描述") || "";
       if (框 && 旧 && !(框.value || "").trim()) 框.value = 旧;
-      var 平台框 = document.getElementById("出图引擎");
-      var 平台 = 规范化出图平台(localStorage.getItem("角色生成器_默认平台"), 读取是否用户选过平台());
-      if (平台框) {
-        平台框.value = 平台;
-        用户选定平台 = 平台框.value || "perchance";
-      }
-      var 对话框 = document.getElementById("AI通道");
-      var 通道 = 规范化对话通道(localStorage.getItem("角色生成器_对话通道"), 读取是否用户选过对话());
-      if (对话框) 对话框.value = 通道;
+      保存默认平台(localStorage.getItem("角色生成器_默认平台") || "perchance", false);
+      保存对话通道(localStorage.getItem("角色生成器_对话通道") || "glm", false);
     } catch (e) {}
     刷新画面说明();
   }
 
   function 请求切换成人主题() {
-    设置成人主题状态(true);
+    切换成人对勾(!成人主题已开启);
   }
 
-  function 检查成人确认按钮() {
-    var 已勾选 =
-      document.getElementById("成人统一确认").checked;
-
-    document.getElementById("确认开启按钮").disabled =
-      !已勾选;
-  }
-
-  function 确认开启成人主题() {
-    var 已勾选 =
-      document.getElementById("成人统一确认").checked;
-
-    if (!已勾选) {
-      alert("请先阅读并勾选统一确认。");
-      return;
-    }
-
-    设置成人主题状态(true);
-    关闭成人确认();
-
+  function 切换成人对勾(开) {
+    设置成人主题状态(!!开);
     try {
-      localStorage.setItem(
-        "角色生成器_成人主题",
-        "enabled"
-      );
-    } catch (错误) {
-      console.log("浏览器不允许保存设置");
-    }
+      localStorage.setItem("角色生成器_成人主题", 开 ? "enabled" : "disabled");
+    } catch (错误) {}
   }
 
   function 关闭成人主题() {
-    var 是否关闭 = confirm(
-      "确定关闭成人主题吗？关闭后将恢复普通生成模式。"
-    );
-
-    if (!是否关闭) {
-      return;
-    }
-
-    设置成人主题状态(false);
-
-    try {
-      localStorage.setItem(
-        "角色生成器_成人主题",
-        "disabled"
-      );
-    } catch (错误) {
-      console.log("浏览器不允许修改设置");
-    }
+    切换成人对勾(false);
   }
 
   function 设置成人主题状态(开启) {
     成人主题已开启 = 开启;
+    try { window.成人主题已开启 = 成人主题已开启; } catch (e0) {}
 
     var 标签 =
       document.getElementById("成人状态标签");
@@ -889,12 +819,23 @@
     var 后台状态 =
       document.getElementById("成人功能状态");
 
-    var 图标 =
-      document.getElementById("成人图标按钮");
+    var 勾 =
+      document.getElementById("成人模式对勾");
+
+    if (勾) 勾.checked = !!开启;
+    var 开关 = document.getElementById("成人开关按钮");
+    if (开关) {
+      开关.classList.toggle("已开启", !!开启);
+      开关.classList.toggle("已关闭", !开启);
+      开关.setAttribute("aria-pressed", 开启 ? "true" : "false");
+      开关.title = 开启 ? "已开启，点击关闭" : "已关闭，点击开启";
+      var 符 = 开关.querySelector(".对勾符");
+      if (符) 符.textContent = 开启 ? "✓" : "";
+    }
 
     if (开启) {
       if (标签) {
-        标签.textContent = "已开启 · 18+";
+        标签.textContent = "18+";
         标签.className = "状态标签 已开启";
       }
 
@@ -907,20 +848,13 @@
         提示.hidden = true;
       }
 
-      if (图标) {
-        图标.classList.add("已开启");
-        图标.classList.remove("已关闭");
-        图标.title = "成人模式已开启（点击可关闭）";
-        图标.setAttribute("aria-pressed", "true");
-      }
-
       if (后台状态) {
         后台状态.value =
-          "adult mode enabled; NSFW allowed; nudity and adult sexual content allowed; follow the core description literally; do not add clothes if described as nude; fictional consenting adults 18+";
+          "adult mode enabled; NSFW allowed when requested in the core description; follow the core description literally and completely including every described clothing, prop, pose, scene, action, and count and clothing as written or implied; omit none of the core facts; do not invent clothing, props, pose, identity, gender defaults, or setting not in the core; do not invent undressing, revealing outfits, lingerie, cleavage, skimpy clothes, seductive posing, or remove clothes unless the core explicitly asks; fictional consenting adults 18+ only; no minors";
       }
     } else {
       if (标签) {
-        标签.textContent = "已关闭";
+        标签.textContent = "18+";
         标签.className = "状态标签 已关闭";
       }
 
@@ -933,25 +867,11 @@
         提示.hidden = true;
       }
 
-      if (图标) {
-        图标.classList.add("已关闭");
-        图标.classList.remove("已开启");
-        图标.title = "成人模式已关闭（点击开启）";
-        图标.setAttribute("aria-pressed", "false");
-      }
-
       if (后台状态) {
         后台状态.value =
           "adult feature disabled; use normal safe character generation mode";
       }
     }
-  }
-
-  function 关闭成人确认() {
-    document.getElementById("成人确认层").hidden =
-      true;
-
-    document.body.classList.remove("禁止滚动");
   }
 
   var 分类后继续生成 = false;
@@ -1083,6 +1003,43 @@
   var 正在回答对话 = false;
   var 对话抢出通道 = "";
   var 对话末通道 = "";
+  var 已配置通道 = { groq: false, gemini: false, openrouter: false, deepseek: false, glm: false, grok: false, horde: true };
+  var 对话通道选项 = [
+    { id: "glm", label: "GLM · 智谱" },
+    { id: "deepseek", label: "DeepSeek" },
+    { id: "groq", label: "Groq · 免费额度" },
+    { id: "gemini", label: "Gemini · 免费层" },
+    { id: "openrouter", label: "OpenRouter · 免费模型" },
+    { id: "grok", label: "Grok · xAI" }
+  ];
+
+  async function 载入已配置通道() {
+    try {
+      var resp = await fetch("/api/health", { credentials: "same-origin", cache: "no-store" });
+      var data = await resp.json();
+      if (data && data.chat) {
+        已配置通道.groq = !!data.chat.groq;
+        已配置通道.gemini = !!data.chat.gemini;
+        已配置通道.openrouter = !!data.chat.openrouter;
+        已配置通道.deepseek = !!data.chat.deepseek;
+        已配置通道.glm = !!data.chat.glm;
+        已配置通道.grok = !!data.chat.grok;
+        已配置通道.horde = true;
+      }
+    } catch (e) {}
+    同步对话通道选项();
+    刷新对话通道状态();
+  }
+
+  function 同步对话通道选项() {
+    var 框 = document.getElementById("AI通道");
+    if (框) 框.disabled = false;
+  }
+
+  function 刷新对话通道状态() {
+    var 状态 = document.getElementById("对话通道状态");
+    if (状态) 状态.textContent = "使用你选择的对话通道；失败时不会自动更换。";
+  }
 
   function 读取登录邮箱() {
     var 键 = ["sushi_email", "email", "邮箱", "userEmail", "user_email", "loginEmail"];
@@ -1154,6 +1111,11 @@
     if (通道 === "fast") return "快答";
     if (通道 === "horde") return "Horde";
     if (通道 === "deepseek") return "DeepSeek";
+    if (通道 === "glm") return "GLM · 智谱";
+    if (通道 === "groq") return "Groq · 免费额度";
+    if (通道 === "gemini") return "Gemini · 免费层";
+    if (通道 === "openrouter") return "OpenRouter · 免费模型";
+    if (通道 === "grok") return "Grok";
     if (通道 === "auto") return "自动抢答";
     return 通道 || "";
   }
@@ -1169,7 +1131,7 @@
     var 区 = document.getElementById("对话列表");
     if (!区) return;
     if (!对话历史.length) {
-      区.innerHTML = '<div class="对话空">还没有对话。选自动抢答会同时问各路，先到的留下；选定具体通道则只用该通道回答。</div>';
+      区.innerHTML = '<div class="对话空">还没有对话。请选择对话通道。</div>';
       return;
     }
     var html = "";
@@ -1231,7 +1193,7 @@
     if (中文) 中文.value = 文;
     if (英文) 英文.value = "";
     刷新画面说明();
-    工具提示("已把 AI 回复填入画面描述，正在准备生成图片…");
+    工具提示("已填入画面描述，正在准备生成图片…");
     try {
       if (含中文(文)) {
         var 译 = await 调用开源翻译(文.slice(0, 800), "en");
@@ -1243,8 +1205,8 @@
 
   function 对话通道已改() {
     对话抢出通道 = "";
-    var 选 = document.getElementById("AI通道");
-    保存对话通道((选 && 选.value) || "auto", true);
+    保存对话通道(document.getElementById("AI通道").value, true);
+    刷新对话通道状态();
   }
 
   function 滚到对话() {
@@ -1273,7 +1235,14 @@
     var 邮 = 读取登录邮箱();
     return 邮 ? 基 + "_" + 邮 : 基;
   }
+  function 记忆路线键() {
+    var 基 = "苏轼AI_记忆路线";
+    var 邮 = 读取登录邮箱();
+    return 邮 ? 基 + "_" + 邮 : 基;
+  }
   var 记忆摘要 = "";
+  var 记忆路线 = [];
+  var 上次用于生成的核心 = "";
   function 记忆已开() {
     if (记忆模式值() === "off") return false;
     try {
@@ -1282,6 +1251,52 @@
     } catch (e) {}
     return true;
   }
+  function 读取当前核心描述() {
+    var 框 = document.getElementById("角色描述");
+    return ((框 && 框.value) || "").trim();
+  }
+  function 核心描述已更新() {
+    var 现 = 读取当前核心描述();
+    return !!(现 && 现 !== 上次用于生成的核心);
+  }
+  function 标记核心已用于生成() {
+    上次用于生成的核心 = 读取当前核心描述();
+  }
+  /** 记忆开且有核心描述时：最新核心描述为准，历史记忆仅补充延续；记忆关则不带历史记忆 */
+  function 组装记忆与核心系统提示() {
+    var 核心 = 读取当前核心描述();
+    var 文 = "用简体中文回复。";
+    if (核心) {
+      文 += "【当前核心描述·以此为准，冲突时覆盖旧记忆】" + 核心.slice(0, 2000);
+    }
+    if (记忆已开() && 记忆摘要) {
+      var 限摘 = 记忆模式值() === "long" ? 6000 : 800;
+      文 += "【历史记忆·仅作补充延续】" + String(记忆摘要).slice(-限摘);
+    } else if (!核心) {
+      文 += "不要突然改成英文。";
+    }
+    return 文;
+  }
+  /** 出图：最新核心描述为主；重新生成且记忆开时把短摘要作补充（不覆盖可见核心） */
+  function 组装出图描述含记忆() {
+    var 核心 = 读取当前核心描述();
+    var 英文 = ((document.getElementById("英文描述") || {}).value || "").trim();
+    var 基 = 核心 || 英文;
+    if (!基) return "";
+    // 改动走参考图局部改，不把记忆摘要拼进生图；重新生成才用记忆作补充。
+    if (记忆已开() && 记忆摘要 && 读取生图方式() === "重新生成") {
+      var 补 = String(记忆摘要).replace(/\s+/g, " ").trim().slice(-240);
+      if (补 && 基.indexOf(补.slice(0, Math.min(24, 补.length))) === -1) {
+        基 = 基 + "，" + 补;
+      }
+    }
+    return 基;
+  }
+  window.读取当前核心描述 = 读取当前核心描述;
+  window.记忆已开 = 记忆已开;
+  window.组装出图描述含记忆 = 组装出图描述含记忆;
+  window.标记核心已用于生成 = 标记核心已用于生成;
+  window.组装记忆与核心系统提示 = 组装记忆与核心系统提示;
   function 载入记忆开关() {
     var 开 = document.getElementById("记忆开关");
     if (开) 开.checked = 记忆已开();
@@ -1293,7 +1308,541 @@
       else if (记忆模式值() === "off") localStorage.setItem(记忆模式键(), "long");
     } catch (e) {}
     载入记忆模式();
+    if (!开) {
+      生图方式用户自选 = false;
+      写入生图方式单选("重新生成");
+    }
+    同步改动可见性();
+    刷新记忆生成线路();
   }
+  window.切换记忆 = 切换记忆;
+
+  var 生图方式用户自选 = false;
+  function 默认生图方式() {
+    // 局部改仅在记忆模式开启时可选；记忆关 → 全文生图。
+    if (!记忆已开()) return "重新生成";
+    if (!有参考图()) return "重新生成";
+    // Perchance/Sana 不能图生图：有参考图时仍默认全文生图；用户勾选「改动」再强制 Horde img2img。
+    try {
+      var 通 = String((document.getElementById("出图引擎") || {}).value || "");
+      if (/^perchance$/i.test(通) || /^sana$/i.test(通)) return "重新生成";
+    } catch (eEng) {}
+    return "改动";
+  }
+  function 读取生图方式() {
+    if (!记忆已开()) return "重新生成";
+    // 用户未自选时，始终按「有参考图→改动 / 否则全文生图」即时默认。
+    // 改动为对勾：勾选=局部改；不勾选=全文生图（原「重新生成」语义）。
+    if (!生图方式用户自选) return 默认生图方式();
+    var 改 = document.getElementById("生图方式改动");
+    if (改 && 改.checked) return "改动";
+    return "重新生成";
+  }
+  function 写入生图方式单选(值) {
+    var 改 = document.getElementById("生图方式改动");
+    if (改) 改.checked = 值 === "改动";
+  }
+  function 同步改动可见性() {
+    var 行 = document.getElementById("生图方式改动行");
+    var 区 = document.getElementById("生图方式行");
+    var 线路区 = document.getElementById("记忆线路区");
+    var 列表 = document.getElementById("记忆路线列表");
+    var 摘要行 = document.getElementById("记忆生成线路");
+    var 清钮 = document.getElementById("清除记忆线路按钮");
+    var 操作 = document.querySelector(".记忆线路操作");
+    var 开 = 记忆已开();
+    if (行) 行.hidden = !开;
+    if (区) 区.hidden = !开;
+    if (线路区) 线路区.hidden = !开;
+    if (列表) { 列表.hidden = !开; if (!开) 列表.replaceChildren(); }
+    if (摘要行) {
+      摘要行.hidden = !开;
+      if (!开) 摘要行.textContent = "";
+    }
+    if (清钮) {
+      清钮.hidden = !开;
+      清钮.disabled = !开;
+    }
+    if (操作) 操作.hidden = !开;
+    if (!开) 写入生图方式单选("重新生成");
+  }
+  function 同步生图方式默认(强制) {
+    if (!记忆已开()) {
+      生图方式用户自选 = false;
+      写入生图方式单选("重新生成");
+      同步改动可见性();
+      刷新记忆生成线路();
+      return "重新生成";
+    }
+    if (!强制 && 生图方式用户自选) {
+      同步改动可见性();
+      刷新记忆生成线路();
+      return 读取生图方式();
+    }
+    var 值 = 默认生图方式();
+    写入生图方式单选(值);
+    同步改动可见性();
+    刷新记忆生成线路();
+    return 值;
+  }
+  function 生图方式已自选() {
+    return !!生图方式用户自选;
+  }
+  function 切换生图方式(值) {
+    if (!记忆已开()) {
+      生图方式用户自选 = false;
+      写入生图方式单选("重新生成");
+      同步改动可见性();
+      刷新记忆生成线路();
+      return;
+    }
+    生图方式用户自选 = true;
+    写入生图方式单选(值 === "改动" ? "改动" : "重新生成");
+    刷新记忆生成线路();
+  }
+  function 本轮使用参考图() {
+    if (!有参考图()) return false;
+    if (!记忆已开()) return false;
+    return 读取生图方式() !== "重新生成";
+  }
+  function 应用局部改图() {
+    if (!记忆已开()) return false;
+    if (!本轮使用参考图()) return false;
+    if (读取生图方式() === "改动") return true;
+    try {
+      return 是局部改图核心(读取当前核心描述());
+    } catch (e) {
+      return false;
+    }
+  }
+  function 当前平台线路名() {
+    var 引擎 = "";
+    try {
+      if (本轮使用参考图()) {
+        引擎 = (typeof 用户选定图生图平台 !== "undefined" && 用户选定图生图平台) || ((document.getElementById("图生图平台") || {}).value) || "";
+      }
+      if (!引擎) 引擎 = (typeof 当前引擎 === "function" ? 当前引擎() : "") || ((document.getElementById("出图引擎") || {}).value) || "perchance";
+    } catch (e) {
+      引擎 = ((document.getElementById("出图引擎") || {}).value) || "perchance";
+    }
+    return typeof 引擎名称 === "function" ? 引擎名称(引擎) : String(引擎 || "Perchance");
+  }
+  var 当前记忆路线Id = "";
+  function 规范化记忆路线项(项) {
+    if (!项 || typeof 项 !== "object" || !项.id || !项.text) return null;
+    var 出 = {
+      id: String(项.id),
+      text: String(项.text || "").slice(0, 500),
+      at: Number(项.at) || 0
+    };
+    if (项.image) 出.image = String(项.image);
+    if (项.thumb) 出.thumb = String(项.thumb);
+    if (项.seed !== undefined && 项.seed !== null && String(项.seed) !== "" && String(项.seed) !== "-1") {
+      出.seed = String(项.seed);
+    }
+    return 出;
+  }
+  function 载入记忆路线() {
+    记忆路线 = [];
+    当前记忆路线Id = "";
+    try {
+      var 原 = localStorage.getItem(记忆路线键());
+      var 列 = 原 ? JSON.parse(原) : [];
+      if (Array.isArray(列)) {
+        记忆路线 = 列.map(规范化记忆路线项).filter(Boolean).slice(-40);
+        if (记忆路线.length) 当前记忆路线Id = 记忆路线[记忆路线.length - 1].id;
+      }
+    } catch (e) { 记忆路线 = []; }
+  }
+  function 序列化记忆路线(含大图) {
+    return 记忆路线.slice(-40).map(function (项) {
+      var 出 = { id: 项.id, text: 项.text, at: 项.at || 0 };
+      if (项.seed) 出.seed = 项.seed;
+      if (含大图 && 项.image) 出.image = 项.image;
+      if (项.thumb) 出.thumb = 项.thumb;
+      else if (含大图 && 项.image && String(项.image).indexOf("data:image/") === 0 && 项.image.length < 120000) 出.thumb = 项.image;
+      return 出;
+    });
+  }
+  function 保存记忆路线() {
+    try {
+      localStorage.setItem(记忆路线键(), JSON.stringify(序列化记忆路线(true)));
+    } catch (e1) {
+      try {
+        localStorage.setItem(记忆路线键(), JSON.stringify(序列化记忆路线(false)));
+      } catch (e2) {
+        try {
+          var 精简 = 记忆路线.slice(-12).map(function (项) {
+            return { id: 项.id, text: 项.text, at: 项.at || 0, seed: 项.seed || undefined };
+          });
+          localStorage.setItem(记忆路线键(), JSON.stringify(精简));
+        } catch (e3) {}
+      }
+    }
+  }
+  function 追加记忆路线(描述, 图信息) {
+    if (!记忆已开()) return null;
+    var 文 = String(描述 || "").replace(/\s+/g, " ").trim();
+    if (!文) return null;
+    var 项 = {
+      id: String(Date.now()) + "_" + Math.random().toString(36).slice(2, 8),
+      text: 文.slice(0, 500),
+      at: Date.now()
+    };
+    if (图信息 && typeof 图信息 === "object") {
+      if (图信息.image || 图信息.url) 项.image = String(图信息.image || 图信息.url || "");
+      if (图信息.thumb) 项.thumb = String(图信息.thumb);
+      if (图信息.seed !== undefined && 图信息.seed !== null && String(图信息.seed) !== "" && String(图信息.seed) !== "-1") {
+        项.seed = String(图信息.seed);
+      }
+    }
+    记忆路线.push(项);
+    if (记忆路线.length > 40) 记忆路线 = 记忆路线.slice(-40);
+    当前记忆路线Id = 项.id;
+    保存记忆路线();
+    刷新记忆路线列表();
+    return 项;
+  }
+  function 更新记忆路线图片(id, 图信息) {
+    if (!记忆已开()) return null;
+    var 目标 = String(id || "");
+    if (!目标 || !图信息) return null;
+    var 项 = null;
+    for (var i = 0; i < 记忆路线.length; i++) {
+      if (String(记忆路线[i].id) === 目标) { 项 = 记忆路线[i]; break; }
+    }
+    if (!项) 项 = 记忆路线.length ? 记忆路线[记忆路线.length - 1] : null;
+    if (!项) return null;
+    if (图信息.image || 图信息.url) 项.image = String(图信息.image || 图信息.url || "");
+    if (图信息.thumb) 项.thumb = String(图信息.thumb);
+    if (图信息.seed !== undefined && 图信息.seed !== null && String(图信息.seed) !== "" && String(图信息.seed) !== "-1") {
+      项.seed = String(图信息.seed);
+    }
+    当前记忆路线Id = 项.id;
+    保存记忆路线();
+    刷新记忆路线列表();
+    return 项;
+  }
+  function 最新记忆路线() {
+    return 记忆路线.length ? 记忆路线[记忆路线.length - 1] : null;
+  }
+  function 当前记忆路线() {
+    if (当前记忆路线Id) {
+      for (var i = 0; i < 记忆路线.length; i++) {
+        if (String(记忆路线[i].id) === String(当前记忆路线Id)) return 记忆路线[i];
+      }
+    }
+    return 最新记忆路线();
+  }
+  function 当前记忆路线图() {
+    var 项 = 当前记忆路线();
+    return 项 && 项.image ? String(项.image) : "";
+  }
+  function 展示记忆路线图(项) {
+    if (!项 || !项.image) return;
+    var 区 = document.getElementById("图像输出");
+    if (!区) return;
+    区.replaceChildren();
+    var card = document.createElement("figure");
+    card.className = "生图卡片 已加载 记忆路线焦点";
+    card.setAttribute("data-memory-route-id", 项.id);
+    card.setAttribute("data-full-url", 项.image);
+    if (项.seed) card.setAttribute("data-seed", String(项.seed));
+    var img = document.createElement("img");
+    img.alt = 项.text || "记忆路线图";
+    img.referrerPolicy = "no-referrer";
+    img.decoding = "async";
+    img.setAttribute("data-full-url", 项.image);
+    if (项.seed) img.setAttribute("data-seed", String(项.seed));
+    img.src = 项.thumb || 项.image;
+    card.appendChild(img);
+    区.appendChild(card);
+    try {
+      var 官 = document.getElementById("官方画廊");
+      if (官) { 官.replaceChildren(); 官.hidden = true; }
+    } catch (eG) {}
+  }
+  function 激活记忆路线项(id, 选项) {
+    if (!记忆已开()) return null;
+    var 目标 = String(id || "");
+    var 项 = null;
+    if (目标) {
+      for (var i = 0; i < 记忆路线.length; i++) {
+        if (String(记忆路线[i].id) === 目标) { 项 = 记忆路线[i]; break; }
+      }
+    }
+    if (!项) 项 = 最新记忆路线();
+    if (!项) return null;
+    当前记忆路线Id = 项.id;
+    var 图 = 项.image || "";
+    if (图) {
+      try {
+        if (typeof window.采用参考图地址 === "function") window.采用参考图地址(图, 项.seed);
+        else {
+          var 地址 = document.getElementById("参考图地址");
+          var 种子 = document.getElementById("参考图种子");
+          if (地址) 地址.value = 图;
+          if (种子) 种子.value = 项.seed ? String(项.seed) : "";
+          try { if (typeof 预览参考图 === "function") 预览参考图(); } catch (eP) {}
+        }
+      } catch (eA) {}
+      var 要展示 = !选项 || 选项.展示 !== false;
+      if (要展示) 展示记忆路线图(项);
+    }
+    刷新记忆路线列表();
+    try { 同步生图方式默认(false); } catch (eS) {}
+    return 项;
+  }
+  /** 改动参照：优先记忆路线最大编号步（1,2,3…末步），否则生成历史最新一张。 */
+  function 最大编号记忆路线项() {
+    if (!记忆已开() || !记忆路线.length) return null;
+    for (var i = 记忆路线.length - 1; i >= 0; i--) {
+      var 项 = 记忆路线[i];
+      if (项 && (项.image || 项.thumb)) {
+        return { 项: 项, 步: i + 1, image: 项.image || "", thumb: 项.thumb || "", seed: 项.seed };
+      }
+    }
+    return null;
+  }
+  function 最新历史原图() {
+    try {
+      var 列表 = typeof 读取生成历史 === "function" ? 读取生成历史() : [];
+      if (!列表 || !列表.length) return null;
+      // 历史 unshift：下标 0 = 最新；编号语义取「最大序号」= 列表长度对应最新
+      // Prefer an entry that already has data: thumb/full so 改动不必等 CORS
+      var 项 = null;
+      var i = 0;
+      for (i = 0; i < 列表.length; i++) {
+        var cand = 列表[i];
+        if (!cand) continue;
+        var full = typeof 历史原图地址 === "function" ? 历史原图地址(cand) : (cand.u || cand.thumb || "");
+        var th = cand.thumb || "";
+        if (/^data:image\//i.test(th) || /^data:image\//i.test(String(full || ""))) {
+          项 = cand;
+          break;
+        }
+        if (!项 && (full || th)) 项 = cand;
+      }
+      if (!项) 项 = 列表[0];
+      var 原 = typeof 历史原图地址 === "function" ? 历史原图地址(项) : (项 && (项.u || 项.thumb)) || "";
+      if (!原 && 项 && 项.thumb) 原 = 项.thumb;
+      if (!原) return null;
+      return { image: 原, thumb: (项 && 项.thumb) || "", seed: "", 步: 列表.length };
+    } catch (eH) { return null; }
+  }
+  function 画廊当前源图() {
+    try {
+      var 区 = document.getElementById("图像输出");
+      if (!区) return null;
+      var 卡 = 区.querySelectorAll(".生图卡片[data-full-url], .生图卡片 img[data-full-url], .生图卡片 img[data-thumb-url]");
+      if (!卡 || !卡.length) return null;
+      // 画廊多张时取最后一张（最大序号）
+      var last = 卡[卡.length - 1];
+      var url = last.getAttribute("data-full-url") || (last.querySelector && last.querySelector("[data-full-url]") && last.querySelector("[data-full-url]").getAttribute("data-full-url")) || "";
+      var thumb = last.getAttribute("data-thumb-url") || (last.querySelector && last.querySelector("[data-thumb-url]") && last.querySelector("[data-thumb-url]").getAttribute("data-thumb-url")) || "";
+      if (!url && last.tagName === "IMG") {
+        url = last.getAttribute("data-full-url") || "";
+        thumb = last.getAttribute("data-thumb-url") || "";
+      }
+      if (!url && !thumb) return null;
+      return { image: url || thumb, thumb: thumb || "", seed: last.getAttribute("data-seed") || "", 步: 卡.length };
+    } catch (eG) { return null; }
+  }
+  /** 返回 { url, thumb, seed, step, source }；url 可能是 http 或 data；thumb 优先 data 供 materialize。
+   * 优先：记忆最大编号 → 历史最新（有编号图时）→ 画廊主图。记忆空但历史有图时用历史，勿强迫用户点选。 */
+  function 改动参照源图() {
+    var mem = 最大编号记忆路线项();
+    if (mem) {
+      return {
+        url: mem.image || mem.thumb || "",
+        thumb: mem.thumb || "",
+        seed: mem.seed,
+        step: mem.步,
+        source: "memory-" + mem.步
+      };
+    }
+    var hist = 最新历史原图();
+    if (hist) {
+      return { url: hist.image || hist.thumb || "", thumb: hist.thumb || "", seed: hist.seed, step: hist.步, source: "history-" + hist.步 };
+    }
+    var gal = 画廊当前源图();
+    if (gal) {
+      return { url: gal.image || gal.thumb || "", thumb: gal.thumb || "", seed: gal.seed, step: gal.步, source: "gallery-" + gal.步 };
+    }
+    return null;
+  }
+  function 确保改动参考图() {
+    if (!记忆已开()) {
+      // 记忆关时仍可用画廊/历史最大编号图作改动源（若勾选改动由调用方决定）
+    }
+    if (读取生图方式() === "重新生成") return "";
+    var 地址 = document.getElementById("参考图地址");
+    var 现有 = 地址 && String(地址.value || "").trim();
+    var 参 = 改动参照源图();
+    // 改动：始终对齐到最大编号步（1…N 的 N）；已有软采用也覆盖为最大编号，避免旧步残留
+    var 目标 = "";
+    var 种子 = "";
+    var 缩略 = "";
+    if (参 && (参.url || 参.thumb)) {
+      目标 = 参.url || 参.thumb;
+      种子 = 参.seed || "";
+      缩略 = 参.thumb || "";
+    } else if (现有) {
+      目标 = 现有;
+    }
+    if (!目标) return "";
+    try {
+      if (地址) {
+        地址.value = 目标;
+        if (缩略 && /^data:image\//i.test(缩略)) {
+          try { 地址.dataset.softThumb = 缩略; } catch (eT) {}
+        }
+      }
+      var 种子框 = document.getElementById("参考图种子");
+      if (种子框 && 种子 !== "" && 种子 != null && String(种子) !== "-1") 种子框.value = String(种子);
+      try { if (typeof 预览参考图 === "function") 预览参考图(); } catch (eP) {}
+    } catch (e) {}
+    return 目标;
+  }
+  function 清除一条记忆路线(id) {
+    var 目标 = String(id || "");
+    if (!目标) return;
+    var 删的是当前 = String(当前记忆路线Id) === 目标;
+    var 删的是最新 = 记忆路线.length && String(记忆路线[记忆路线.length - 1].id) === 目标;
+    记忆路线 = 记忆路线.filter(function (项) { return String(项.id) !== 目标; });
+    保存记忆路线();
+    if (!记忆路线.length) {
+      当前记忆路线Id = "";
+      try { 清除生图工作缓存({ 保留参考图: false }); } catch (eClr1) {}
+      刷新记忆路线列表();
+      刷新记忆生成线路();
+      return;
+    }
+    if (删的是当前 || 删的是最新 || !当前记忆路线Id) {
+      var 最新 = 最新记忆路线();
+      激活记忆路线项(最新 && 最新.id, { 展示: true });
+    } else {
+      刷新记忆路线列表();
+    }
+    刷新记忆生成线路();
+  }
+  function 刷新记忆路线列表() {
+    var 列表 = document.getElementById("记忆路线列表");
+    if (!列表) return;
+    列表.replaceChildren();
+    if (!记忆已开()) {
+      列表.hidden = true;
+      return;
+    }
+    列表.hidden = false;
+    if (!记忆路线.length) {
+      var 空 = document.createElement("li");
+      空.className = "记忆路线空";
+      空.textContent = "暂无记忆生成描述";
+      列表.appendChild(空);
+      return;
+    }
+    记忆路线.forEach(function (项, 序) {
+      var li = document.createElement("li");
+      li.className = "记忆路线项" + (String(项.id) === String(当前记忆路线Id) ? " 现行" : "");
+      li.setAttribute("data-id", 项.id);
+      li.setAttribute("role", "button");
+      li.tabIndex = 0;
+      li.title = "点击采用此步图片作为改动参考";
+      if (项.thumb || 项.image) {
+        var 缩 = document.createElement("img");
+        缩.className = "记忆路线缩略";
+        缩.alt = "";
+        缩.decoding = "async";
+        缩.referrerPolicy = "no-referrer";
+        缩.src = 项.thumb || 项.image;
+        li.appendChild(缩);
+      }
+      var 文 = document.createElement("span");
+      文.className = "记忆路线文";
+      文.textContent = (序 + 1) + ". " + 项.text;
+      文.title = 项.text;
+      var 钮 = document.createElement("button");
+      钮.type = "button";
+      钮.className = "次按钮 清除单条记忆钮";
+      钮.textContent = "清除";
+      钮.setAttribute("aria-label", "清除这次记忆路线");
+      钮.onclick = function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        清除一条记忆路线(项.id);
+      };
+      li.append(文, 钮);
+      li.onclick = function (ev) {
+        if (ev && ev.target && ev.target.closest && ev.target.closest("button")) return;
+        激活记忆路线项(项.id, { 展示: true });
+      };
+      li.onkeydown = function (ev) {
+        if (!ev) return;
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          激活记忆路线项(项.id, { 展示: true });
+        }
+      };
+      列表.appendChild(li);
+    });
+  }
+  function 刷新记忆生成线路() {
+    var 行 = document.getElementById("记忆生成线路");
+    if (!行) return;
+    同步改动可见性();
+    if (!记忆已开()) {
+      行.textContent = "";
+      行.hidden = true;
+      刷新记忆路线列表();
+      return;
+    }
+    行.hidden = false;
+    var 方式 = 读取生图方式();
+    if (!生图方式用户自选) 写入生图方式单选(方式);
+    var 平台 = 当前平台线路名();
+    var 参考 = 有参考图() ? (本轮使用参考图() ? "带参考图" : "有参考图·本轮忽略") : "无参考图";
+    行.textContent = "记忆线路：记忆续生 · " + 平台 + " · " + 参考 + " · " + 方式 + (记忆路线.length ? (" · " + 记忆路线.length + " 步") : "");
+    刷新记忆路线列表();
+  }
+  function 清除记忆线路() {
+    if (!window.confirm("清除本角色全部记忆线路（对话、摘要与每次生成描述）？不影响记忆开关与其它数据。")) return;
+    对话历史 = [];
+    try { 对话抢出通道 = ""; } catch (e0) {}
+    写记忆摘要("");
+    记忆路线 = [];
+    当前记忆路线Id = "";
+    保存记忆路线();
+    保存对话历史();
+    try { 渲染对话(); } catch (e1) {}
+    try { 清除生图工作缓存({ 保留参考图: false }); } catch (eClr2) {}
+    刷新记忆生成线路();
+  }
+  function 清除本记忆() { return 清除记忆线路(); }
+  window.读取生图方式 = 读取生图方式;
+  window.切换生图方式 = 切换生图方式;
+  window.生图方式已自选 = 生图方式已自选;
+  window.同步生图方式默认 = 同步生图方式默认;
+  window.同步改动可见性 = 同步改动可见性;
+  window.本轮使用参考图 = 本轮使用参考图;
+  window.应用局部改图 = 应用局部改图;
+  window.刷新记忆生成线路 = 刷新记忆生成线路;
+  window.刷新记忆路线列表 = 刷新记忆路线列表;
+  window.追加记忆路线 = 追加记忆路线;
+  window.更新记忆路线图片 = 更新记忆路线图片;
+  window.最新记忆路线 = 最新记忆路线;
+  window.当前记忆路线 = 当前记忆路线;
+  window.当前记忆路线图 = 当前记忆路线图;
+  window.激活记忆路线项 = 激活记忆路线项;
+  window.确保改动参考图 = 确保改动参考图;
+  window.改动参照源图 = 改动参照源图;
+  window.最大编号记忆路线项 = 最大编号记忆路线项;
+  window.最新历史原图 = 最新历史原图;
+  window.画廊当前源图 = 画廊当前源图;
+  window.展示记忆路线图 = 展示记忆路线图;
+  window.清除一条记忆路线 = 清除一条记忆路线;
+  window.清除记忆线路 = 清除记忆线路;
+  window.清除本记忆 = 清除本记忆;
+  window.载入记忆路线 = 载入记忆路线;
   function 记忆模式值() {
     try {
       var v = localStorage.getItem(记忆模式键()) || "long";
@@ -1314,6 +1863,12 @@
       localStorage.setItem(记忆开键(), 值 === "off" ? "0" : "1");
     } catch (e) {}
     载入记忆开关();
+    if (值 === "off") {
+      生图方式用户自选 = false;
+      写入生图方式单选("重新生成");
+    }
+    同步改动可见性();
+    刷新记忆生成线路();
   }
   function 载入记忆摘要() {
     记忆摘要 = "";
@@ -1324,6 +1879,7 @@
     记忆摘要 = String(文 || "").slice(-限);
     try { localStorage.setItem(记忆摘要键(), 记忆摘要); } catch (e) {}
   }
+  window.写记忆摘要 = 写记忆摘要;
   function 滚动写入记忆(用户文, 助手文) {
     if (!记忆已开()) return;
     var 长 = 记忆模式值() === "long";
@@ -1345,13 +1901,16 @@
     var 列 = [];
     var i = 0;
     var 片 = String(问句 || "").slice(0, 800);
-    if (记忆已开() && 记忆摘要) {
+    if (记忆已开()) {
+      列.push({ role: "system", content: 组装记忆与核心系统提示() });
+    } else {
+      var 核心现 = 读取当前核心描述();
       列.push({
         role: "system",
-        content: "用简体中文回复。延续以下角色记忆（姓名、关系、正在发生的事）：" + String(记忆摘要).slice(-(记忆模式值() === "long" ? 6000 : 800))
+        content: 核心现
+          ? ("用简体中文回复。按当前核心描述：" + 核心现.slice(0, 2000))
+          : "用简体中文回复，不要突然改成英文。"
       });
-    } else {
-      列.push({ role: "system", content: "用简体中文回复，不要突然改成英文。" });
     }
     if (!正在预载 && 记忆已开()) {
       var 保留 = 记忆模式值() === "long" ? 80 : 12;
@@ -1371,10 +1930,17 @@
     }
     return 列;
   }
+  window.组装花粉消息 = 组装花粉消息;
 
   function 组装群体提示(问句) {
-    var 文 = "### System:\n用简体中文回复。";
-    if (记忆已开() && 记忆摘要) 文 += "角色记忆：" + String(记忆摘要).slice(-(记忆模式值() === "long" ? 6000 : 800));
+    var 文 = "### System:\n";
+    if (记忆已开()) 文 += 组装记忆与核心系统提示();
+    else {
+      var 核心现 = 读取当前核心描述();
+      文 += 核心现
+        ? ("用简体中文回复。按当前核心描述：" + 核心现.slice(0, 2000))
+        : "用简体中文回复。";
+    }
     文 += "\n";
     var i = 0;
     var 片 = "### User:\n" + String(问句 || "").slice(0, 800) + "\n### Assistant:\n";
@@ -1393,6 +1959,11 @@
 
   function 花粉通道名(模型) {
     if (模型 === "deepseek") return "deepseek";
+    if (模型 === "glm") return "glm";
+    if (模型 === "groq") return "groq";
+    if (模型 === "gemini") return "gemini";
+    if (模型 === "openrouter") return "openrouter";
+    if (模型 === "grok") return "grok";
     if (模型 === "openai-fast" || 模型 === "openai" || 模型 === "fast") return "fast";
     return "turbo";
   }
@@ -1460,6 +2031,7 @@
     模型 = 模型 || "turbo";
     if (模型 === "fast") 模型 = "openai-fast";
     var 内容 = "";
+    var 最后错误 = null;
     try {
       var 体 = new Object();
       体.model = 模型;
@@ -1471,16 +2043,24 @@
         body: JSON.stringify({ k: 工坊票据(), model: 体.model, messages: 体.messages })
       }, 20000);
       var 文本 = (await resp.text() || "").trim();
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      if (!resp.ok) {
+        var 错 = "HTTP " + resp.status;
+        try {
+          var 错体 = JSON.parse(文本);
+          if (错体 && 错体.error) 错 = String(错体.error);
+        } catch (e0) {}
+        throw new Error(错);
+      }
       var data = JSON.parse(文本);
       内容 = data && data.choices && data.choices[0] && data.choices[0].message
         ? data.choices[0].message.content
         : "";
       内容 = 可用对话文(内容);
     } catch (e) {
+      最后错误 = e;
       内容 = "";
     }
-    if (!内容 && 模型 !== "deepseek") {
+    if (!内容 && ["openai", "openai-fast", "fast", "turbo"].indexOf(模型) >= 0) {
       try {
         var getResp = await 限时拉取("https://text.pollinations.ai/" + encodeURIComponent(组装群体提示(问句).slice(0, 1200)), {
           method: "GET",
@@ -1495,9 +2075,9 @@
             ? getData.choices[0].message.content : "";
         }
         内容 = 可用对话文(getText);
-      } catch (e2) {}
+      } catch (e2) { 最后错误 = 最后错误 || e2; }
     }
-    if (!内容) throw new Error("空回复");
+    if (!内容) throw (最后错误 || new Error("空回复"));
     对话末通道 = 花粉通道名(模型);
     return 内容;
   }
@@ -1570,55 +2150,44 @@
   }
 
   async function 问免费模型(问句, 模型) {
-    var 指定 = 模型 || "";
-    if (指定 === "deepseek") return 问花粉(问句, "deepseek");
-    if (指定 === "horde") return 问群体模型(问句);
-    if (指定 === "fast" || 指定 === "openai-fast" || 指定 === "openai" || 指定 === "turbo") return 问花粉(问句, "openai");
-    if (指定 && 指定 !== "auto") return 问花粉(问句, "openai");
-    var 赛道 = [
-      问花粉(问句, "openai"),
-      问花粉(问句, "deepseek"),
-      问群体模型(问句)
-    ];
-    return new Promise(function (成功, 失败) {
-      var 剩余 = 赛道.length;
-      var 末错 = "";
+    模型 = 规范化对话通道(模型, true);
+    return await new Promise(function (成功, 失败) {
       var 已中 = false;
       var 定时 = setTimeout(function () {
         if (已中) return;
         已中 = true;
         失败(new Error("抢答超时"));
       }, 30000);
-      function 一条(任务) {
-        任务.then(function (文) {
-          if (已中 || !文) {
-            剩余 -= 1;
-            if (!已中 && 剩余 <= 0) { clearTimeout(定时); 失败(new Error(末错 || "问答不可用")); }
-            return;
-          }
-          已中 = true;
-          clearTimeout(定时);
-          成功(文);
-        }).catch(function (错) {
-          末错 = String(错 && 错.message ? 错.message : 错);
-          剩余 -= 1;
-          if (!已中 && 剩余 <= 0) { clearTimeout(定时); 失败(new Error(末错)); }
-        });
-      }
-      var i = 0;
-      for (i = 0; i < 赛道.length; i++) 一条(赛道[i]);
+      问花粉(问句, 模型).then(function (文) {
+        if (已中) return;
+        已中 = true;
+        clearTimeout(定时);
+        成功(文);
+      }).catch(function (错) {
+        if (已中) return;
+        已中 = true;
+        clearTimeout(定时);
+        失败(错);
+      });
     });
+  }
+
+  function 含生图指令(文) {
+    return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|画一个|给我.*(图|照片)|再画|再来一[张幅]|根据.*生成图|生成角色|出一[张幅]|设计.*角色|角色设定|txt2img|text.?to.?image|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)/i.test(String(文 || ''));
   }
 
   async function 提问AI() {
     if (正在回答对话) return;
     var 问 = document.getElementById("AI问题");
-    var 选 = document.getElementById("AI通道");
     var 文本 = 问 && 问.value ? 问.value.trim() : "";
     if (!文本) return;
-    var 选择通道 = (选 && 选.value) || "auto";
+    if (含生图指令(文本)) {
+      问.value = "";
+      按对话生成图片(文本).catch(function (e) { 工具提示(e.message || "生图失败"); });
+      return;
+    }
+    var 选择通道 = document.getElementById("AI通道").value;
     var 本轮通道 = 选择通道;
-    if (选择通道 !== "auto") 本轮通道 = 选择通道;
     问.value = "";
     正在回答对话 = true;
     var 用户项 = { role: "user", text: 文本, channel: 选择通道, t: Date.now() };
@@ -1644,11 +2213,13 @@
     对话历史.push(助手项);
     保存对话历史();
     滚动写入记忆(文本, 回复);
+    标记核心已用于生成();
     var 助手泡 = 追加对话气泡("assistant", 回复, 用通道, false);
     正在回答对话 = false;
     var 区 = document.getElementById("对话列表");
     if (区) 区.scrollTop = 区.scrollHeight;
     后台译成中文(回复, 助手项, 助手泡);
+
   }
 
   function 像中文回复(文) {
@@ -1881,43 +2452,133 @@
   }
 
   function 显式画风(文) {
-    return /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i.test(String(文 || ""));
+    var 文本 = String(文 || "");
+    // “非动漫/不要卡通”是负面约束，不能误判为用户要求动漫风格。
+    文本 = 文本.replace(/(?:非|不要|不需要|no|not)\s*(?:anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说)/gi, " ");
+    return /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i.test(文本);
   }
 
-  function 强制写实英文(英文) {
+  function 强制写实英文(英文, 核心提示) {
+    var 核 = String(核心提示 || "");
     var 文 = String(英文 || "").replace(/\s+/g, " ").trim();
-    if (!文) 文 = "photorealistic RAW photo of a fictional adult, natural light, DSLR";
-    // 用户点名动漫/插画等画风时按文字生成，不强制写实、不剥离风格词。
-    if (显式画风(文)) {
-      if (!/fictional adult|18\+|no minors|虚构成年/i.test(文)) {
-        文 += ", fictional adult 18+ only, no minors";
-      }
-      return 文.replace(/\s{2,}/g, " ").trim();
-    }
-    // 默认写实：前置摄影修辞，便于 Perchance 等偏二次元引擎也走照片风（只写生成器提示，不回写展示框）。
-    var 头 = "photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture";
-    if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(文)) {
+    文 = 文
+      .replace(/\b(anime|manga|cartoon|chibi|illustration|cel[\s-]?shading|pixar|disney|comic(?:\s|-)?style|2d\s*art|visual novel)\b/gi, " ")
+      .replace(/二次元|动漫风格|动漫|卡通|漫画|插画|手绘|赛璐璐|视觉小说/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    if (!文) 文 = "photorealistic photograph of a fictional adult, natural light";
+    // 最小写实默认：不钉死 35mm / RAW / cinematic / skin-pore 长墙
+    var 头 = "photorealistic photograph, natural light";
+    if (!/photoreal|RAW photo|DSLR|real human|写实摄影|写实照片|documentary|candid/i.test(文)) {
       文 = 头 + ", " + 文;
-    } else if (!/^\s*photoreal/i.test(文)) {
+    } else if (!/^\s*photoreal/i.test(文) && !/documentary|candid/i.test(文)) {
       文 = "photorealistic photograph of " + 文;
     }
-    if (!/natural light|cinematic|rim light|soft light|golden hour|studio light|volumetric|shallow depth/i.test(文)) {
-      文 += ", natural light, cinematic still, shallow depth of field";
+    if (!/natural light|warm light|soft light|golden hour|studio light|window light|overhead/i.test(文)) {
+      文 += ", natural light";
     }
-    if (!/skin pores|subsurface|imperfection|fabric texture|material detail|sharp focus/i.test(文)) {
-      文 += ", natural skin texture, clear material detail, sharp focus, real human";
-    }
-    if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(文)) {
-      文 += ", not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading";
+    if (!/not anime|no anime|非卡通|非动漫|NOT anime|not cartoon|not 2d/i.test(文)) {
+      文 += ", not anime, not cartoon, not 2d";
     }
     if (!/fictional adult|18\+|no minors/i.test(文)) {
       文 += ", fictional adult 18+ only, no minors";
     }
+    var 源 = 核 + " " + 文;
+    var 要全身 = /full[\s-]?body|full[\s-]?figure|全身|从头到脚|head[\s-]?to[\s-]?toe|feet in (?:the )?frame|entire body in frame|standing full figure/i.test(源);
+    var 要半身 = !要全身 && /半身|七分身|胸像|头像|特写|近景|肖像|close[\s-]?up|bust\b|headshot|waist[\s-]?up|upper[\s-]?body|half[\s-]?body|面部特写|脸部特写|肩部以上|(?:close[\s-]?up|head|bust|waist[\s-]?up|upper[\s-]?body|half[\s-]?body)\s+portrait|portrait\s+(?:shot|close|crop|headshot)/i.test(文);
+    var 局部改 = false;
+    try { 局部改 = typeof 应用局部改图 === "function" ? 应用局部改图() : (有参考图() && 是局部改图核心(核)); } catch (eLoc) { 局部改 = false; }
+    // 软覆盖：仅当核心要求全身时补 framing；不默认钉死全身正面/面向镜头
+    if (要全身 && !要半身 && !局部改) {
+      var 全身片 = [];
+      if (!/full[\s-]?body|head[\s-]?to[\s-]?toe|feet in frame/i.test(文)) {
+        全身片.push("full body head-to-toe visible", "feet in frame");
+      } else {
+        if (!/feet in frame/i.test(文)) 全身片.push("feet in frame");
+        if (!/head and feet both visible|head[\s-]?to[\s-]?toe/i.test(文)) 全身片.push("head and feet both visible");
+      }
+      if (/正面|面向镜头|平视|facing\s+(?:the\s+)?camera|front\s+view|eye[\s-]?level/i.test(源)
+          && !/侧脸|侧面|侧身|背面|背影|后视|profile|from behind|back view|side view/i.test(文)
+          && !/front[\s-]?view|facing (the )?camera|eye[\s-]?level|looking at (the )?camera/i.test(文)) {
+        全身片.push("front view facing camera");
+      }
+      文 = 文.replace(/\bshot on DSLR,\s*(?:85|50|35)mm\b/gi, "shot on DSLR, 28mm");
+      if (全身片.length) {
+        var 注入 = 全身片.join(", ");
+        var 头匹配 = 文.match(/^(photorealistic (?:RAW )?photo(?:graph)?(?:,\s*shot on DSLR,\s*(?:28|35|50|85)mm)?(?:,\s*natural (?:skin pores|light))?(?:,\s*realistic fabric texture)?)/i);
+        if (头匹配) {
+          文 = 头匹配[1] + ", " + 注入 + 文.slice(头匹配[1].length);
+        } else {
+          文 = 注入 + ", " + 文;
+        }
+      }
+    }
+    // 东亚外貌：核心有才软强化；去掉西方默认美貌词
+    if (/东亚|亚洲人|中国人|韩国人|日本人|华人|east[\s-]?asian|\bchinese\b|\bkorean\b|\bjapanese\b|asian (?:woman|man|features|face)/i.test(源)) {
+      文 = 文.replace(/\b(blonde|blond|caucasian|european|western european|blue[\s-]?eyes)\b/gi, " ").replace(/\s{2,}/g, " ").replace(/[，,]{2,}/g, ",").trim();
+      if (!/east[\s-]?asian/i.test(文)) {
+        var 族 = "East Asian, East Asian facial features";
+        文 = 族 + ", " + 文;
+      } else if (!/east[\s-]?asian facial features|asian facial features/i.test(文)) {
+        文 = 文.replace(/east[\s-]?asian/i, "East Asian, East Asian facial features");
+      }
+    }
     return 文.replace(/\s{2,}/g, " ").trim();
+  }
+
+  function 是局部改图核心(文) {
+    var t = String(文 || "").replace(/\s+/g, " ").trim();
+    if (!t) return false;
+    if (/换背景|改背景|更换背景|只换背景|纯背景|change (?:the )?background|replace (?:the )?background|new scene|全新场景|重画整|整张重绘|redraw (?:the )?(?:whole |entire )?scene|from scratch/i.test(t)) return false;
+    var keepCue = /图中|图里|图上|参考图|原图中|保持|只|仅仅|仅将|仅把|不要改|别改|其余不变|其他不变|in the (?:image|picture|photo)|from the reference|keep (?:the )?(?:rest|same|identity|everything)|only (?:change|edit|raise|turn|smile)/i.test(t);
+    var strongAction = /抬起|举起|放下|伸手|举手|挥手|叉腰|转头|回头|侧头|低头|抬头|扭头|侧过脸|微笑|浅笑|闭眼|睁眼|眨眼|张嘴|闭嘴|raise(?:s|d)? (?:(?:the |her |his |their )?(?:left |right )?)?(?:hand|arm)|turn(?:s|ed|ing)? (?:(?:the )?head)|smil(?:e|ing)\b|frown|wink|look(?:s|ing)? (?:left|right|away)|change(?:s|d)? (?:(?:the |her |his )?hair colou?r)|slightly (?:change|adjust)/i.test(t);
+    var mildAction = /换发型|染发|发色|头发颜色|换一件|换衣服|改发型|改发色|hair colou?r|clothing tweak|\bpose\b/i.test(t);
+    var compact = t.length <= 96;
+    if (strongAction && (compact || keepCue)) return true;
+    if (keepCue && mildAction && (compact || t.length <= 180)) return true;
+    return false;
+  }
+
+  function 局部改姿势手势(文) {
+    var t = String(文 || "").replace(/\s+/g, " ").trim();
+    if (!t) return false;
+    return /抬起|举起|放下|伸手|举手|挥手|叉腰|转头|回头|侧头|低头|抬头|扭头|侧过脸|抬手|站姿|raise(?:s|d|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|lower(?:s|ed|ing)?\s+(?:(?:the|her|his|their)\s+)?(?:left\s+|right\s+)?(?:hand|arm)|turn(?:s|ed|ing)?\s+(?:(?:the)\s+)?head|look(?:s|ing)?\s+(?:left|right|away)|wave(?:s|d|ing)?\b|hands?\s+on\s+(?:hips|waist)|arms?\s+(?:crossed|raised|up|out)/i.test(t);
+  }
+  function 局部改变化英文(核心) {
+    if (typeof localEditChangeDirective === "function") return localEditChangeDirective(核心);
+    var t = String(核心 || "").replace(/\s+/g, " ").trim();
+    if (/抬起左手|左手抬起|左手举起/i.test(t)) return "Visible edit: left hand raised high, left arm lifted upward, raised left hand clearly visible";
+    if (/抬起右手|右手抬起|右手举起/i.test(t)) return "Visible edit: right hand raised high, right arm lifted upward, raised right hand clearly visible";
+    if (/举手|抬起|举起|抬手|伸手|挥手/i.test(t)) return "Visible edit: hand/arm raised as requested, pose change obvious and limbs clearly different from the reference";
+    if (/转头|回头|侧头|扭头|侧过脸|低头|抬头/i.test(t)) return "Visible edit: head turned/oriented as requested, new head direction clearly visible";
+    if (局部改姿势手势(t)) return "Visible edit: apply the requested pose/gesture change strongly so limbs/posture clearly differ from the reference";
+    return "Visible edit: apply the stated local change so it is obvious";
+  }
+  function 补局部改图英文(英文, 核心) {
+    if (typeof applyLocalEditOutbound === "function") {
+      try {
+        var 强制外 = false;
+        try { 强制外 = 读取生图方式() === "改动" && 本轮使用参考图(); } catch (eF) { 强制外 = false; }
+        return applyLocalEditOutbound(英文, 核心, { img2img: true, force: 强制外 || 是局部改图核心(核心 || 英文) });
+      } catch (eOut) {}
+    }
+    var 文本 = String(英文 || "").trim();
+    var 强制 = false;
+    try { 强制 = 读取生图方式() === "改动" && 本轮使用参考图(); } catch (eForce) { 强制 = false; }
+    if (!强制 && !是局部改图核心(核心 || 文本)) return 文本;
+    if (/CRITICAL EDIT \(must be clearly visible\)|Visible edit:|keep the (?:EXACT )?same person identity|the stated local change must stay clearly visible|apply ONLY the stated local change|do not (?:redraw|recompose)/i.test(文本)) return 文本;
+    var 变化 = 局部改变化英文(核心 || 文本);
+    var 姿势 = 局部改姿势手势(核心 || 文本);
+    var 锁定 = 姿势
+      ? "Keep the same person identity, face, hairstyle, clothing, and background as the reference; allow pose/gesture/limbs to change as stated; do not invent a new person or background"
+      : "Keep the same person identity, face, hairstyle, body proportions, clothing, accessories, background, and lighting as the reference image; do NOT invent a new person or background; the stated local change must stay clearly visible while preserving likeness";
+    return 变化 + (文本 ? ", " + 文本 : "") + ", " + 锁定;
   }
 
   function 补换背景英文(英文) {
     var 文本 = String(英文 || "").trim();
+    var 核 = ((document.getElementById("角色描述") || {}).value || "");
+    if (typeof 应用局部改图 === "function" ? 应用局部改图() : (有参考图() && 是局部改图核心(核))) return 补局部改图英文(文本, 核);
     if (!正在换背景()) return 文本;
     var 锁定 =
       "use the reference photo as the base, keep the exact same person, same face, same hair, same body shape, same clothing, same pose, same crop and camera angle, do not redraw the subject, only replace the background scene, seamless foreground edge against the new background, " +
@@ -1993,7 +2654,10 @@
       var 原始 = String(reader.result || "");
       压缩参考图(原始, function (结果) {
         地址.value = 结果;
+        try { delete 地址.dataset.softAdopted; } catch (eIntent) {}
+        try { delete 地址.dataset.softThumb; } catch (eThumbClr) {}
         预览参考图();
+        同步生图方式默认(false);
         设图生图状态(成功文案 || "参考图已就绪，可以直接生成。");
       });
     };
@@ -2028,14 +2692,44 @@
     图.src = dataUrl;
   }
 
+  /** 清除生图工作/会话缓存（pending、软采用参考图、过期英文等）。
+   *  不碰六张生成历史，不碰记忆路线本体（除非调用方先已清空路线）。
+   *  选项.保留参考图：保留用户上传或记忆点选的参考图（非 softAdopted）。 */
+  function 清除生图工作缓存(选项) {
+    选项 = 选项 || {};
+    var 保留参考 = !!选项.保留参考图;
+    try { localStorage.removeItem("sushi_pending_prompt"); } catch (e0) {}
+    try {
+      var 英 = document.getElementById("英文描述");
+      if (英 && 英.dataset && 英.dataset.staleFromCore === "1") {
+        英.value = "";
+        try { delete 英.dataset.staleFromCore; } catch (eStale) {}
+      }
+    } catch (e1) {}
+    try {
+      var 安 = document.getElementById("安全英文");
+      if (安) 安.value = "";
+    } catch (e2) {}
+    if (!保留参考) {
+      var 地址 = document.getElementById("参考图地址");
+      var 文件框 = document.getElementById("参考图文件");
+      var 种子 = document.getElementById("参考图种子");
+      if (地址) {
+        地址.value = "";
+        try { delete 地址.dataset.softAdopted; } catch (e3) {}
+        try { delete 地址.dataset.softThumb; } catch (eThumbClr2) {}
+      }
+      if (文件框) 文件框.value = "";
+      if (种子) 种子.value = "";
+      try { 预览参考图(); } catch (e4) {}
+      try { 同步生图方式默认(false); } catch (e5) {}
+    }
+  }
   function 清空参考图() {
-    var 地址 = document.getElementById("参考图地址");
-    var 文件框 = document.getElementById("参考图文件");
-    if (地址) 地址.value = "";
-    if (文件框) 文件框.value = "";
-    预览参考图();
+    清除生图工作缓存({ 保留参考图: false });
     设图生图状态("已清除参考图，将按文生图。");
   }
+  window.清除生图工作缓存 = 清除生图工作缓存;
 
   function 去掉方括号(文) {
     return String(文 || "").replace(/[\[\]\{\}]/g, " ").replace(/\s+/g, " ").trim();
@@ -2051,69 +2745,26 @@
   }
 
   function 扩写随机核心(简中, 简英) {
+    // 随机功能只补画面质量与构图，不决定衣着或暴露程度。
+    // 若调用方传入了衣着事实，它仍作为原始核心的一部分原样保留。
     var 核心 = 简中 +
-      "。虚构成年角色，五官与发型清晰，皮肤质感自然；半身或全身构图，浅景深；主光明确、辅光柔和，阴影层次清楚；服装面料与场景材质可辨；无未成年人。";
+      "。虚构成年角色，五官与发型清晰，皮肤质感自然；构图完整，主光明确、辅光柔和，阴影层次清楚；场景材质可辨；无未成年人。";
     var 详英 = 简英 +
-      ", detailed facial features and hair, natural skin texture, half-body or full-body framing, shallow depth of field, clear key light with soft fill, readable fabric and environment materials, cinematic composition, fictional consenting adults 18+ only, no minors";
+      ", detailed facial features and hair, natural skin texture, complete composition, clear key light with soft fill, readable environment materials, fictional consenting adults 18+ only, no minors";
     return 丰富随机项(简中, 简英, 核心, 详英);
   }
 
   function 本地随机一项() {
     var 池 = [
-      丰富随机项(
-        "黄昏窗边的成年女人，写实照片",
-        "photoreal photo of a fictional adult woman by a dusk window",
-        "黄昏窗边的虚构成年女人，侧脸看向窗外暖橙余晖；半身构图，浅景深虚化室内；窗边轮廓光勾勒发丝与肩线，室内有一盏柔和补光；针织衫纹理清晰，皮肤与眼神自然写实；无未成年人。",
-        "photoreal photo of a fictional adult woman by a dusk window, three-quarter profile looking outside, warm orange rim light on hair and shoulders, soft indoor fill, half-body framing, shallow depth of field, visible knitwear texture, natural skin detail, cinematic still, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "雨夜街道上的成年男人，电影感",
-        "cinematic photoreal photo of a fictional adult man on a rainy night street",
-        "雨夜街道上的虚构成年男人，湿润沥青反光，霓虹冷暖交织；全身或七分身构图，微仰视角；街灯作主光，雨丝与积水高光清楚；风衣面料微湿，面部轮廓锐利写实；无未成年人。",
-        "cinematic photoreal photo of a fictional adult man on a rainy night street, wet asphalt reflections, mixed neon key light, visible rain streaks, slight low angle, full or three-quarter body, damp coat fabric detail, sharp facial structure, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "两名成年人在暖光室内对视",
-        "photoreal photo of two fictional adults facing each other in warm indoor light",
-        "两名虚构成年人在暖光室内近距离对视，肩线相对；双人半身构图，浅景深；钨丝暖黄主光从侧前方打来，背景墙面柔和虚化；表情克制、眼神交汇，服装与皮肤质感清晰；无未成年人。",
-        "photoreal photo of two fictional adults facing each other in warm indoor light, intimate half-body two-shot, tungsten key from front-side, shallow depth of field, restrained expressions with eye contact, clear clothing and skin texture, fictional consenting adults 18+ only, no minors"
-      ),
-      丰富随机项(
-        "旧沙发上的成年女人，胶片质感",
-        "film-look photoreal photo of a fictional adult woman sitting on an old sofa",
-        "旧沙发上的虚构成年女人侧坐，一条腿收起；中景半身，轻微胶片颗粒；落地窗柔光作主光，室内阴影偏冷；沙发绒面与针织纹理清楚，表情放松自然；无未成年人。",
-        "film-look photoreal photo of a fictional adult woman sitting sideways on an old sofa, mid shot, gentle film grain, soft window key light with cooler shadow, visible sofa velvet and knit texture, relaxed natural expression, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "靠在车门边的成年男人，黄金时刻",
-        "golden hour photoreal photo of a fictional adult man leaning on a car door",
-        "黄金时刻靠在车门边的虚构成年男人，手臂搭在车顶；七分身构图，逆光勾边；低角度阳光拉长影子，车漆反光清楚；衬衫微皱，面部高光自然；无未成年人。",
-        "golden hour photoreal photo of a fictional adult man leaning on a car door, arm on roof, three-quarter body, backlight rim, long shadows, clear car-paint reflections, slightly wrinkled shirt, natural facial highlights, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "厨房里忙碌的成年女人，纪实摄影",
-        "documentary photoreal photo of a fictional adult woman cooking in a kitchen",
-        "厨房里忙碌的虚构成年女人正在翻炒，蒸汽升腾；纪实抓拍半身，略带运动感；顶灯与窗光混合，不锈钢锅具有高光；围裙与食材细节清楚，表情专注；无未成年人。",
-        "documentary photoreal photo of a fictional adult woman cooking in a kitchen, steam rising, candid half-body with slight motion, mixed overhead and window light, stainless cookware highlights, apron and food detail, focused expression, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "图书馆窗边读书的成年男人",
-        "photoreal photo of a fictional adult man reading by a library window",
-        "图书馆窗边读书的虚构成年男人，手持书本；半身侧光构图，书架虚化；冷白窗光为主，室内暖台灯为辅；纸张纤维与毛衣纹理清楚，神情安静；无未成年人。",
-        "photoreal photo of a fictional adult man reading by a library window, half-body side light, soft bookshelf bokeh, cool window key with warm desk-lamp fill, visible paper fiber and sweater knit, calm expression, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "海边栈道上的成年女人，自然光",
-        "photoreal photo of a fictional adult woman on a seaside boardwalk, natural light",
-        "海边栈道上的虚构成年女人迎风而立，发丝轻扬；全身远中景，地平线偏低；阴天柔和自然光，海面与木板纹理清楚；休闲外套质感写实，表情轻松；无未成年人。",
-        "photoreal photo of a fictional adult woman on a seaside boardwalk in natural light, wind-lifted hair, full-body mid-distance framing, low horizon, overcast soft daylight, clear wood plank and sea texture, casual jacket detail, relaxed expression, fictional adult 18+ only, no minors"
-      ),
-      丰富随机项(
-        "三名成年人站在一起的半身写实照",
-        "photoreal half-body photo of three fictional adults standing together",
-        "三名虚构成年人并肩半身站立，间距自然；水平机位、轻微广角；均匀影棚柔光，背景干净浅灰；各自发型服装可辨，表情自然互动；无未成年人。",
-        "photoreal half-body photo of three fictional adults standing together, even spacing, eye-level slight wide framing, soft studio key light, clean light-gray backdrop, distinct hairstyles and outfits, natural interaction, fictional adults 18+ only, no minors"
-      )
+      扩写随机核心("黄昏窗边的成年女人，写实照片", "photoreal photo of a fictional adult woman by a dusk window"),
+      扩写随机核心("雨夜街道上的成年男人，电影感", "cinematic photoreal photo of a fictional adult man on a rainy night street"),
+      扩写随机核心("两名成年人在暖光室内对视", "photoreal photo of two fictional adults facing each other in warm indoor light"),
+      扩写随机核心("旧沙发上的成年女人，胶片质感", "film-look photoreal photo of a fictional adult woman sitting on an old sofa"),
+      扩写随机核心("靠在车门边的成年男人，黄金时刻", "golden hour photoreal photo of a fictional adult man leaning on a car door"),
+      扩写随机核心("厨房里忙碌的成年女人，纪实摄影", "documentary photoreal photo of a fictional adult woman stir-frying in a kitchen with steam"),
+      扩写随机核心("图书馆窗边读书的成年男人", "photoreal photo of a fictional adult man reading by a library window"),
+      扩写随机核心("海边栈道上的成年女人，自然光", "photoreal photo of a fictional adult woman on a seaside boardwalk, natural light"),
+      扩写随机核心("三名成年人站在一起的全身正面写实照", "photoreal full-body front-view photo of three fictional adults standing together")
     ];
     return 池[Math.floor(Math.random() * 池.length)];
   }
@@ -2158,7 +2809,7 @@
     正在预载 = true;
     var 项 = null;
     try {
-      项 = 解析AI两行(await 问免费模型("雨夜街头一名成年女人撑伞。\nA fictional adult woman with an umbrella on a rainy night street, photoreal photo.\n再写一组全新的，只要上面这种两行。", "auto"));
+      项 = 解析AI两行(await 问免费模型("雨夜街头一名虚构成年人撑伞，身穿普通风衣。\nA fictional adult in an ordinary coat with an umbrella on a rainy night street, photoreal photo.\n再写一组全新的，只要上面这种两行。性别与身份须多样化；必须写明普通日常着装；不要默认女人；禁止裸体、内衣、暴露、lingerie、nude。", "glm"));
     } catch (e) {}
     if (!项) {
       项 = 本地随机一项();
@@ -2181,7 +2832,7 @@
       预载图.src = 图.src;
     };
     var 提示 = encodeURIComponent((写实提示(英文) || "photo").slice(0, 500));
-    图.src = 写实根址[0] + "?k=" + encodeURIComponent(工坊票据()) + "&prompt=" + 提示 + "&model=turbo&width=768&height=768&nologo=true&enhance=false&safe=false&seed=" + Math.floor(Math.random() * 1e9);
+    图.src = 写实根址[0] + "?k=" + encodeURIComponent(工坊票据()) + "&prompt=" + 提示 + "&model=sana&width=768&height=768&nologo=true&enhance=false&safe=false&seed=" + Math.floor(Math.random() * 1e9);
   }
 
   function 取出预载() {
@@ -2191,44 +2842,142 @@
     return 项;
   }
 
-  // 「智能修饰」：把写实/画风修饰写入可见核心描述；再点替换上一版后缀，不无限堆叠。
+  // 「智能修饰」：按核心衣着/场景/情绪生成偏向性修饰；只写入出图层，绝不改写可见核心；再点替换上一版；词库用尽后走 AI。
   var _智能修饰基座 = "";
   var _智能修饰后缀 = "";
   var _智能修饰序号 = 0;
+  var _智能修饰忙碌 = false;
 
   function _智能修饰候选(基座) {
     var 文 = String(基座 || "");
     var 画风 = 显式画风(文);
-    var 中文 = /[\u4e00-\u9fff]/.test(文);
-    if (画风) {
-      if (中文) {
-        return [
-          "，二次元动漫插画风格，精致线稿与赛璐璐上色，鲜明色彩层次，清晰角色设计，虚构成年人，无未成年人",
-          "，日系动漫插画，干净线条，柔和光影，高完成度角色立绘，虚构成年人，18+",
-          "，漫画风插画，鲜明配色，动态构图，细腻表情与服饰细节，虚构成年角色，无未成年人"
-        ];
-      }
-      return [
-        ", anime illustration style, clean lineart, cel shading, vivid colors, detailed character design, fictional adult 18+ only, no minors",
-        ", manga illustration, soft lighting, high-finish character portrait, fictional adult 18+, no minors",
-        ", comic-style illustration, dynamic composition, crisp linework, fictional adult, no minors"
-      ];
+    // 偏向性修饰：只从核心已有衣着/场景/情绪提炼强化，不灌全局暴露/性感模板
+    var 衣 = [];
+    if (/毛衣|针织|sweater|knit/i.test(文)) 衣.push("clear knit sweater texture as described");
+    if (/大衣|风衣|coat|jacket/i.test(文)) 衣.push("coat fabric readable as described");
+    if (/裙|dress/i.test(文)) 衣.push("dress silhouette matching the core");
+    if (/衬衫|shirt|blouse/i.test(文)) 衣.push("shirt fabric detail as described");
+    if (/裤|trousers|pants|jeans/i.test(文)) 衣.push("trousers/pants as described");
+    if (/伞|umbrella/i.test(文)) 衣.push("umbrella prop kept");
+    if (/帽|hat|cap/i.test(文)) 衣.push("hat as described");
+    if (/围裙|apron/i.test(文)) 衣.push("apron clearly visible as described");
+    if (!衣.length && /穿|衣|服|outfit|clothing|wear(?:ing)?|dressed|sweater|coat|dress|shirt|jacket|裙|裤|围裙/i.test(文)) {
+      衣.push("clothing exactly as described", "fabric detail matching the core outfit");
     }
-    if (中文) {
+    var 动 = [];
+    if (/翻炒|颠勺|炒菜|stir[\s-]?fry|wok[\s-]?toss/i.test(文)) 动.push("stir-frying tossing food in wok mid-motion");
+    if (/蒸汽升腾|冒着?蒸汽|热气腾腾|steam\s+ris|rising\s+steam/i.test(文)) 动.push("visible rising steam vapor");
+    if (/运动感|略带运动|motion\s+blur|slight\s+motion/i.test(文)) 动.push("slight motion blur hint from cooking action");
+    if (/不锈钢锅|炒锅|锅具|stainless.*wok|wok/i.test(文)) 动.push("stainless steel wok with specular highlights");
+    if (/食材|ingredients|food\s+detail/i.test(文)) 动.push("ingredients and food details clearly visible");
+    var 景 = [];
+    if (/雨|rain/i.test(文)) 景.push("rainy atmosphere from the core");
+    if (/窗|window/i.test(文)) 景.push("window-side setting as described");
+    if (/街|street|路/i.test(文)) 景.push("street environment as described");
+    if (/图书馆|library/i.test(文)) 景.push("library interior as described");
+    if (/海|seaside|beach|栈道|boardwalk/i.test(文)) 景.push("seaside setting as described");
+    if (/厨房|kitchen/i.test(文)) 景.push("kitchen environment as described");
+    if (/纪实|抓拍|documentary|candid/i.test(文)) 景.push("documentary candid photojournalistic capture");
+    if (/顶灯与窗光|顶灯|窗光|overhead|window light/i.test(文) && /厨房|kitchen|翻炒|蒸汽/i.test(文)) 景.push("mixed overhead and window light");
+    if (/室内|indoor|房间|bedroom|studio/i.test(文)) 景.push("indoor scene as described");
+    if (/室外|outdoor|户外/i.test(文)) 景.push("outdoor scene as described");
+    if (/夜|night/i.test(文)) 景.push("nighttime mood from the core");
+    if (/黄昏|dusk|golden hour|暖橙|暖光/i.test(文)) 景.push("warm dusk mood from the core");
+    if (/霓虹|neon/i.test(文)) 景.push("neon light mood as described");
+    var 情 = [];
+    if (/安静|calm|quiet/i.test(文)) 情.push("calm mood");
+    if (/轻松|relax/i.test(文)) 情.push("relaxed expression");
+    if (/专注|focused/i.test(文)) 情.push("focused expression");
+    if (/对视|facing each other/i.test(文)) 情.push("natural mutual gaze as described");
+    var 偏 = 动.concat(衣, 景, 情).filter(Boolean);
+    var 偏串 = 偏.length ? 偏.slice(0, 8).join(", ") + ", " : "";
+    // 修饰词一律英文：仅叠加入站出图 prompt，不回写核心描述原文语言。
+    if (画风) {
       return [
-        "，写实摄影，单反拍摄，85mm，自然皮肤毛孔与织物材质，自然光，电影剧照，浅景深，真实照片，非动漫非卡通非插画，虚构成年人，无未成年人",
-        "，纪实人像摄影，自然光影，真实皮肤质感，清晰材质细节，浅景深，非二次元非卡通，虚构成年人，18+",
-        "，电影感写实照片，85mm镜头，柔和侧光，真实毛孔与布料纹理，非动漫非插画，虚构成年，无未成年人"
+        ", " + 偏串 + "anime illustration style, clean lineart, cel shading, vivid color hierarchy, detailed character design reinforcing core outfit and scene, full-character standing art when core allows, fictional adult 18+ only, no minors",
+        ", " + 偏串 + "Japanese anime illustration, clean linework, soft lighting matching the core setting, high-finish character art, fictional adult 18+, no minors",
+        ", " + 偏串 + "comic-style illustration, vivid palette, dynamic composition, crisp expression and outfit detail from the core, fictional adult, no minors",
+        ", " + 偏串 + "visual-novel character art, clear facial features and hair, soft gradient shading, polished costume detail as written, fictional adult 18+ only, no minors",
+        ", " + 偏串 + "high-finish anime character illustration, clean lineart, cel-shaded lighting, readable costume detail from the core, fictional adult 18+, no minors",
+        ", " + 偏串 + "modern anime illustration, strong key colors, refined facial features, full-character standing-art feel when core allows, fictional adult, no minors"
       ];
     }
     return [
-      ", photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture, natural light, cinematic still, shallow depth of field, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
-      ", photoreal cinematic photograph, natural light, real human skin texture, sharp material detail, DSLR, not anime, not cartoon, fictional adult 18+, no minors",
-      ", realistic photography, 85mm lens, soft key light, pore-level skin, fabric weave visible, not 2d art, not cel shading, fictional adult, no minors"
+      ", " + 偏串 + "photorealistic photography style, shot on DSLR, 35mm lens, natural light, cinematic still, reinforce core clothing setting and mood only, not anime, not manga, not cartoon, not illustration, fictional adult 18+ only, no minors",
+      ", " + 偏串 + "documentary photoreal photography, natural lighting, materials matching core description, full-body framing head to toe when core allows, not anime, not cartoon, fictional adult 18+, no minors",
+      ", " + 偏串 + "cinematic photoreal photograph, 35mm lens, soft side light, pore-level skin and fabric weave matching the core outfit, not anime, not illustration, fictional adult, no minors",
+      ", " + 偏串 + "commercial photoreal photography, soft studio-light look when indoor, clear skin and clothing materials as written, natural depth of field, not cartoon, not 2d art, fictional adult 18+, no minors",
+      ", " + 偏串 + "natural-light photoreal photography, even ambient light, clear facial and hair detail, scene continuity with the core, not illustration, not anime, fictional adult, no minors",
+      ", " + 偏串 + "high-definition photoreal photography, readable materials and light hierarchy from the core setting, not anime, not manga, fictional adult 18+ only, no minors"
     ];
   }
 
-  function 智能修饰() {
+  function _清洗修饰后缀(原文) {
+    var 文 = String(原文 || "").replace(/\r/g, "").trim();
+    if (!文) return "";
+    文 = 文.split(/\n/)[0].trim();
+    文 = 文.replace(/^["'`「『]|["'`」』]$/g, "").trim();
+    文 = 文.replace(/^修饰[词短语]*[：:]\s*/i, "").trim();
+    文 = 文.replace(/^modifier[s]?\s*[:：]\s*/i, "").trim();
+    // Strip leftover assistant-instruction phrasing if the model echoes the ask.
+    文 = 文.replace(/请只输出.*$/i, "").replace(/Output ONLY.*$/i, "").trim();
+    if (!文) return "";
+    文 = 文.replace(/^[,，]\s*/, "");
+    文 = ", " + 文;
+    if (文.length < 10 || 文.length > 320) return "";
+    return 文;
+  }
+
+  async function _智能修饰AI生成(基座) {
+    var 文 = String(基座 || "").trim();
+    var 画风 = 显式画风(文);
+    var 风格说明 = 画风
+      ? "anime/manga illustration modifiers (lineart, cel shading, palette, character design, full-character standing art)"
+      : "photoreal photography modifiers (full-body front view 35mm, lens, lighting, materials, not anime, not close-up)";
+    var 问 = "Output ONLY one English modifier phrase to append after the scene description for the image API. No explanation, no quotes, no line breaks.\n"
+      + "Style: " + 风格说明 + ".\n"
+      + "Requirements: product-official wording; fictional adult 18+; ethnicity-neutral unless base already states ethnicity; if base mentions East Asian/Chinese/Korean/Japanese, reinforce East Asian facial features and never add blonde/caucasian/european/blue eyes; BIAS FROM BASE ONLY — reinforce clothing, setting, mood already present in the base; style/lighting/materials that support those core facts; do NOT invent woman/female/girl/beautiful woman unless base already states female gender; if base states male (男人/男性/男主/帅哥/大叔/male/man), reinforce adult man/male/masculine and NEVER invent woman/girl/female/she; follow gender as written or stay gender-neutral; do NOT invent nude/naked/lingerie/underwear/bra/panties/cleavage/skimpy/seductive/revealing/sexy/crop top modifiers unless the base explicitly asks; do NOT contradict clothing, pose, identity, or scene in the base; do NOT invent outfits/props/settings absent from base; prefer full-body framing only when base allows, avoid close-up/half-body unless base asks; do not repeat the base text; do not rewrite the base.\n"
+      + "Base: " + 文.slice(0, 280);
+    var 通道框 = document.getElementById("AI通道");
+    var 模型 = 通道框 && 通道框.value ? 通道框.value : "glm";
+    var 原文 = "";
+    try {
+      原文 = await 问免费模型(问, 模型);
+    } catch (e1) {
+      try {
+        if (模型 !== "glm") 原文 = await 问免费模型(问, "glm");
+      } catch (e2) {
+        try { 原文 = await 问群体模型(问); } catch (e3) { 原文 = ""; }
+      }
+    }
+    return _清洗修饰后缀(原文);
+  }
+
+  function _应用智能修饰(框, 基座, 后缀) {
+    _智能修饰基座 = 基座;
+    _智能修饰后缀 = 后缀;
+    // 绝不改写可见 #角色描述 / 核心描述原文。
+    var 安 = document.getElementById("安全英文");
+    var 英 = document.getElementById("英文描述");
+    if (安) {
+      var 英文明 = 只留英文(去掉方括号((英 && 英.value) || ""));
+      if (!英文明) 英文明 = 只留英文(去掉方括号(基座));
+      if (!英文明) 英文明 = String(基座 || "");
+      安.value = (英文明 + 后缀).replace(/\s{2,}/g, " ").trim();
+    }
+    if (typeof 设翻译状态 === "function") {
+      设翻译状态("已选出图修饰（核心描述未改）：" + String(后缀).replace(/^[,，]\s*/, "").slice(0, 48));
+    }
+    if (typeof 刷新画面说明 === "function") 刷新画面说明();
+    if (框) 框.focus();
+  }
+
+  function 读取智能修饰后缀() {
+    return String(_智能修饰后缀 || "");
+  }
+
+  async function 智能修饰() {
+    if (_智能修饰忙碌) return;
     var 框 = document.getElementById("角色描述");
     if (!框) return;
     var 全文 = String(框.value || "");
@@ -2238,44 +2987,38 @@
       框.focus();
       return;
     }
-    var 可替换 = false;
     var 基座 = 全文;
-    if (_智能修饰后缀 && _智能修饰基座 !== "" && 全文.length >= _智能修饰后缀.length &&
-        全文.slice(全文.length - _智能修饰后缀.length) === _智能修饰后缀) {
-      var 前 = 全文.slice(0, 全文.length - _智能修饰后缀.length);
-      var 旧基 = String(_智能修饰基座);
-      var 相似度 = 前.trim() === 旧基.trim() ||
-        (前.trim().length > 8 && 旧基.trim().indexOf(前.trim().slice(0, Math.min(24, 前.trim().length))) === 0 &&
-          Math.abs(前.trim().length - 旧基.trim().length) <= Math.max(12, 旧基.trim().length * 0.35));
-      if (前 === 旧基 || 前.trim() === 旧基.trim() || 相似度) {
-        可替换 = true;
-        基座 = 前;
-      }
-    }
-    if (!可替换) {
+    if (_智能修饰基座 !== "" && _智能修饰基座.trim() === 文) {
+      _智能修饰序号 += 1;
+    } else {
       _智能修饰序号 = 0;
       基座 = 全文;
-    } else {
-      _智能修饰序号 += 1;
     }
     var 列表 = _智能修饰候选(基座.trim());
-    var 后缀 = 列表[_智能修饰序号 % 列表.length];
-    _智能修饰基座 = 基座;
-    _智能修饰后缀 = 后缀;
-    框.value = 基座 + 后缀;
-    try { 框.dispatchEvent(new Event("input", { bubbles: true })); } catch (e0) {}
-    try { localStorage.setItem("角色生成器_上次描述", 框.value); } catch (e1) {}
-    var 安 = document.getElementById("安全英文");
-    var 英 = document.getElementById("英文描述");
-    if (安) {
-      var 英文明 = 只留英文(去掉方括号((英 && 英.value) || ""));
-      if (!英文明) 英文明 = 只留英文(去掉方括号(框.value));
-      if (!英文明) 英文明 = 框.value;
-      安.value = 英文明;
+    var 后缀 = "";
+    if (_智能修饰序号 < 列表.length) {
+      后缀 = 列表[_智能修饰序号];
+      _应用智能修饰(框, 基座, 后缀);
+      return;
     }
-    if (typeof 刷新画面说明 === "function") 刷新画面说明();
-    框.focus();
+    _智能修饰忙碌 = true;
+    var 钮 = document.getElementById("智能修饰按钮");
+    var 旧文 = 钮 ? 钮.textContent : "";
+    if (钮) { 钮.disabled = true; 钮.textContent = "AI 修饰中…"; }
+    try {
+      后缀 = await _智能修饰AI生成(基座.trim());
+    } catch (eAi) {
+      后缀 = "";
+    }
+    if (!后缀) 后缀 = 列表[_智能修饰序号 % 列表.length];
+    _应用智能修饰(框, 基座, 后缀);
+    if (钮) { 钮.disabled = false; 钮.textContent = 旧文 || "智能修饰"; }
+    _智能修饰忙碌 = false;
   }
+
+  window.读取智能修饰后缀 = 读取智能修饰后缀;
+  window._智能修饰候选 = _智能修饰候选;
+  window.智能修饰 = 智能修饰;
 
   function 清空描述() {
     // 只清空核心描述与相关出图描述字段；不碰画廊/历史/参考图。
@@ -2286,6 +3029,7 @@
     _智能修饰基座 = "";
     _智能修饰后缀 = "";
     _智能修饰序号 = 0;
+    _智能修饰忙碌 = false;
     try { localStorage.removeItem("角色生成器_上次描述"); } catch (e) {}
     上次译源 = "";
     if (typeof 刷新画面说明 === "function") 刷新画面说明();
@@ -2299,9 +3043,12 @@
     var 核 = document.getElementById("角色描述");
     var 安 = document.getElementById("安全英文");
     var 文 = "";
-    if (有参考图()) {
+    if (typeof 本轮使用参考图 === "function" ? 本轮使用参考图() : 有参考图()) {
       var 参考描述 = (英 && 英.value) || (核 && 核.value) || "replace the background with a natural cinematic scene";
-      文 = 补换背景英文(只留英文(去掉方括号(参考描述)));
+      var 核文 = (核 && 核.value) || "";
+      文 = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文))
+        ? 补局部改图英文(只留英文(去掉方括号(参考描述)), 核文)
+        : 补换背景英文(只留英文(去掉方括号(参考描述)));
     } else {
       文 = 只留英文(去掉方括号((英 && 英.value) || ""));
       if (!文) {
@@ -2313,7 +3060,7 @@
     if (!文 || /女性[:：]\s*[\d.]+/.test(文) || (文.match(/\d/g) || []).length >= 12) {
       文 = "photoreal cinematic photo of a fictional adult, natural light, DSLR";
     }
-    文 = 强制写实英文(文);
+    文 = 强制写实英文(文, (核 && 核.value) || "");
     if (安) 安.value = 文;
     return 文;
   }
@@ -2369,12 +3116,9 @@
     if (抢出已定) return;
     抢出已定 = true;
     本轮抢出 = false;
-    本轮胜出 = 引擎 || "turbo";
+    本轮胜出 = 引擎 || "perchance";
     var 框 = document.getElementById("出图引擎");
-    var 用户选 = (框 && 框.value) || 用户选定平台 || "auto";
-    if (用户选 !== "auto") {
-      用户选定平台 = 用户选;
-    }
+    var 用户选 = "perchance";
     设平台提示(本轮胜出);
     var 隐 = document.getElementById("抢出探测");
     if (隐) 隐.innerHTML = "";
@@ -2532,7 +3276,7 @@
   async function 开始备用生成() {
     走备用线路 = true;
     var 备 = document.getElementById("备用引擎");
-    用户选定平台 = (备 && 备.value) || "turbo";
+    用户选定平台 = (备 && 备.value) || "sana";
     await 开始生成();
   }
 
@@ -2547,28 +3291,25 @@
       return;
     }
 
+    if (正在生成图片) return;
     var 令牌 = ++出图令牌;
-    本轮抢出 = (!!即将抢出 || 当前引擎() === "auto") && !有参考图();
+    本轮抢出 = false;
     即将抢出 = false;
     本轮胜出 = "";
     抢出已定 = false;
     本平台成功 = 0;
     本平台失败 = 0;
     if (生成检查器) { clearInterval(生成检查器); 生成检查器 = null; }
-    正在生成图片 = true;
-
     var 核心 = 描述框 ? 描述框.value.trim() : "";
+    // 中文核心描述必须先完成英文转换，再进入实际生图，避免首张图直接把中文送给偏动漫的模型。
+    if (!有参考图() && 核心 && 含中文(核心)) {
+      设置生成按钮状态(true, "正在翻译并准备生成…");
+      await 准备英文描述(false);
+    }
+    正在生成图片 = true;
     写出安全英文();
     刷新画面说明();
     真正生成图片(令牌);
-    if (!有参考图() && 核心 && 含中文(核心)) {
-      var 现英 = 英文框 ? (英文框.value || "").trim() : "";
-      if (!现英 || !像画面描述(现英) || 含中文(现英)) {
-        调用开源翻译(核心, "en").then(function (译) {
-          if (英文框 && 译) 英文框.value = 去掉方括号(译);
-        }).catch(function () {});
-      }
-    }
   }
 
 
@@ -2674,17 +3415,24 @@
   }
 
   function 当前引擎() {
-    var 框 = document.getElementById("出图引擎");
-    var 值 = (框 && 框.value) || 用户选定平台 || "auto";
-    if (值 === "官方") 值 = "perchance";
-    if (有参考图()) return "horde";
-    return 值 || "auto";
+    return document.getElementById("出图引擎").value || "perchance";
   }
 
 
   function 立即更换出图平台() {
     记录失败原因("出图失败，仍使用当前平台");
     结束本次生成("生成角色图片", false);
+  }
+
+
+  var __sushiHistFull = Object.create(null);
+
+  function 历史缩略(地址, 回) {
+    if (typeof window.makeThumbnailDataUrl === 'function') {
+      window.makeThumbnailDataUrl(地址, 220, 0.65).then(function (t) { 回(t || ''); });
+      return;
+    }
+    回('');
   }
 
   var 历史键 = "角色生成器_生成历史";
@@ -2707,27 +3455,54 @@
     try {
       var 裁 = 空列表();
       var i = 0;
-      for (i = 0; i < 列表.length && i < 6; i++) 裁.push(列表[i]);
+      for (i = 0; i < 列表.length && i < 6; i++) {
+        var 源 = 列表[i] || {};
+        var 项 = new Object();
+        项.id = 源.id || ("h" + 源.t + "_" + i);
+        项.t = 源.t || Date.now();
+        项.thumb = 源.thumb || "";
+        // 只缓存缩略图与可重新拉取的 http 原图地址；不把巨大 dataURL 写入 localStorage。
+        if (源.u && String(源.u).indexOf("http") === 0) 项.u = 源.u;
+        else 项.u = "";
+        if (源.u && String(源.u).indexOf("data:image") === 0) __sushiHistFull[项.id] = 源.u;
+        裁.push(项);
+      }
       localStorage.setItem(历史键, JSON.stringify(裁));
     } catch (e) {}
   }
 
-  function 收入历史(地址) {
+  function 收入历史(地址, 缩略图) {
     if (!地址) return;
     if (地址.indexOf("http") !== 0 && 地址.indexOf("data:image") !== 0) return;
     var 旧 = 读取生成历史();
     var 列表 = 空列表();
     var i = 0;
+    var id = "h" + Date.now() + "_" + Math.floor(Math.random() * 10000);
     for (i = 0; i < 旧.length; i++) {
-      if (旧[i] && 旧[i].u !== 地址) 列表.push(旧[i]);
+      if (旧[i] && ((旧[i].u && 旧[i].u === 地址) || (旧[i].id && __sushiHistFull[旧[i].id] === 地址))) continue;
+      列表.push(旧[i]);
     }
     var 项 = new Object();
-    项.u = 地址;
+    项.id = id;
     项.t = Date.now();
+    项.thumb = 缩略图 || "";
+    if (地址.indexOf("http") === 0) 项.u = 地址;
+    else {
+      项.u = "";
+      __sushiHistFull[id] = 地址;
+    }
     列表.unshift(项);
     保存生成历史(列表);
     var 板 = document.getElementById("历史面板");
     if (板 && !板.hasAttribute("hidden")) 刷新历史面板();
+    if (!缩略图) {
+      历史缩略(地址, function (t) {
+        if (!t) return;
+        项.thumb = t;
+        保存生成历史(列表);
+        if (板 && !板.hasAttribute("hidden")) 刷新历史面板();
+      });
+    }
   }
 
   function 开关生成历史() {
@@ -2742,6 +3517,10 @@
     保存生成历史(空列表());
     刷新历史面板();
   }
+  window.读取生成历史 = 读取生成历史;
+  window.历史原图地址 = 历史原图地址;
+  window.最新历史原图 = 最新历史原图;
+  window.收入历史 = 收入历史;
 
   function 下载历史图片(序号) {
     var 全部 = 读取生成历史();
@@ -2750,18 +3529,27 @@
     for (i = 0; i < 全部.length; i++) {
       if (i === 序号) 项 = 全部[i];
     }
-    if (!项 || !项.u) {
+    var 原 = 历史原图地址(项);
+    if (!项 || !原) {
       alert("这张图已经失效。");
       return;
     }
     var a = document.createElement("a");
-    a.href = 项.u;
+    a.href = 原;
     a.download = "角色图.jpg";
     a.target = "_blank";
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
     a.remove();
+  }
+
+  function 历史原图地址(项) {
+    if (!项) return "";
+    if (项.id && __sushiHistFull[项.id]) return __sushiHistFull[项.id];
+    if (项.u && String(项.u).indexOf("http") === 0) return 项.u;
+    if (项.u && String(项.u).indexOf("data:image") === 0) return 项.u;
+    return 项.thumb || "";
   }
 
   function 刷新历史面板() {
@@ -2782,20 +3570,44 @@
       var 卡 = document.createElement("div");
       卡.className = "历史卡片";
       var 图 = document.createElement("img");
-      图.alt = "历史图";
+      图.alt = "历史缩略图";
+      图.decoding = "async";
       var 钮 = document.createElement("button");
       钮.type = "button";
       钮.className = "次按钮";
       钮.textContent = "下载";
-      钮.addEventListener("click", function () { 下载历史图片(号); });
+      钮.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        下载历史图片(号);
+      });
       卡.appendChild(图);
       卡.appendChild(钮);
+      卡.addEventListener("click", function () {
+        var full = 历史原图地址(项);
+        if (!full) {
+          alert("原图未缓存，请重新生成后再查看。");
+          return;
+        }
+        if (typeof window.打开图片预览 === "function") window.打开图片预览(full, 图);
+        else window.open(full, "_blank");
+      });
       区.appendChild(卡);
       var 下一步 = function () { 加一张(号 + 1); };
       图.addEventListener("load", 下一步);
       图.addEventListener("error", 下一步);
-      if (项 && 项.u) 图.src = 项.u;
-      else 下一步();
+      // 历史画廊只加载缩略图；原图在点击预览时再取。
+      if (项 && 项.thumb) 图.src = 项.thumb;
+      else if (项 && 项.u && String(项.u).indexOf("http") === 0) {
+        历史缩略(项.u, function (t) {
+          if (t) {
+            项.thumb = t;
+            保存生成历史(列表);
+            图.src = t;
+          } else {
+            图.src = 项.u;
+          }
+        });
+      } else 下一步();
     }
     加一张(0);
   }
@@ -2809,12 +3621,18 @@
     区.setAttribute("data-hist", "1");
     function 收一张(图) {
       if (!图 || 图.getAttribute("data-in-hist") === "1") return;
-      图.setAttribute("data-in-hist", "1");
+      var 地址 = 图.getAttribute("data-full-url") || 图.currentSrc || 图.src;
+      if (地址 && (地址.indexOf("http") === 0 || 地址.indexOf("data:image") === 0)) {
+        图.setAttribute("data-in-hist", "1");
+        收入历史(地址);
+        return;
+      }
       var 收 = function () {
-        收入历史(图.currentSrc || 图.src);
+        if (图.getAttribute("data-in-hist") === "1") return;
+        图.setAttribute("data-in-hist", "1");
+        收入历史(图.getAttribute("data-full-url") || 图.currentSrc || 图.src);
       };
-      if (图.complete && 图.naturalWidth) 收();
-      else 图.addEventListener("load", 收);
+      图.addEventListener("load", 收);
     }
     var 现有 = 区.getElementsByTagName("img");
     var i = 0;
@@ -2839,7 +3657,7 @@
     }
     var i = 0;
     for (i = 0; i < 图们.length; i++) {
-      var 地址 = 图们[i].currentSrc || 图们[i].src;
+      var 地址 = 图们[i].getAttribute("data-full-url") || 图们[i].currentSrc || 图们[i].src;
       if (!地址 || 地址.indexOf("http") !== 0 && 地址.indexOf("data:") !== 0) continue;
       收入历史(地址);
       var a = document.createElement("a");
@@ -2854,15 +3672,13 @@
 
   function 引擎名称(值) {
     var 真 = {
-      auto: "自动抢出",
-      turbo: "Turbo",
-      flux: "Flux",
-      "flux-realism": "Flux写实",
-      sana: "Sana",
-      horde: "群体计算",
-      perchance: "Perch / Perchance · 应用内"
+      perchance: "Perchance",
+      "horde-real": "AI Horde · 写实",
+      horde: "AI Horde · 写实",
+      "horde-anime": "AI Horde · 动漫",
+      sana: "Sana · 动漫/插画"
     };
-    return 真[值] || 值;
+    return 真[值] || 值 || "Perchance";
   }
 
   function 刷新管理员界面() {
@@ -2885,22 +3701,16 @@
   }
 
   function 保存默认平台(值, 用户选的) {
-    用户选定平台 = 值 || "perchance";
+    用户选定平台 = 规范化出图平台(值, 用户选的);
     var 框 = document.getElementById("出图引擎");
-    if (框) 框.value = 用户选定平台;
-    try {
-      localStorage.setItem("角色生成器_默认平台", 用户选定平台);
-      if (用户选的) localStorage.setItem("角色生成器_用户选过平台", "1");
-    } catch (e) {}
+    if (框) { 框.value = 用户选定平台; 框.disabled = false; }
+    try { localStorage.setItem("角色生成器_默认平台", 用户选定平台); } catch (e) {}
   }
   function 保存对话通道(值, 用户选的) {
-    值 = 值 || "auto";
+    值 = 规范化对话通道(值, 用户选的);
     var 框 = document.getElementById("AI通道");
-    if (框) 框.value = 值;
-    try {
-      localStorage.setItem("角色生成器_对话通道", 值);
-      if (用户选的) localStorage.setItem("角色生成器_用户选过对话", "1");
-    } catch (e) {}
+    if (框) { 框.value = 值; 框.disabled = false; }
+    try { localStorage.setItem("角色生成器_对话通道", 值); } catch (e) {}
   }
 
   function 切换调试(开) {
@@ -2914,47 +3724,9 @@
   }
 
   function 工具提示(文案) {
-    var 状态 = document.getElementById("工具状态");
-    if (状态) 状态.textContent = 文案 || "";
-  }
-  function 生成随机种子() {
-    var 框 = document.getElementById("随机种子");
-    if (!框) return;
-    var 值 = Math.floor(Math.random() * 2147483646) + 1;
-    框.value = String(值);
-    工具提示("已生成新随机种子：" + 值);
-  }
-  async function 复制当前提示() {
-    var 框 = document.getElementById("英文描述");
-    var 文 = String((框 && 框.value) || document.getElementById("角色描述").value || "").trim();
-    if (!文) return 工具提示("当前还没有可复制的提示词。");
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(文);
-      else { 框.focus(); 框.select(); document.execCommand("copy"); }
-      工具提示("当前提示词已复制。");
-    } catch (e) { 工具提示("复制失败，请手动选择文字复制。"); }
-  }
-  function 清理当前提示() {
-    ["角色描述", "英文描述", "中文译文"].forEach(function (id) {
-      var 框 = document.getElementById(id);
-      if (框) 框.value = 去掉方括号(框.value).replace(/\s+/g, " ").trim();
-    });
-    刷新画面说明();
-    工具提示("已清理多余空格和括号，未删除主要描述。");
-  }
-  function 重置生成参数() {
-    var 默认值 = {
-      "出图引擎": "perchance", "图像比例": "512x512", "生成数量": "1",
-      "引导强度": "7", "图生图强度": "0.52"
-    };
-    Object.keys(默认值).forEach(function (id) {
-      var 框 = document.getElementById(id);
-      if (框) 框.value = 默认值[id];
-    });
-    用户选定平台 = "perchance";
-    同步换背景强度();
-    设平台提示("perchance");
-    工具提示("已恢复推荐参数，核心描述和历史记录未改变。");
+    // 实用小工具区已移除；短暂提示改写到分类状态（若存在）
+    var 状态 = document.getElementById("分类状态");
+    if (状态 && 文案) 状态.textContent = 文案;
   }
 
   function 刷新十八禁开关() {
@@ -3016,12 +3788,12 @@
   }
 
   function 写实提示(英文) {
-    var 文 = 强制写实英文(英文);
+    var 引擎 = "";
+    try { 引擎 = String((document.getElementById("出图引擎") || {}).value || ""); } catch (e) {}
+    if (/anime|sana/.test(引擎)) return String(英文 || "").replace(/\s+/g, " ").trim();
     var 核 = ((document.getElementById("角色描述") || {}).value || "") + ((document.getElementById("英文描述") || {}).value || "");
-    var 尾 = "";
-    if (!显式画风(文 + 核)) {
-      尾 = ", photorealistic RAW photo, cinematic still, DSLR, natural skin, sharp focus, real human, not anime, not manga, not cartoon";
-    }
+    var 文 = 强制写实英文(英文, 核);
+    var 尾 = ", photorealistic RAW photo, cinematic still, DSLR, natural skin, sharp focus, real human, not anime, not manga, not cartoon";
     if (/性爱|插入|抽插|口交|后入|骑乘|性交|做爱|sex|penetrat|oral|doggy|cowgirl/i.test(核)) {
       尾 += ", explicit adult sex";
     }
@@ -3159,10 +3931,14 @@
     var 尺寸 = 解析尺寸();
     var w = Math.min(768, Math.max(512, Math.round((尺寸.宽 || 512) / 64) * 64));
     var h = Math.min(768, Math.max(512, Math.round((尺寸.高 || 512) / 64) * 64));
+    var 引擎 = "";
+    try { 引擎 = String((document.getElementById("出图引擎") || {}).value || ""); } catch (e) {}
+    var 动漫 = /anime|sana/.test(引擎);
+    var 提示 = 动漫 ? String(英文 || "photo") : (写实提示(英文) || "photo");
     var resp = await 限时拉取("/api/workshop/horde-image", {
       method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ k: 工坊票据(), prompt: (写实提示(英文) || "photo").slice(0, 1000), width: w, height: h })
-    }, 55000);
+      body: JSON.stringify({ k: 工坊票据(), prompt: 提示.slice(0, 1000), width: w, height: h, style: 动漫 ? "anime" : "real" })
+    }, 180000);
     var j = await resp.json().catch(function () { return {}; });
     if (!resp.ok || !j || !j.url) throw new Error((j && j.error) || "群体未返回图片");
     return j.url;
@@ -3227,8 +4003,10 @@
     var 种子框 = document.getElementById("随机种子");
     var 强度框 = document.getElementById("图生图强度");
     var 英文 = String((document.getElementById("安全英文") || {}).value || "").trim();
+    var 核文 = String((document.getElementById("角色描述") || {}).value || "").trim();
     var 原图 = String((地址框 && 地址框.value) || "").trim();
     if (!原图) return 显示全部失败();
+    if (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) 英文 = 补局部改图英文(英文, 核文);
     输出区.innerHTML = "";
     状态区.style.display = "flex";
     状态区.innerHTML = '<div class="加载动画"></div><b>正在进行图生图</b><p>参考图正在提交到备用图生图服务器，请稍候。</p>';
@@ -3245,7 +4023,8 @@
         body: JSON.stringify({
           k: 工坊票据(), image: 原图, prompt: 英文 || "photorealistic background replacement",
           width: 尺寸.宽, height: 尺寸.高,
-          strength: Number((强度框 && 强度框.value) || 0.52), seed: 基础种子 + 序号 * 97
+          strength: (function () { var base = Number((强度框 && 强度框.value) || 0.52); var local = (typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)); if (!local) return base; if (typeof preferLocalEditStrength === "function") return preferLocalEditStrength(base, 核文); if (局部改姿势手势(核文)) { var poseCap = 0.65, poseFloor = 0.55; if (base > poseCap) return poseCap; if (base < poseFloor) return poseFloor; return base; } var shortEdit = String(核文 || "").trim().length <= 48; var cap = shortEdit ? 0.22 : 0.28; var floor = 0.2; if (base > cap) return cap; if (base < floor) return floor; return base; })(), seed: (function () { if (局部改姿势手势(核文)) return undefined; var lock = Number((document.getElementById("参考图种子") || {}).value); if ((typeof 应用局部改图 === "function" ? 应用局部改图() : 是局部改图核心(核文)) && Number.isFinite(lock) && lock > 0) return lock; return 基础种子 + 序号 * 97; })(),
+          style: "real"
         })
       }, 95_000);
       var data = await resp.json().catch(function () { return {}; });
@@ -3279,11 +4058,10 @@
   }
 
   function 用官方插件出图(竞速) {
-    // 应用内 Perchance：有嵌入插件则走官方画廊；否则回落到应用内免费通道（绝不 window.open 官网）
+    // 不嵌入官网。先在官网开限制通常也无法解锁应用内嵌（会话/Cookie 不进 iframe）。有官方组件则用；否则走官方出图接口，绝不转接其他平台、绝不 window.open。
     if (typeof update !== "function") {
       设平台提示("perchance");
-      用写实引擎出图("turbo");
-      用群体出图探测();
+      if (typeof window.开始生成 === "function") window.开始生成();
       return;
     }
     上次官方张数 = 0;
@@ -3296,9 +4074,9 @@
     if (typeof update !== "function") {
       输出区.innerHTML = "";
       状态区.style.display = "flex";
-      状态区.innerHTML = '<div class="加载动画"></div><b>Perchance 官方组件未加载</b><p>已自动切换免费写实线路，请稍候。</p>';
-      记录失败原因("Perchance 官方组件未加载，已切换 Turbo 备用线路");
-      用写实引擎出图("turbo", 0);
+      状态区.innerHTML = '<div class="加载动画"></div><b>正在用 Perchance 出图</b><p>按所选通道出图，失败不更换平台。</p>';
+      记录失败原因("Perchance 页面组件未加载，改走官方出图接口");
+      if (typeof window.开始生成 === "function") window.开始生成();
       return;
     }
     执行生成.value =
@@ -3311,13 +4089,14 @@
     状态区.innerHTML =
       '<div class="加载动画"></div>' +
       (竞速
-        ? ("<b>正在抢出 " + 计划张数 + " 张</b><p>Turbo 已开跑，官方若先到也算。</p>")
+        ? ("<b>正在抢出 " + 计划张数 + " 张</b><p>写实通道已开跑，官方若先到也算。</p>")
         : ("<b>正在用官方插件生成 " + 计划张数 + " 张</b><p>本轮只用这一路。</p>"));
     try {
       update(输出区);
     } catch (错误) {
       console.error(错误);
-      切换备用引擎("官方插件没有启动");
+      设平台提示("perchance");
+      if (typeof window.开始生成 === "function") window.开始生成();
       return;
     }
     var 检查次数 = 0;
@@ -3349,9 +4128,8 @@
           /* Turbo / Horde 已在跑，官方迟到不再挡 */
         } else if (!抢出已定) {
           var 行 = document.getElementById("平台提示");
-          if (行) 行.textContent = "生图平台：官方超时，改抢 Turbo";
-          用写实引擎出图("turbo");
-          用群体出图探测();
+          if (行) 行.textContent = "生图平台：Perchance 出图超时，未更换平台";
+          结束本次生成("生成角色图片");
         } else {
           结束本次生成("生成角色图片");
         }
@@ -3362,19 +4140,25 @@
   function 设平台提示(引擎) {
     var 行 = document.getElementById("平台提示");
     if (!行) return;
-    if (!引擎) 行.textContent = "生图平台：Turbo";
-    else 行.textContent = "生图平台：" + 引擎名称(引擎);
+    if (!引擎) 行.textContent = "生图平台：Perchance · 按所选通道";
+    else 行.textContent = "生图平台：" + 引擎名称(引擎) + " · 按所选通道";
+    try { 刷新记忆生成线路(); } catch (eTip) {}
   }
 
   function 按指定引擎出图(引擎) {
-    本轮已试引擎.push(引擎);
+    var 选 = String(引擎 || 当前引擎() || "perchance");
+    if (选 === "官方" || 选 === "perch") 选 = "perchance";
+    本轮已试引擎.push(选);
     var 框 = document.getElementById("出图引擎");
-    if (框) 框.value = 引擎;
-    设平台提示(引擎);
-    if (引擎 === "auto") { 用写实引擎出图("turbo"); 用群体出图探测(); }
-    else if (引擎 === "perchance") { 用官方插件出图(false); }
-    else if (引擎 === "horde") 用群体出图();
-    else 用写实引擎出图(引擎);
+    if (框) 框.value = 选;
+    设平台提示(选);
+    // 选定平台独占：交给 workshop-generation 按所选引擎出图，不强制跳 Perch
+    if (typeof window.开始生成 === "function") {
+      window.开始生成();
+      return;
+    }
+    if (选 === "perchance") 用官方插件出图(false);
+    else 显示全部失败();
   }
 
   function 真正生成图片(令牌) {
@@ -3407,48 +4191,40 @@
       预载图 = null;
       抢出已定 = true;
       本轮抢出 = false;
-      本轮胜出 = "turbo";
-      设平台提示("turbo");
+      本轮胜出 = "perchance";
+      设平台提示("perchance");
       if (计划张数 <= 1) {
         结束本次生成("生成角色图片");
         return;
       }
-      用写实引擎出图("turbo", 1);
+      用写实引擎出图("perchance", 1);
       return;
     }
-    var 选引擎 = 当前引擎() || "auto";
-    if (有参考图()) {
+    var 选引擎 = 当前引擎() || "perchance";
+    if (选引擎 === "官方" || 选引擎 === "perch") 选引擎 = "perchance";
+    if (typeof 本轮使用参考图 === "function" ? 本轮使用参考图() : 有参考图()) {
       本轮抢出 = false;
-      设平台提示("horde");
+      设平台提示(用户选定图生图平台 || 选引擎);
       用图生图出图();
       return;
     }
-    if (本轮抢出 || 选引擎 === "auto") {
-      抢出已定 = false;
-      本轮胜出 = "";
-      设平台提示("auto");
-      var 行 = document.getElementById("平台提示");
-      if (行) 行.textContent = "生图平台：自动抢出 · 全平台先到先得";
-      var 输出区 = document.getElementById("图像输出");
-      if (输出区) 输出区.style.visibility = "";
-      计划张数 = 抢出目标张数 || 1;
-      // 全平台抢出（仅 auto）：写实优先 + Horde 同时探测，先到先得。
-      用写实引擎出图("flux-realism");
-      用写实引擎追加("turbo");
-      用写实引擎追加("flux");
-      用写实引擎追加("sana");
-      用群体出图探测();
-    } else if (选引擎 === "perchance") {
-      本轮抢出 = false;
-      设平台提示("perchance");
-      用官方插件出图(false);
-    } else {
-      本轮抢出 = false;
-      按指定引擎出图(选引擎 || "turbo");
+    本轮抢出 = false;
+    设平台提示(选引擎);
+    // 不强制跳到 Perch：优先走已覆盖的 window.开始生成（workshop-generation）
+    if (typeof window.__sushiReady !== "undefined" && window.__sushiReady && typeof window.开始生成 === "function") {
+      // HTML 旧路径被 generation.js 覆盖后不应落到这里；若落到则按所选提示失败，避免静默换平台
+      记录失败原因("旧出图路径已停用，请使用所选生图平台重试");
+      结束本次生成("生成角色图片", false);
+      return;
+    }
+    if (选引擎 === "perchance") 用官方插件出图(false);
+    else {
+      记录失败原因("所选平台 " + 选引擎 + " 需由生图组件出图，未更换平台");
+      结束本次生成("生成角色图片", false);
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.29" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.79" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -3506,10 +4282,6 @@
       sans-serif;
   }
 
-  body.禁止滚动 {
-    overflow: hidden;
-  }
-
   button,
   input,
   textarea,
@@ -3525,6 +4297,9 @@
   select {
     font-size: 16px;
   }
+
+  /* 保留创作、AI 对话和工具框架；仅隐藏后台管理入口。 */
+  #平台管理区, #管理面板 { display: none !important; }
 
   .应用 {
     min-height: 100vh;
@@ -3597,8 +4372,9 @@
 
   .历史卡片 img {
     width: 100%;
-    aspect-ratio: 1;
-    object-fit: cover;
+    max-height: min(28vh, 220px);
+    aspect-ratio: auto;
+    object-fit: contain;
     border-radius: 10px;
     background: #F5F7FA;
   }
@@ -3917,6 +4693,137 @@
     border-radius: 10px;
   }
 
+  .记忆线路区 {
+    margin: -4px 0 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--边框);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .记忆生成线路 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--淡色);
+    word-break: break-word;
+  }
+  .记忆路线列表 {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    max-height: 160px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .记忆路线项 {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--边框);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .记忆路线文 {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--淡色);
+    word-break: break-word;
+  }
+  .记忆路线空 {
+    font-size: 11px;
+    color: var(--淡色);
+    opacity: 0.8;
+    padding: 2px 0;
+  }
+  .清除单条记忆钮 {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .记忆线路操作 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .生图方式行 {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    width: 100%;
+  }
+  .记忆线路区[hidden],
+  .生图方式行[hidden],
+  #生图方式改动行[hidden],
+  .生图方式项[hidden],
+  #记忆生成线路[hidden],
+  #记忆路线列表[hidden],
+  #清除记忆线路按钮[hidden],
+  .记忆线路操作[hidden] {
+    display: none !important;
+  }
+  .记忆路线缩略 {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.04);
+  }
+  .记忆路线项.现行 {
+    border-color: rgba(225, 29, 72, 0.45);
+    background: rgba(225, 29, 72, 0.06);
+  }
+  .记忆路线项 {
+    cursor: pointer;
+  }
+  .生图方式项 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    min-height: 40px;
+    padding: 6px 10px 6px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid var(--边框);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    flex: 1 1 140px;
+    box-sizing: border-box;
+  }
+  .生图方式项:has(input:checked) {
+    border-color: rgba(225, 29, 72, 0.45);
+    background: rgba(225, 29, 72, 0.08);
+  }
+  .生图方式文案 {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.25;
+    min-width: 0;
+  }
+  .生图方式文案 b {
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .生图方式文案 small {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--淡色);
+  }
+  .清除本记忆钮 {
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
   .换背景行 {
     display: flex;
     align-items: center;
@@ -3967,6 +4874,50 @@
       rgba(255, 102, 143, 0.10);
   }
 
+  .对勾行 {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .成人开关 {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    padding: 0;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 8px;
+    border: 2px solid #111827;
+    background: #ffffff;
+  }
+
+  .成人开关 .对勾符 {
+    font-size: 16px;
+    font-weight: 900;
+    line-height: 1;
+    color: transparent;
+  }
+
+  .成人开关.已开启 {
+    border-color: #E11D48;
+    background: #fff1f2;
+  }
+
+  .成人开关.已开启 .对勾符 {
+    color: #E11D48;
+  }
+
+  #成人状态标签 {
+    display: none !important;
+  }
+
   .主按钮,
   .次按钮 {
     min-height: 43px;
@@ -4003,7 +4954,8 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 18px 22px 20px;
+    gap: 14px;
+    padding: 20px clamp(16px, 3vw, 28px) 28px;
     overflow: auto;
   }
 
@@ -4141,13 +5093,13 @@
 
   .状态提示 {
     display: flex;
-    flex: 1;
-    min-height: 320px;
+    flex: 0 0 auto;
+    min-height: min(28vh, 180px);
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 30px;
+    padding: 18px 16px;
     color: var(--淡色);
     text-align: center;
     border: 1px dashed var(--边框);
@@ -4198,22 +5150,29 @@
   }
 
   .画廊 {
-    max-height: 90vh;
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
     display: grid;
-    grid-template-columns:
-      repeat(auto-fit, minmax(260px, 1fr));
-    gap: 16px;
-    flex: 1;
+    grid-template-columns: 1fr;
+    gap: 22px;
+    flex: 0 1 auto;
     align-content: start;
+    min-height: 0;
+    width: 100%;
+    margin-top: 4px;
+    padding: 4px 0 8px;
   }
 
   .画廊 img,
   .画廊 iframe {
     display: block;
-    width: 100% !important;
+    width: min(100%, 920px) !important;
     max-width: 100%;
     height: auto !important;
+    max-height: none;
+    margin-inline: auto;
+    object-fit: contain;
+    object-position: center top;
     border: 0;
     border-radius: 17px;
     background: #FFFFFF;
@@ -4221,6 +5180,140 @@
       0 18px 60px
       rgba(0, 0, 0, 0.48);
   }
+
+  .生图卡片 {
+    position: relative;
+    margin: 0;
+    cursor: pointer;
+    border-radius: 17px;
+    overflow: visible;
+    background: #FFFFFF;
+    box-shadow:
+      0 18px 60px
+      rgba(0, 0, 0, 0.48);
+  }
+
+  .生图卡片 img {
+    display: block;
+  }
+
+  .生图卡片 .生图失败 {
+    margin: 10px 12px 0;
+    color: #6B7280;
+    font-size: 13px;
+  }
+
+  .生图卡片.加载中::before {
+    content: "";
+    display: block;
+    width: 28px;
+    height: 28px;
+    margin: 18px auto 8px;
+    border: 3px solid rgba(255,255,255,.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: 旋转 0.8s linear infinite;
+  }
+  .生图卡片 .生图进度 {
+    display: block;
+    padding: 8px 10px 14px;
+    color: rgba(255,255,255,.82);
+    font-size: 13px;
+    text-align: center;
+  }
+  .生图卡片 .生图重试 {
+    margin: 8px 12px 12px;
+  }
+
+  .图片预览层 {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: grid;
+    place-items: center;
+    padding: max(20px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px));
+    background: rgba(5, 7, 8, 0.92);
+    backdrop-filter: blur(16px);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .图片预览层[hidden] {
+    display: none;
+  }
+
+  .图片预览关闭 {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    z-index: 10060;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 30px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .图片预览框 {
+    margin: 0;
+    max-width: 96vw;
+    text-align: center;
+  }
+
+  .图片预览层 img {
+    max-width: min(96vw, 100%);
+    max-height: min(90vh, calc(100dvh - 72px));
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 12px;
+    background: #111;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    cursor: zoom-in;
+  }
+
+  .图片预览层.放大 {
+    place-items: start center;
+    align-content: start;
+    padding-top: max(64px, calc(env(safe-area-inset-top, 0px) + 52px));
+  }
+
+  .图片预览层.放大 .图片预览框 {
+    max-width: none;
+  }
+
+  .图片预览层.放大 img {
+    max-width: none;
+    max-height: none;
+    width: min(180vw, 2400px);
+    height: auto;
+    cursor: zoom-out;
+  }
+
+  .图片预览状态 {
+    margin: 12px 0 0;
+    color: #e5e7eb;
+    font-size: 14px;
+  }
+
+  .图片预览提示 {
+    margin: 8px 0 0;
+    color: rgba(229, 231, 235, 0.78);
+    font-size: 12px;
+  }
+
+  .图片预览重试 {
+    margin-top: 12px;
+  }
+
 
   .提示卡 {
     margin-top: 18px;
@@ -4316,141 +5409,54 @@
     text-decoration: none;
   }
 
-  .确认遮罩 {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    display: grid;
-    place-items: center;
-    padding: 20px;
-    background:
-      rgba(5, 7, 8, 0.95);
-    backdrop-filter: blur(18px);
+  .对勾行 input[type="checkbox"],
+  .对勾行 input[type="radio"] {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    transform: translateY(-50%);
+    opacity: 0;
+    z-index: 2;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .生图方式项.对勾行 input[type="radio"] {
+    left: 8px;
+    width: 28px;
+    height: 28px;
   }
 
-  .确认遮罩[hidden] {
-    display: none;
-  }
-
-  .确认卡 {
-    position: relative;
-    width: min(460px, 100%);
-    padding: 28px;
-    text-align: center;
-    border:
-      1px solid
-      rgba(255, 102, 143, 0.28);
-    border-radius: 20px;
-    background: #FFFFFF;
-    box-shadow:
-      0 30px 100px
-      rgba(0, 0, 0, 0.70);
-  }
-
-  .确认卡 h2 {
-    margin: 13px 0 9px;
-  }
-
-  .确认说明 {
-    color: var(--淡色);
-    font-size: 11px;
-    line-height: 1.8;
-  }
-
-  .年龄标志 {
-    display: inline-grid;
-    place-items: center;
-    width: 64px;
-    height: 64px;
-    color: var(--成人色);
-    font-size: 20px;
-    font-weight: 900;
-    border: 2px solid var(--成人色);
-    border-radius: 50%;
-  }
-
-  .规则列表 {
-    margin: 15px 0;
-    padding: 13px;
-    text-align: left;
-    border:
-      1px solid
-      rgba(255, 102, 143, 0.18);
-    border-radius: 11px;
-    background:
-      rgba(255, 102, 143, 0.05);
-  }
-
-  .规则列表 p {
-    margin: 5px 0;
-    color: #6B7280;
-    font-size: 10px;
-    line-height: 1.6;
-  }
-
-  .统一确认 {
-    display: flex;
+  .对勾盒 {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 9px;
-    margin: 16px 0;
-    cursor: pointer;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 6px;
+    border: 2px solid #111827;
+    background: #ffffff;
+    pointer-events: none;
   }
 
-  .统一确认 input {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--成人色);
+  .对勾盒 .对勾符 {
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 1;
+    color: transparent;
   }
 
-  .成人开启按钮,
-  .取消按钮 {
-    width: 100%;
-    min-height: 43px;
-    margin-top: 8px;
-    padding: 9px 14px;
-    cursor: pointer;
-    font-weight: 800;
-    border-radius: 11px;
+  .对勾行 input:checked + .对勾盒 {
+    border-color: #E11D48;
+    background: #fff1f2;
   }
 
-  .成人开启按钮 {
-    color: #FFFFFF;
-    border: 0;
-    background: var(--成人色);
-  }
-
-  .成人开启按钮:disabled {
-    cursor: not-allowed;
-    opacity: 0.40;
-  }
-
-  .取消按钮 {
-    color: var(--文字);
-    border: 1px solid var(--边框);
-    background:
-      rgba(255, 255, 255, 0.03);
-  }
-
-  .确认卡 small {
-    display: block;
-    margin-top: 13px;
-    color: #6B7280;
-    font-size: 9px;
-    line-height: 1.6;
-  }
-
-  .关闭按钮 {
-    position: absolute;
-    top: 11px;
-    right: 13px;
-    width: 32px;
-    height: 32px;
-    color: var(--淡色);
-    font-size: 21px;
-    cursor: pointer;
-    border: 0;
-    background: transparent;
+  .对勾行 input:checked + .对勾盒 .对勾符 {
+    color: #E11D48;
   }
 
   .紧凑模式 .控制栏 {
@@ -4569,7 +5575,8 @@
     }
 
     .结果区 {
-      padding: 16px 12px 24px;
+      gap: 12px;
+      padding: 14px 14px 28px;
     }
 
     .结果标题 {
@@ -4587,19 +5594,30 @@
     }
 
     .状态提示 {
-      min-height: 180px;
-      padding: 20px 14px;
+      min-height: min(22vh, 140px);
+      padding: 14px 12px;
     }
 
     .画廊 {
-    max-height: 90vh;
-    overflow: auto;
+      max-height: none;
+      overflow: visible;
       grid-template-columns: 1fr;
+      gap: 18px;
+      min-height: 0;
+      flex: 0 1 auto;
+      width: 100%;
+      padding: 2px 0 10px;
     }
 
     .画廊 img,
     .画廊 iframe {
       border-radius: 12px;
+      min-height: 0;
+      max-height: none;
+      height: auto !important;
+      width: 100% !important;
+      object-fit: contain;
+      object-position: center top;
     }
 
     .画面说明 {
@@ -4652,22 +5670,17 @@
       padding: 6px 4px;
     }
 
-    .确认卡 {
-      max-height: 86vh;
-      max-height: 86dvh;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
   }
 
-  /* Desktop/web: gallery dominates under 「角色画廊」; even columns */
+  /* Desktop/web: gallery stacks downward; full images, no fixed-height crop */
   @media (min-width: 901px) {
     .工作区 {
       grid-template-columns: minmax(240px, 22vw) minmax(0, 1fr);
     }
 
     .结果区 {
-      padding: 18px 24px 24px;
+      gap: 16px;
+      padding: 22px clamp(20px, 3vw, 32px) 32px;
     }
 
     .状态提示 {
@@ -4676,21 +5689,43 @@
     }
 
     .状态提示[aria-busy="true"] {
-      min-height: 28vh;
+      min-height: min(22vh, 160px);
     }
 
     .画廊 {
-      min-height: 64vh;
-      gap: 22px;
-      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
-      flex: 1 1 auto;
+      min-height: 0;
+      gap: 24px;
+      grid-template-columns: 1fr;
+      flex: 0 1 auto;
+      max-height: none;
+      overflow: visible;
+      width: 100%;
+      padding: 6px 0 12px;
     }
 
     .画廊 img,
     .画廊 iframe {
-      min-height: 520px;
+      min-height: 0;
+      max-height: none;
+      width: 100% !important;
+      height: auto !important;
       object-fit: contain;
+      object-position: center top;
       background: #FFFFFF;
+    }
+
+    .生图卡片 {
+      min-height: 0;
+      aspect-ratio: auto;
+      overflow: visible;
+    }
+
+    .生图卡片 img {
+      max-height: none;
+      height: auto !important;
+      width: 100% !important;
+      object-fit: contain;
+      object-position: center top;
     }
 
     .对话列表 {

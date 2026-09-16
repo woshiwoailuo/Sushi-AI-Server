@@ -1,5 +1,6 @@
 'use strict';
 
+const { fetchLimitedRetry } = require('./http-client');
 const { randomUUID } = require('node:crypto');
 
 class ImageError extends Error {
@@ -29,11 +30,117 @@ function imageSource(value) {
   return 'data:image/' + type + ';base64,' + bytes.toString('base64');
 }
 
+const HORDE_REAL_MODELS = [
+  'Realistic Vision',
+  'majicMIX realistic',
+  'AbsoluteReality',
+  'Photon',
+  'ICBINP - I Can\'t Believe It\'s Not Photography',
+  'ICBINP XL',
+  'Edge Of Realism',
+];
+const HORDE_IMG2IMG_REAL_MODELS = HORDE_REAL_MODELS.filter((name) => !/flux|z-image/i.test(name));
+const HORDE_ANIME_MODELS = [
+  'WAI-NSFW-illustrious-SDXL',
+  'Counterfeit',
+  'Anima-Turbo-v1.1',
+  'Anything v5',
+  'Flat-2D Animerge',
+  'Rev Animated',
+];
+
+function preferNsfwModels(models, isAnime, aggressive) {
+  const preferred = isAnime
+    ? ['WAI-NSFW-illustrious-SDXL', 'Counterfeit', 'Anima-Turbo-v1.1']
+    : ['Realistic Vision', 'majicMIX realistic', 'AbsoluteReality', 'Photon'];
+  const rest = models.slice();
+  const head = [];
+  for (const name of preferred) {
+    const idx = rest.indexOf(name);
+    if (idx >= 0) {
+      head.push(name);
+      rest.splice(idx, 1);
+    }
+  }
+  if (aggressive && head.length) return head.concat(rest.slice(0, 2));
+  return head.concat(rest);
+}
+const REAL_NEGATIVE = 'anime, manga, cartoon, illustration, cel shading, 2d, lineart, chibi, drawing, painting, cgi, render, lowres, blurry, bad anatomy, extra limbs, child, minor, underage, watermark, text, pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
+
+function stripArtStyleWords(text) {
+  return String(text || '')
+    .replace(/\b(anime|manga|cartoon|chibi|illustration|cel[\s-]?shading|pixar|disney|comic(?:\s|-)?style|2d\s*art|visual novel)\b/gi, ' ')
+    .replace(/二次元|动漫风格|动漫|卡通|漫画|插画|手绘|赛璐璐|视觉小说/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[，,]{2,}/g, ',')
+    .trim();
+}
+
+function ensureNoTextOnImage(prompt) {
+  let text = String(prompt || '').replace(/\s+/g, ' ').trim();
+  if (!text) return text;
+  if (!/no text in image|no watermark|no pinyin|no romanization|no letters or characters on image/i.test(text)) {
+    text += ', no text in image, no watermark, no pinyin, no romanization, no letters or characters on image';
+  }
+  return text.replace(/\s{2,}/g, ' ').trim();
+}
+
+function sanitizeRealPrompt(prompt, options = {}) {
+  const enrich = !(options && options.enrich === false);
+  let text = stripArtStyleWords(String(prompt || '').replace(/\s+/g, ' ').trim());
+  if (!text) text = enrich ? 'a fictional adult, natural light, DSLR' : 'a fictional adult';
+  if (!enrich) {
+    // 未智能修饰：不堆写实修饰词库，仅清掉动漫词并禁止图内文字/拼音
+    return ensureNoTextOnImage(text);
+  }
+  const bare = /nude|naked|nudity|unclothed|topless|bottomless|无衣|裸体|裸身|全裸|裸露|不穿|未穿衣/i.test(text);
+  if (!/photoreal|RAW photo|DSLR|cinematic still|real human|写实摄影|写实照片/i.test(text)) {
+    const lead = bare
+      ? 'photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores, '
+      : 'photorealistic RAW photo, shot on DSLR, 35mm, natural skin pores, realistic fabric texture, ';
+    text = lead + text;
+  } else if (!/^\s*photoreal/i.test(text)) {
+    text = 'photorealistic photograph of ' + text;
+  }
+  if (bare) {
+    text = text.replace(/,?\s*realistic fabric texture/gi, '').replace(/\s{2,}/g, ' ').trim();
+  }
+  if (!/not anime|no anime|非卡通|非动漫|NOT anime/i.test(text)) {
+    text += ', not anime, not manga, not cartoon, not illustration, not 2d art, not cel shading';
+  }
+  return ensureNoTextOnImage(text.replace(/\s{2,}/g, ' ').trim());
+}
+
+/** Keep adult/NSFW directive when truncating long prompts (do not cut trailing adult instructions). */
+function clipPromptPreserveAdult(prompt, maxLen) {
+  const text = String(prompt || '');
+  if (text.length <= maxLen) return text;
+  const marker = 'adult mode enabled';
+  const idx = text.toLowerCase().lastIndexOf(marker);
+  if (idx < 0) return text.slice(0, maxLen);
+  const tail = text.slice(idx).trim();
+  if (tail.length >= maxLen) return tail.slice(0, maxLen);
+  const headBudget = maxLen - tail.length - 1;
+  return text.slice(0, Math.max(0, headBudget)).trim() + ' ' + tail;
+}
+
+function hordeModelsFor(input = {}, model = '') {
+  const style = String((input && input.style) || '').trim().toLowerCase();
+  const hasSource = !!(input && input.sourceImage);
+  if (style === 'anime' || style === 'horde-anime' || style === 'auto-anime') return HORDE_ANIME_MODELS.slice();
+  if (style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance') {
+    return hasSource ? HORDE_IMG2IMG_REAL_MODELS.slice() : HORDE_REAL_MODELS.slice();
+  }
+  // Unstyled img2img used to omit models → Horde picked WAI-NSFW-illustrious (anime). Always pin photoreal.
+  if (hasSource) return HORDE_IMG2IMG_REAL_MODELS.slice();
+  if (model) return [model];
+  return null;
+}
+
 function generationPayload(input = {}, model = '') {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ImageError('生图参数格式无效', 400, 'BAD_INPUT');
-  const prompt = String(input.prompt || '').trim();
-  if (!prompt) throw new ImageError('请先填写画面描述', 400, 'EMPTY_PROMPT');
-  if (prompt.length > 2000) throw new ImageError('画面描述请控制在 2000 字以内', 400, 'LONG_PROMPT');
+  const promptRaw = String(input.prompt || '').trim();
+  if (!promptRaw) throw new ImageError('请先填写画面描述', 400, 'EMPTY_PROMPT');
   const dimension = (value) => {
     const number = Number(value === undefined ? 512 : value);
     if (!Number.isFinite(number) || number < 256 || number > 1024 || number % 64) {
@@ -41,22 +148,35 @@ function generationPayload(input = {}, model = '') {
     }
     return number;
   };
-  const negative = String(input.negativePrompt || '').trim().slice(0, 1000);
+  const negativeRaw = String(input.negativePrompt || '').trim().slice(0, 1000);
+  const style = String((input && input.style) || '').trim().toLowerCase();
+  const isReal = style === 'real' || style === 'photoreal' || style === 'horde-real' || style === 'auto-real' || style === 'perchance';
+  const enrich = !(input && (input.enrich === false || input.enrichPrompt === false));
+  let prompt = isReal ? sanitizeRealPrompt(promptRaw, { enrich }) : promptRaw;
+  if (prompt.length > 2000) prompt = clipPromptPreserveAdult(prompt, 2000);
+  let negative = negativeRaw;
+  if (isReal) {
+    negative = negative ? (negative + ', ' + REAL_NEGATIVE) : REAL_NEGATIVE;
+    if (!/pinyin|romanization|letters on image/i.test(negative)) {
+      negative += ', pinyin, romanization, letters on image, chinese characters on image, subtitle, caption, logo, signature';
+    }
+  }
   const cfgScale = Number(input.cfgScale === undefined ? 7 : input.cfgScale);
   if (!Number.isFinite(cfgScale) || cfgScale < 1 || cfgScale > 20) throw new ImageError('引导强度需在 1 到 20 之间', 400, 'BAD_CFG');
   const params = {
     n: 1,
     width: dimension(input.width),
     height: dimension(input.height),
-    steps: 20,
+    steps: 16,
     cfg_scale: cfgScale,
   };
   if (input.seed !== undefined && input.seed !== null && input.seed !== '') {
     if (!/^\d{1,10}$/.test(String(input.seed))) throw new ImageError('随机种子格式无效', 400, 'BAD_SEED');
     params.seed = String(input.seed);
   }
-  const payload = { prompt: prompt + (negative ? ' ### ' + negative : ''), params, r2: true };
-  if (model) payload.models = [model];
+  const payload = { prompt: prompt + (negative ? ' ### ' + negative : ''), params, r2: true, nsfw: true, censor_nsfw: false, slow_workers: true };
+  const models = hordeModelsFor(input, model);
+  if (models && models.length) payload.models = models;
   if (input.sourceImage) {
     const source = String(input.sourceImage);
     if (!/^data:image\/(?:png|jpe?g|webp);base64,/i.test(source) || source.length > 10 * 1024 * 1024) {
@@ -75,7 +195,12 @@ function generationPayload(input = {}, model = '') {
 }
 
 function createImageService(options = {}) {
-  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const userFetch = options.fetchImpl || ((url, opts) => globalThis.fetch(url, opts));
+  const fetchImpl = (url, opts) => fetchLimitedRetry(url, opts, {
+    retries: (opts && String(opts.method || 'GET').toUpperCase() === 'GET') ? 2 : 1,
+    baseDelayMs: 400,
+    fetchImpl: userFetch,
+  });
   const base = options.baseUrl || 'https://aihorde.net/api/v2';
   const apiKey = options.apiKey || '0000000000';
   const now = options.now || Date.now;
@@ -84,8 +209,24 @@ function createImageService(options = {}) {
   const reserve = options.reserve || (() => null);
   const refund = options.refund || (() => {});
   const commit = options.commit || (() => {});
+  const sleep = options.sleep || function (ms, signal) {
+    return new Promise(function (resolve, reject) {
+      if (signal && signal.aborted) {
+        reject(new ImageError('已取消生成', 409, 'CANCELLED'));
+        return;
+      }
+      const timer = setTimeout(resolve, ms);
+      if (signal) {
+        signal.addEventListener('abort', function () {
+          clearTimeout(timer);
+          reject(new ImageError('已取消生成', 409, 'CANCELLED'));
+        }, { once: true });
+      }
+    });
+  };
   const jobs = new Map();
   const active = new Map();
+  let lastUpstreamId = '';
   const terminal = (job) => ['done', 'failed', 'cancelled'].includes(job.state);
 
   async function request(path, method = 'GET', body, signal) {
@@ -102,15 +243,20 @@ function createImageService(options = {}) {
       let data;
       try { data = JSON.parse(text); } catch { throw new ImageError('生图服务返回了非 JSON 响应，请稍后重试'); }
       if (!response.ok) {
+        const rc = data && data.rc;
+        const detail = String((data && data.message) || '');
         const messages = {
           400: '生图参数未被接受，请尝试较小尺寸或更简短的描述',
           401: '生图服务的密钥无效，请联系管理员检查配置',
-          403: '当前任务未获生图服务许可，请尝试 512×512 或稍后重试',
+          403: rc === 'KudosUpfront' || /kudos/i.test(detail)
+            ? '免费写实通道当前需要积分（Flux 等模型），请稍后重试'
+            : '当前任务未被生图节点接受，请稍后重试',
           404: '生图任务已过期，请重新生成',
           429: '免费生图服务繁忙，请稍后重试',
         };
         const error = new ImageError(messages[response.status] || '生图服务暂时不可用，请稍后重试', response.status === 429 ? 429 : 502, 'UPSTREAM_' + response.status);
         error.upstreamStatus = response.status;
+        error.upstreamRc = rc;
         throw error;
       }
       return data;
@@ -157,9 +303,21 @@ function createImageService(options = {}) {
     try { await request('/generate/status/' + encodeURIComponent(job.upstreamId), 'DELETE'); } catch { /* local cancellation still completes */ }
   }
 
+  function isRetryableSubmit(error) {
+    if (!error) return false;
+    if (error.code === 'CANCELLED') return false;
+    const upstream = error.upstreamStatus || error.status;
+    return upstream === 429 || upstream === 409 || upstream === 503 || error.code === 'UPSTREAM_UNREACHABLE';
+  }
+
   async function create(userId, input) {
     const payload = generationPayload(input, options.model || '');
-    if (active.has(userId)) throw new ImageError('已有图片正在生成，请等待完成或先取消', 409, 'ALREADY_RUNNING');
+    if (active.has(userId)) {
+      const prevId = active.get(userId);
+      try { await cancel(userId, prevId); } catch { /* previous job may already be gone */ }
+      // Horde anonymous keys keep the old slot for a beat after DELETE.
+      try { await sleep(500); } catch { /* ignore */ }
+    }
     if (jobs.size >= 100) {
       for (const [id, job] of jobs) if (terminal(job)) jobs.delete(id);
       if (jobs.size >= 100) throw new ImageError('当前生成任务较多，请稍后重试', 503, 'SERVER_BUSY');
@@ -174,23 +332,53 @@ function createImageService(options = {}) {
       id: randomUUID(), userId, state: 'submitting', reservation,
       expiresAt: now() + maxWaitMs, queuePosition: null, waitTimeSeconds: null,
       controller: new AbortController(), lastPoll: -Infinity,
+      payload, censoredRetries: 0,
     };
     jobs.set(job.id, job);
     active.set(userId, job.id);
-    try {
-      const data = await request('/generate/async', 'POST', payload, job.controller.signal);
-      if (typeof data.id !== 'string' || !data.id) throw new ImageError('生图服务没有返回任务编号');
-      job.upstreamId = data.id;
-      if (terminal(job)) {
-        await removeUpstream(job);
-        return snapshot(job);
+    const submitDelays = [0, 700, 1400];
+    let lastError;
+    for (let attempt = 0; attempt < submitDelays.length; attempt += 1) {
+      if (submitDelays[attempt]) {
+        try { await sleep(submitDelays[attempt], job.controller.signal); } catch (error) {
+          if (!terminal(job)) await finish(job, 'failed', error.message);
+          throw error;
+        }
       }
-      job.state = 'queued';
-      return snapshot(job);
-    } catch (error) {
-      if (!terminal(job)) await finish(job, 'failed', error.message);
-      throw error;
+      try {
+        const data = await request('/generate/async', 'POST', payload, job.controller.signal);
+        if (typeof data.id !== 'string' || !data.id) throw new ImageError('生图服务没有返回任务编号');
+        job.upstreamId = data.id;
+        lastUpstreamId = data.id;
+        if (terminal(job)) {
+          await removeUpstream(job);
+          return snapshot(job);
+        }
+        job.state = 'queued';
+        return snapshot(job);
+      } catch (error) {
+        lastError = error;
+        const kudosDenied = error && (error.upstreamStatus === 403 || error.upstreamRc === 'KudosUpfront');
+        if (kudosDenied && attempt < submitDelays.length - 1) {
+          payload.models = HORDE_REAL_MODELS.slice();
+          if (payload.params) {
+            payload.params.width = Math.min(Number(payload.params.width) || 512, 512);
+            payload.params.height = Math.min(Number(payload.params.height) || 512, 512);
+            payload.params.steps = Math.min(Number(payload.params.steps) || 16, 16);
+          }
+          continue;
+        }
+        if (terminal(job) || !isRetryableSubmit(error) || attempt === submitDelays.length - 1) {
+          if (!terminal(job)) await finish(job, 'failed', error.message);
+          throw error;
+        }
+        if (lastUpstreamId) {
+          try { await request('/generate/status/' + encodeURIComponent(lastUpstreamId), 'DELETE'); } catch { /* slot may already be free */ }
+        }
+      }
     }
+    if (!terminal(job)) await finish(job, 'failed', (lastError && lastError.message) || '生图提交失败');
+    throw lastError || new ImageError('生图提交失败');
   }
 
   async function refresh(job) {
@@ -206,8 +394,41 @@ function createImageService(options = {}) {
       if (check.done) {
         const result = await request('/generate/status/' + encodeURIComponent(job.upstreamId), 'GET', undefined, job.controller.signal);
         if (terminal(job)) return snapshot(job);
-        const image = Array.isArray(result.generations) && result.generations.find((item) => item && item.img && !item.censored);
-        if (!image) throw new ImageError('任务结束但没有可显示的图片，请修改描述后重试');
+        const gens = Array.isArray(result.generations) ? result.generations : [];
+        const image = gens.find((item) => item && item.img && !item.censored);
+        const hadCensored = gens.some((item) => item && item.censored);
+        if (!image) {
+          const maxCensoredRetries = 3;
+          if (hadCensored && job.payload && job.censoredRetries < maxCensoredRetries) {
+            job.censoredRetries += 1;
+            const retryPayload = JSON.parse(JSON.stringify(job.payload));
+            retryPayload.nsfw = true;
+            retryPayload.censor_nsfw = false;
+            const isAnime = Array.isArray(retryPayload.models)
+              && retryPayload.models.some((name) => /wai-nsfw|counterfeit|anima|anything|animerge|rev animated/i.test(String(name)));
+            if (Array.isArray(retryPayload.models) && retryPayload.models.length) {
+              retryPayload.models = preferNsfwModels(retryPayload.models, isAnime, true);
+            }
+            const data = await request('/generate/async', 'POST', retryPayload, job.controller.signal);
+            if (typeof data.id !== 'string' || !data.id) {
+              throw new ImageError('成人内容被生图节点审查，请换写实/动漫通道或稍后再试', 502, 'HORDE_CENSORED');
+            }
+            job.upstreamId = data.id;
+            lastUpstreamId = data.id;
+            job.state = 'queued';
+            job.queuePosition = null;
+            job.waitTimeSeconds = null;
+            job.lastPoll = now();
+            return snapshot(job);
+          }
+          throw new ImageError(
+            hadCensored
+              ? '成人内容被生图节点审查，请换写实/动漫通道或稍后再试'
+              : '任务结束但没有可显示的图片，请修改描述后重试',
+            502,
+            hadCensored ? 'HORDE_CENSORED' : 'NO_IMAGE'
+          );
+        }
         job.image = { url: imageSource(image.img), seed: String(image.seed ?? ''), model: String(image.model || '') };
         await finish(job, 'done');
       }
@@ -228,7 +449,7 @@ function createImageService(options = {}) {
       job.controller.abort();
       void removeUpstream(job);
     }
-    if (terminal(job) || job.state === 'submitting' || now() - job.lastPoll < 1500) return snapshot(job);
+    if (terminal(job) || job.state === 'submitting' || now() - job.lastPoll < 800) return snapshot(job);
     if (!job.polling) job.polling = refresh(job).finally(() => { job.polling = null; });
     return job.polling;
   }
@@ -260,4 +481,4 @@ function createImageService(options = {}) {
   return { create, get, cancel, current, sweep };
 }
 
-module.exports = { ImageError, imageSource, generationPayload, createImageService };
+module.exports = { ImageError, imageSource, generationPayload, createImageService, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, hordeModelsFor, sanitizeRealPrompt, ensureNoTextOnImage, preferNsfwModels, clipPromptPreserveAdult };

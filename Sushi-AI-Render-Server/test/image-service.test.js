@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createImageService, imageSource, generationPayload } = require('../lib/image-service');
+const { createImageService, imageSource, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS, HORDE_IMG2IMG_REAL_MODELS, sanitizeRealPrompt, clipPromptPreserveAdult } = require('../lib/image-service');
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6JkAAAAASUVORK5CYII=';
 const response = (data, status = 200) => new Response(JSON.stringify(data), { status });
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
@@ -16,7 +16,8 @@ function fixture(handler, extra = {}) {
     reserve: uid => { reserved.push(uid); return reserved.length; },
     refund: (id, uid) => refunded.push([id, uid]),
     commit: (id, uid) => committed.push([id, uid]),
-    ...extra
+    ...extra,
+    sleep: extra.sleep || (async () => {}),
   });
   return { service, calls, reserved, refunded, committed, advance: ms => { time += ms; } };
 }
@@ -33,6 +34,79 @@ test('validates input, preserves the prompt and sends reference images and guida
   for (const input of [null, [], {}, { prompt: 'x', width: 513 }, { prompt: 'x', width: 0 }, { prompt: 'x', cfgScale: 40 }, { prompt: 'x', seed: '-1' }, { prompt: 'x', sourceImage: 'https://example.com/photo.jpg' }]) {
     assert.throws(() => generationPayload(input), e => e.status === 400);
   }
+});
+
+
+test('sanitizeRealPrompt keeps nude tokens and skips fabric bias; clip preserves adult directive', () => {
+  const nude = sanitizeRealPrompt('nude fictional adult woman, explicit adult scene by a window');
+  assert.match(nude, /nude fictional adult woman/i);
+  assert.doesNotMatch(nude, /realistic fabric texture/i);
+  const clothed = sanitizeRealPrompt('a fictional adult in a red coat by a window');
+  assert.match(clothed, /realistic fabric texture/i);
+  const longHead = 'x'.repeat(1900);
+  const adult = 'adult mode enabled; NSFW allowed; do not add clothes if described as nude; fictional consenting adults 18+';
+  const clipped = clipPromptPreserveAdult(longHead + ' ' + adult, 2000);
+  assert.ok(clipped.length <= 2000);
+  assert.match(clipped, /adult mode enabled/i);
+  assert.match(clipped, /do not add clothes if described as nude/i);
+  const payload = generationPayload({
+    prompt: 'nude fictional adult woman standing indoors, ' + adult,
+    style: 'real',
+    width: 512,
+    height: 512,
+  });
+  assert.match(payload.prompt, /nude fictional adult woman/i);
+  assert.match(payload.prompt, /adult mode enabled/i);
+});
+
+test('style pins Horde models for 写实 vs 动漫 without changing prompt text', () => {
+  const real = generationPayload({ prompt: 'A cat by a window', style: 'real', width: 512, height: 512 });
+  const anime = generationPayload({ prompt: 'A cat by a window', style: 'anime', width: 512, height: 512 });
+  const plain = generationPayload({ prompt: 'A cat by a window', width: 512, height: 512 });
+  assert.deepEqual(real.models, HORDE_REAL_MODELS);
+  assert.deepEqual(anime.models, HORDE_ANIME_MODELS);
+  assert.equal(plain.models, undefined);
+  assert.match(real.prompt, /A cat by a window/);
+  assert.match(real.prompt, /photorealistic RAW photo/i);
+  assert.match(real.prompt, /anime, manga, cartoon/);
+  assert.equal(anime.prompt, 'A cat by a window');
+  assert.equal(real.slow_workers, true);
+  assert.equal(real.nsfw, true);
+  assert.equal(anime.censor_nsfw, false);
+  assert.equal(HORDE_REAL_MODELS.includes('Z-Image-Turbo'), false);
+  assert.ok(HORDE_REAL_MODELS.includes('AbsoluteReality'));
+  assert.equal(HORDE_REAL_MODELS.includes('Flux.1-Schnell fp8 (Compact)'), false);
+  assert.equal(HORDE_REAL_MODELS.some((name) => /flux|z-image/i.test(name)), false);
+  assert.equal(HORDE_REAL_MODELS.includes('AlbedoBase XL (SDXL)'), false);
+  assert.equal(HORDE_REAL_MODELS.includes('AlbedoBase XL 3.1'), false);
+  assert.equal(HORDE_REAL_MODELS.some((name) => /deliberate|anima|anything|counterfeit|illustrious|wai-nsfw|albedobase/i.test(name)), false);
+  assert.ok(HORDE_ANIME_MODELS.includes('WAI-NSFW-illustrious-SDXL'));
+  const forced = generationPayload({ prompt: 'anime style girl with red hair', style: 'real', width: 512, height: 512 });
+  assert.match(forced.prompt, /photorealistic RAW photo/i);
+  assert.doesNotMatch(forced.prompt.split(' ### ')[0], /\banime style\b/i);
+  assert.match(forced.prompt, /not anime, not manga, not cartoon/);
+  const img2img = generationPayload({
+    prompt: 'A cat by a window',
+    style: 'real',
+    width: 512,
+    height: 512,
+    sourceImage: 'data:image/png;base64,' + PNG,
+    strength: 0.3,
+  });
+  assert.deepEqual(img2img.models, HORDE_IMG2IMG_REAL_MODELS);
+  assert.equal(HORDE_IMG2IMG_REAL_MODELS.some((name) => /flux|z-image/i.test(name)), false);
+  assert.ok(HORDE_IMG2IMG_REAL_MODELS.includes('AbsoluteReality'));
+  const unstyledImg2img = generationPayload({
+    prompt: 'A cat by a window',
+    width: 512,
+    height: 512,
+    sourceImage: 'data:image/png;base64,' + PNG,
+    strength: 0.3,
+  });
+  assert.deepEqual(unstyledImg2img.models, HORDE_IMG2IMG_REAL_MODELS);
+  const perch = generationPayload({ prompt: 'A cat by a window', style: 'perchance', width: 512, height: 512 });
+  assert.deepEqual(perch.models, HORDE_REAL_MODELS);
+  assert.match(perch.prompt, /photorealistic RAW photo/i);
 });
 
 test('accepts HTTPS, data URLs and raw base64; rejects HTML and unsafe URL schemes', () => {
@@ -64,16 +138,60 @@ test('polls check first, fetches the image only on done, and commits quota once'
   assert.deepEqual(f.calls.map(c => new URL(c.url).pathname), ['/api/v2/generate/async', '/api/v2/generate/check/remote-1', '/api/v2/generate/check/remote-1', '/api/v2/generate/status/remote-1']);
 });
 
-test('prevents duplicate submissions and hides jobs from other users', async () => {
-  const f = fixture(() => response({ id: 'remote' }, 202));
+test('new submission auto-cancels a previous in-flight job', async () => {
+  let posts = 0;
+  const f = fixture((url, options) => {
+    if (url.endsWith('/async') && options.method === 'POST') return response({ id: 'remote-' + (++posts) }, 202);
+    if (options.method === 'DELETE') return response({});
+    return response({ done: false, is_possible: true, processing: 0 });
+  });
   const job = await f.service.create(1, { prompt: 'A cat' });
-  await assert.rejects(f.service.create(1, { prompt: 'A dog' }), e => e.status === 409);
-  await assert.rejects(f.service.get(2, job.id), e => e.status === 404);
-  await assert.rejects(f.service.cancel(2, job.id), e => e.status === 404);
-  assert.equal(f.calls.length, 1);
+  const next = await f.service.create(1, { prompt: 'A dog' });
+  assert.equal((await f.service.get(1, job.id)).state, 'cancelled');
+  assert.equal(next.state, 'queued');
+  assert.equal(f.service.current(1).id, next.id);
+  await assert.rejects(f.service.get(2, next.id), e => e.status === 404);
+  await assert.rejects(f.service.cancel(2, next.id), e => e.status === 404);
+  assert.equal(f.calls.filter(c => c.method === 'POST').length, 2);
+  await f.service.cancel(1, next.id);
+});
+
+test('create retries Horde 429 instead of failing the user immediately', async () => {
+  let posts = 0;
+  const f = fixture((url, options) => {
+    if (url.endsWith('/async') && options.method === 'POST') {
+      posts += 1;
+      if (posts === 1) return response({ message: 'Already has a waiting request' }, 429);
+      return response({ id: 'remote-ok' }, 202);
+    }
+    if (options.method === 'DELETE') return response({});
+    return response({ done: false, is_possible: true, processing: 0 });
+  });
+  const job = await f.service.create(1, { prompt: 'A cat' });
+  assert.equal(job.state, 'queued');
+  assert.equal(posts, 2);
   await f.service.cancel(1, job.id);
+});
+
+test('Horde 403 kudos retries without Flux and clamps to 512', async () => {
+  let posts = 0;
+  const f = fixture((url, options) => {
+    if (url.endsWith('/async') && options.method === 'POST') {
+      posts += 1;
+      const body = JSON.parse(options.body);
+      if (posts === 1) return response({ message: 'This request requires 7.13 kudos', rc: 'KudosUpfront' }, 403);
+      assert.deepEqual(body.models, HORDE_REAL_MODELS);
+      assert.equal(body.params.width, 512);
+      assert.equal(body.params.height, 512);
+      return response({ id: 'remote-ok' }, 202);
+    }
+    if (options.method === 'DELETE') return response({});
+    return response({ done: false, is_possible: true, processing: 0 });
+  });
+  const job = await f.service.create(1, { prompt: 'A cat', style: 'real', width: 768, height: 768 });
+  assert.equal(job.state, 'queued');
+  assert.equal(posts, 2);
   await f.service.cancel(1, job.id);
-  assert.deepEqual(f.refunded, [[1, 1]]);
 });
 
 test('cancellation during submission deletes a late upstream task and refunds once', async () => {
@@ -104,22 +222,68 @@ test('concurrent polls share one request and cancellation ignores late results',
 
 test('failed submissions, faulted tasks, censored/missing images and expiry refund quota', async () => {
   for (const mode of ['unreachable', 'faulted', 'empty', 'censored', 'expired']) {
+    let asyncCount = 0;
     const f = fixture((url) => {
       if (mode === 'unreachable') throw new Error('network offline');
-      if (url.endsWith('/async')) return response({ id: 'remote' }, 202);
+      if (url.endsWith('/async')) {
+        asyncCount += 1;
+        return response({ id: 'remote-' + asyncCount }, 202);
+      }
       if (url.includes('/check/')) return response({ done: mode !== 'faulted', faulted: mode === 'faulted' });
       return response({ generations: mode === 'censored' ? [{ img: PNG, censored: true }] : [] });
     });
     if (mode === 'unreachable') await assert.rejects(f.service.create(1, { prompt: 'A cat' }), e => e.code === 'UPSTREAM_UNREACHABLE');
     else {
-      const job = await f.service.create(1, { prompt: 'A cat' });
+      const job = await f.service.create(1, { prompt: 'A cat', style: 'anime' });
       if (mode === 'expired') f.advance(600001);
-      assert.equal((await f.service.get(1, job.id)).state, 'failed');
+      let snap = await f.service.get(1, job.id);
+      // Censored path retries up to 3 times (each get may resubmit then return queued).
+      for (let i = 0; i < 8 && snap.state !== 'failed' && snap.state !== 'done'; i += 1) {
+        f.advance(900);
+        snap = await f.service.get(1, job.id);
+      }
+      assert.equal(snap.state, 'failed', mode + ' state=' + snap.state + ' err=' + snap.error);
+      if (mode === 'censored') {
+        assert.match(String(snap.error || ''), /成人内容被生图节点审查，请换写实\/动漫通道或稍后再试/);
+        assert.ok(asyncCount >= 4, 'initial + 3 censored retries, got ' + asyncCount);
+      }
       await f.service.get(1, job.id);
     }
     assert.equal(f.refunded.length, 1, mode);
     assert.equal(f.service.current(1), null, mode);
   }
+});
+
+test('censored Horde result retries then succeeds with clearer adult path', async () => {
+  let asyncCount = 0;
+  const f = fixture((url) => {
+    if (url.endsWith('/async')) {
+      asyncCount += 1;
+      return response({ id: 'remote-' + asyncCount }, 202);
+    }
+    if (url.includes('/check/')) return response({ done: true, faulted: false, is_possible: true });
+    return response({
+      generations: asyncCount <= 2
+        ? [{ img: PNG, censored: true }]
+        : [{ img: PNG, censored: false, seed: '7', model: 'WAI-NSFW-illustrious-SDXL' }],
+    });
+  });
+  const job = await f.service.create(1, { prompt: 'A cat', style: 'anime', width: 512, height: 512 });
+  let snap = await f.service.get(1, job.id);
+  for (let i = 0; i < 8 && snap.state !== 'done' && snap.state !== 'failed'; i += 1) {
+    f.advance(900);
+    snap = await f.service.get(1, job.id);
+  }
+  assert.equal(snap.state, 'done', snap.error);
+  assert.ok(snap.image && snap.image.url);
+  assert.ok(asyncCount >= 3, 'got asyncCount=' + asyncCount);
+  const posts = f.calls.filter((c) => c.method === 'POST');
+  assert.ok(posts.length >= 3);
+  const retryBody = JSON.parse(posts[1].body);
+  assert.equal(retryBody.nsfw, true);
+  assert.equal(retryBody.censor_nsfw, false);
+  assert.equal(retryBody.models[0], 'WAI-NSFW-illustrious-SDXL');
+  assert.deepEqual(f.committed, [[1, 1]]);
 });
 
 test('transient poll errors can be retried without resubmission or an early refund', async () => {
@@ -131,4 +295,44 @@ test('transient poll errors can be retried without resubmission or an early refu
   assert.equal(f.calls.filter(c => c.method === 'POST').length, 1);
   assert.deepEqual(f.refunded, []);
   await f.service.cancel(1, job.id);
+});
+
+test('sanitizeRealPrompt enrich:false skips photoreal stack but bans on-image text/pinyin', () => {
+  const plain = sanitizeRealPrompt('a fictional adult standing in a park', { enrich: false });
+  assert.match(plain, /a fictional adult standing in a park/i);
+  assert.doesNotMatch(plain, /photorealistic RAW photo|natural skin pores|cinematic still/i);
+  assert.match(plain, /no text in image|no pinyin|no watermark/i);
+  const enriched = sanitizeRealPrompt('a fictional adult standing in a park', { enrich: true });
+  assert.match(enriched, /photorealistic RAW photo/i);
+  assert.match(enriched, /no text in image|no pinyin/i);
+});
+
+test('generationPayload enrich:false keeps translate-only prompt and expands text/pinyin negatives', () => {
+  const built = generationPayload({
+    prompt: 'a fictional adult by a window',
+    width: 512,
+    height: 768,
+    style: 'real',
+    enrich: false,
+  });
+  assert.match(built.prompt, /a fictional adult by a window/i);
+  assert.doesNotMatch(built.prompt.split(' ### ')[0], /photorealistic RAW photo/i);
+  assert.match(built.prompt, /###/);
+  assert.match(built.prompt, /pinyin|romanization|watermark|text/i);
+});
+
+test('enrich false skips photoreal pack (smart-mod off path)', () => {
+  const plain = sanitizeRealPrompt('a fictional adult in a red coat by a window', { enrich: false });
+  assert.match(plain, /red coat|fictional adult/i);
+  assert.doesNotMatch(plain, /photorealistic RAW photo|natural skin pores|realistic fabric texture/i);
+  assert.match(plain, /no text in image|no pinyin/i);
+  const payload = generationPayload({
+    prompt: 'a fictional adult in a red coat by a window',
+    style: 'real',
+    width: 512,
+    height: 512,
+    enrich: false,
+  });
+  assert.match(payload.prompt, /red coat/i);
+  assert.doesNotMatch(payload.prompt.split(' ### ')[0], /photorealistic RAW photo/i);
 });

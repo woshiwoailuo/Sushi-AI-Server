@@ -19,14 +19,16 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   });
   const realFetch = global.fetch;
   let upstreamMode = 'done', upstreamCalls = 0;
+  const upstreamBodies = [];
   global.fetch = async (url, options) => {
     assert.ok(url.startsWith('https://aihorde.net/api/v2/'), 'only the provider adapter is mocked');
     upstreamCalls++;
+    if (options && options.body) upstreamBodies.push(JSON.parse(options.body));
     if (upstreamMode === 'offline') throw new Error('offline');
     let data = {};
     if (url.endsWith('/async')) data = { id: 'mock-upstream-' + upstreamCalls };
     else if (url.includes('/check/')) data = { done: upstreamMode === 'done', is_possible: true, queue_position: 9, wait_time: 90 };
-    else if (options.method === 'GET') data = { generations: [{ img: 'https://images.example/result.png', seed: '1', model: 'test-worker' }] };
+    else if (url.includes('/status/') || options.method === 'GET') data = { generations: [{ img: 'https://images.example/result.png', seed: '1', model: 'test-worker' }] };
     return new Response(JSON.stringify(data), { status: url.endsWith('/async') ? 202 : 200 });
   };
   const { main } = require('../server');
@@ -46,6 +48,12 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   assert.equal(login.status, 200);
   const token = (await login.json()).token;
   const auth = { Authorization: 'Bearer ' + token };
+  const page = await request('/workshop', 'GET', undefined, auth);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-type'), /text\/html; charset=utf-8/i);
+  const pageText = await page.text();
+  assert.match(pageText, /核心描述/);
+  assert.doesNotMatch(pageText, /\uFFFD/);
   const ticket = await (await request('/api/workshop/ticket', 'POST', {}, auth)).json();
   assert.ok(ticket.key && ticket.iv);
   const loader = await request('/workshop?k=' + ticket.ticket);
@@ -57,17 +65,40 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   assert.match(bridge.headers.get('set-cookie'), /HttpOnly/);
   const cookie = { Cookie: bridge.headers.get('set-cookie').split(';')[0] };
   assert.equal((await request('/api/images/config', 'GET', undefined, cookie)).status, 200);
+  const callsBeforeUnsupported = upstreamCalls;
+  for (const model of ['perchance', 'turbo', 'flux', 'flux-realism']) {
+    const chatImage = await request('/api/chat/image', 'POST', {model, prompt:'A cup'}, cookie);
+    assert.equal(chatImage.status, 422);
+    const workshopImage = await request('/api/workshop/image?model=' + model + '&prompt=cup', 'GET', undefined, cookie);
+    assert.equal(workshopImage.status, 422);
+    assert.match((await workshopImage.json()).error, /未切换平台/);
+  }
+  assert.equal(upstreamCalls, callsBeforeUnsupported, 'unsupported providers never submit another provider');
+  const proxyImage = await request('/api/workshop/horde-image', 'POST', {
+    prompt: 'a ceramic cup on a wooden table', width: 512, height: 512,
+    style: 'real', enrichPrompt: false,
+  }, cookie);
+  assert.equal(proxyImage.status, 200);
+  assert.equal((await proxyImage.json()).url, 'https://images.example/result.png');
+  const proxySubmit = upstreamBodies.find(body => body && body.prompt && /ceramic cup/.test(body.prompt));
+  assert.ok(proxySubmit, 'same-origin Horde proxy submits upstream');
+  assert.doesNotMatch(proxySubmit.prompt, /photorealistic RAW photo|shot on DSLR|natural skin pores/i);
   const quota = async () => (await (await request('/api/me/quota', 'GET', undefined, cookie)).json()).used;
   assert.equal(await quota(), 0);
   const created = await request('/api/images', 'POST', { prompt: 'A cat by a window' }, cookie);
   assert.equal(created.status, 202);
   const job = await created.json();
   assert.equal(await quota(), 1);
-  assert.equal((await request('/api/images', 'POST', { prompt: 'A dog' }, cookie)).status, 409);
-  const done = await (await request('/api/images/' + job.id, 'GET', undefined, cookie)).json();
+  const replaced = await request('/api/images', 'POST', { prompt: 'A dog' }, cookie);
+  assert.equal(replaced.status, 202);
+  const replacedJob = await replaced.json();
+  assert.notEqual(replacedJob.id, job.id);
+  assert.equal((await (await request('/api/images/' + job.id, 'GET', undefined, cookie)).json()).state, 'cancelled');
+  assert.equal(await quota(), 1, 'auto-cancel refunds the previous pending reservation');
+  const done = await (await request('/api/images/' + replacedJob.id, 'GET', undefined, cookie)).json();
   assert.equal(done.state, 'done');
   assert.equal(await quota(), 1);
-  await request('/api/images/' + job.id, 'DELETE', undefined, cookie);
+  await request('/api/images/' + replacedJob.id, 'DELETE', undefined, cookie);
   assert.equal(await quota(), 1, 'a completed image is counted once');
   upstreamMode = 'queued';
   const queued = await (await request('/api/images', 'POST', { prompt: 'A dog' }, cookie)).json();
@@ -88,6 +119,11 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   assert.match(directHtml, /角色描述|生成按钮/);
   assert.doesNotMatch(directHtml, /api\/workshop\/unlock/);
   assert.doesNotMatch(directHtml, /正在打开工坊/);
+
+  const htmlAlias = await request('/workshop.html', 'GET', undefined, auth);
+  assert.equal(htmlAlias.status, 200);
+  assert.match(await htmlAlias.text(), /角色描述|生成按钮/);
+  assert.equal((await request('/workshop.html')).status, 401);
 
   // Unlock tolerates string vs number userId (Postgres BIGINT shape).
   const ticket2 = await (await request('/api/workshop/ticket', 'POST', {}, auth)).json();

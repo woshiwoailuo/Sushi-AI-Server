@@ -76,7 +76,7 @@ test('cookie unlock auth failures surface instead of waiting silently until tota
   w.AbortController = AbortController;
   // Speed up soft-failure timer in boot catch
   const realTimeout = w.setTimeout.bind(w);
-  w.setTimeout = (fn, ms, ...args) => realTimeout(fn, Math.min(ms, 20), ...args);
+  w.setTimeout = (fn, ms, ...args) => realTimeout(fn, ms === 90000 ? 200 : Math.min(ms, 20), ...args);
   w.fetch = async (url) => {
     if (String(url).includes('/unlock')) {
       return { ok: false, json: async () => ({ error: '未登录，请先登录后再进入工坊' }) };

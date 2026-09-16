@@ -10,14 +10,13 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const { ImageError, createImageService } = require('./lib/image-service');
+const { ImageError, createImageService, generationPayload, HORDE_REAL_MODELS, HORDE_ANIME_MODELS } = require('./lib/image-service');
 const workshopLoaderHtml = require('./lib/workshop-loader');
-const {
-  openPostgres,
-  migratePostgres,
-  persistenceFromMode,
-} = require('./lib/db-postgres');
-const { normalizeChatPayload, collapseRepeatedText } = require('./lib/chat-response');
+const { openPostgres, migratePostgres, persistenceFromMode } = require('./lib/db-postgres');
+const { normalizeChatPayload, collapseRepeatedText, normalizeChatModel, missingChatApiKeyMessage, configuredChatChannels, chatChannelLabel, buildKeyedChatRequest } = require('./lib/chat-response');
+const { categorizeImageFailure, recordImageFailure, snapshotImageFailures } = require('./lib/image-failure-stats');
+const { fetchReuse, fetchLimitedRetry, imageUpstreamQueue } = require('./lib/http-client');
+const { parseStructureJson, assembleStructuredPrompt, heuristicStructureFromText, buildStructureMessages, applyLocalEditOutbound, applyCoreFidelityLead } = require('./lib/structure-prompt');
 
 const SMTP_SECRET_FILE =
   process.env.SMTP_PASS_FILE ||
@@ -614,6 +613,7 @@ app.get('/api/me', authMiddleware, async (req, res) => {
   res.json({ user: publicUser(req.user), remaining: await remainingQuota(req.user) });
 });
 
+
 app.post('/api/me/password', authMiddleware, async (req, res) => {
   const current = String((req.body && req.body.current_password) || '');
   const next = String((req.body && req.body.new_password) || '');
@@ -679,7 +679,15 @@ function imageRoute(handler) {
 }
 
 app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
-  res.json({ provider: 'horde', free: true, maxWaitSeconds: 600, race: ['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'] });
+  res.json({
+    provider: 'horde',
+    authenticatedHorde: !!process.env.HORDE_API_KEY && process.env.HORDE_API_KEY !== '0000000000',
+    free: true,
+    maxWaitSeconds: 600,
+    race: ['perchance'],
+    realRace: ['perchance'],
+    animeRace: [],
+  });
 });
 app.get('/api/images/current', authMiddleware, imageAccount, (req, res) => res.json({ job: images.current(req.user.id) }));
 app.post('/api/images', authMiddleware, imageAccount, imageRoute(async (req, res) => {
@@ -890,7 +898,28 @@ app.get('/api/health', (req, res) => {
     db: persistence,
     mail: smtpConfigured(),
     warning,
+    chat: configuredChatChannels(process.env),
+    wake: 'ready',
+    message: '服务已就绪',
   });
+});
+
+app.get('/api/image-failure-stats', (req, res) => {
+  res.status(200).json(snapshotImageFailures());
+});
+
+app.post('/api/image-failure-stats', (req, res) => {
+  const body = req.body || {};
+  const row = recordImageFailure({
+    platform: body.platform,
+    durationMs: body.durationMs,
+    statusCode: body.statusCode,
+    errorType: body.errorType,
+    message: body.message,
+    code: body.code,
+    name: body.name,
+  });
+  res.status(200).json({ ok: true, recorded: row, counts: snapshotImageFailures().counts });
 });
 
 
@@ -1164,7 +1193,7 @@ async function sendWorkshopLoader(req, res) {
   // Encrypted ticket loader remains available when ?k= is present and valid
   // (Android WebView / legacy clients).
   if (user && !user.banned && !k) {
-    res.status(200).type('html').send(readWorkshopPlaintext());
+    res.status(200).set('Content-Type', 'text/html; charset=utf-8').send(readWorkshopPlaintext().toString('utf8'));
     return;
   }
 
@@ -1172,7 +1201,7 @@ async function sendWorkshopLoader(req, res) {
   if (!ticket) {
     if (user && !user.banned) {
       // Cross-instance / expired ticket but session still valid → open without AES.
-      res.status(200).type('html').send(readWorkshopPlaintext());
+      res.status(200).set('Content-Type', 'text/html; charset=utf-8').send(readWorkshopPlaintext().toString('utf8'));
       return;
     }
     res.status(401).type('html').send(WORKSHOP_401);
@@ -1234,29 +1263,40 @@ app.post('/api/workshop/unlock', authMiddleware, async (req, res) => {
   res.json({ key: ticket.key, iv: ticket.iv });
 });
 
-const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana']);
-const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai']);
+const IMAGE_MODELS = new Set(['turbo', 'flux', 'flux-realism', 'sana', 'perchance']);
+const CHAT_MODELS = new Set(['openai', 'openai-fast', 'turbo', 'deepseek', 'horde', 'grok', 'xai', 'groq', 'gemini', 'google', 'google-gemini', 'openrouter', 'open-router', 'glm', 'zhipu', 'zhipuai', 'chatglm', 'zai', 'z-ai']);
 const DEEPSEEK_API_KEY = String(process.env.DEEPSEEK_API_KEY || '').trim();
 const DEEPSEEK_MODEL = String(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim();
 const XAI_API_KEY = String(process.env.XAI_API_KEY || process.env.GROK_API_KEY || '').trim();
 const GROK_MODEL = String(process.env.GROK_MODEL || process.env.XAI_MODEL || 'grok-4-fast').trim() || 'grok-4-fast';
+// Groq free-tier friendly default: openai/gpt-oss-20b (llama-3.1-8b-instant shut down for free/dev Aug 2026).
+const GROQ_API_KEY = String(process.env.GROQ_API_KEY || '').trim();
+const GROQ_MODEL = String(process.env.GROQ_MODEL || 'openai/gpt-oss-20b').trim() || 'openai/gpt-oss-20b';
+const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_MODEL = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').trim() || 'gemini-2.5-flash-lite';
+const OPENROUTER_API_KEY = String(process.env.OPENROUTER_API_KEY || '').trim();
+const OPENROUTER_MODEL = String(process.env.OPENROUTER_MODEL || 'openrouter/free').trim() || 'openrouter/free';
+const GLM_API_KEY = String(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.ZAI_API_KEY || process.env.ZHIPU_API_KEY || '').trim();
+const GLM_MODEL = String(process.env.GLM_MODEL || 'glm-4.7-flash').trim() || 'glm-4.7-flash';
+const GLM_BASE_URL = String(process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/chat/completions').trim() || 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+
 const HORDE_TEXT_API_KEY = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
 const HORDE_TEXT_CLIENT = 'sushi-club:1.1.21:https://aihorde.net';
 
-function workshopImageError(res, status, error) {
-  res.status(status).json({ error });
-}
-
-function normalizeChatModel(raw) {
-  const model = String(raw || 'openai').trim().toLowerCase();
-  if (model === 'deepseek') return 'deepseek';
-  if (model === 'grok' || model === 'xai' || model === 'x-ai') return 'grok';
-  if (model === 'horde' || model === 'aihorde' || model === 'ai-horde') return 'horde';
-  // Pollinations legacy ids: turbo is gone; openai-fast often 402s while alias "openai" still works anonymously.
-  if (model === 'turbo' || model === 'openai-fast' || model === 'fast' || model === 'openai' || model === 'gpt-oss') {
-    return 'openai';
+function workshopImageError(res, status, error, meta) {
+  if (meta && meta.record) {
+    const message = typeof error === 'string' ? error : (error && error.message) || String(error || '');
+    recordImageFailure({
+      platform: meta.platform || 'unknown',
+      durationMs: meta.durationMs,
+      statusCode: status,
+      errorType: meta.errorType || categorizeImageFailure({ message, status, name: meta.name, code: meta.code }, status),
+      message,
+    });
   }
-  return model;
+  const body = { error };
+  if (meta && meta.errorType) body.errorType = meta.errorType;
+  res.status(status).json(body);
 }
 
 function messagesToHordePrompt(messages) {
@@ -1346,27 +1386,174 @@ function normalizeImageModel(raw) {
   if (model === 'flux-real' || model === 'flux_realism') return 'flux-realism';
   if (model === 'zimage' || model === 'sdxl' || model === 'krea2' || model === 'liblib') return 'flux';
   if (model === 'anishort') return 'sana';
+  if (model === 'perch' || model === '官方') return 'perchance';
   return model;
 }
+
+function pollinationsModelFor(model) {
+  // Live Pollinations catalog is only `sana`. turbo/flux/flux-realism all aliased to the same dummy jpeg.
+  // Perchance no longer uses this proxy (official site is Cloudflare-blocked / unembeddable).
+  // Leftover GET /api/workshop/image?model=perchance from cached clients still maps to sana.
+  void model;
+  return 'sana';
+}
+
+async function runImageUpstream(platform, fn) {
+  const started = Date.now();
+  try {
+    return await imageUpstreamQueue(() => fn({ fetchReuse, fetchLimitedRetry }));
+  } catch (error) {
+    const statusCode = (error && error.status) || (error && error.name === 'AbortError' ? 504 : 502);
+    recordImageFailure({
+      platform,
+      durationMs: Date.now() - started,
+      statusCode,
+      name: error && error.name,
+      code: error && error.code,
+      message: error && error.message,
+    });
+    throw error;
+  }
+}
+
+app.post('/api/workshop/structure-prompt', async (req, res) => {
+  const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
+  if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
+  const core = String((req.body && (req.body.core || req.body.prompt || req.body.text)) || '').trim().slice(0, 2000);
+  if (!core) return workshopImageError(res, 400, '核心描述不能为空');
+  const anime = !!(req.body && req.body.anime);
+  const img2img = !!(req.body && (req.body.img2img || req.body.hasSourceImage || req.body.sourceImage));
+  const forceLocalEdit = !!(req.body && (req.body.localEdit || req.body.forceLocalEdit));
+  const smart = !!(req.body && req.body.smart);
+  const started = Date.now();
+  const messages = buildStructureMessages(core, { anime, smart, img2img: img2img || forceLocalEdit });
+  const preferred = normalizeChatModel((req.body && req.body.model) || 'glm');
+  const tryModels = [preferred];
+  const keyedCfg = {
+    groqKey: GROQ_API_KEY,
+    groqModel: GROQ_MODEL,
+    geminiKey: GEMINI_API_KEY,
+    geminiModel: GEMINI_MODEL,
+    openrouterKey: OPENROUTER_API_KEY,
+    openrouterModel: OPENROUTER_MODEL,
+    xaiKey: XAI_API_KEY,
+    grokModel: GROK_MODEL,
+    deepseekKey: DEEPSEEK_API_KEY,
+    deepseekModel: DEEPSEEK_MODEL,
+    glmKey: GLM_API_KEY,
+    glmModel: GLM_MODEL,
+    glmBase: GLM_BASE_URL,
+  };
+  const keyReady = {
+    glm: !!GLM_API_KEY,
+    groq: !!GROQ_API_KEY,
+    gemini: !!GEMINI_API_KEY,
+    openrouter: !!OPENROUTER_API_KEY,
+    deepseek: !!DEEPSEEK_API_KEY,
+    grok: !!XAI_API_KEY,
+  };
+  let lastError = null;
+  for (const model of tryModels) {
+    try {
+      if (!keyReady[model]) continue;
+      const keyed = buildKeyedChatRequest(model, messages, keyedCfg);
+      if (!keyed || !keyed.endpoint) continue;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 25_000);
+      try {
+        const upstream = await fetchLimitedRetry(keyed.endpoint, {
+          method: 'POST',
+          headers: Object.assign({
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Referer: 'https://sushi-ai-server.vercel.app/',
+          }, keyed.headers || {}),
+          body: JSON.stringify(keyed.body),
+          signal: controller.signal,
+        }, { retries: 1, baseDelayMs: 350 });
+        const text = await upstream.text();
+        if (!upstream.ok) {
+          lastError = Object.assign(new Error('结构化对话上游 ' + upstream.status), { status: upstream.status });
+          continue;
+        }
+        const normalized = normalizeChatPayload(text, model);
+        const content = normalized && normalized.choices && normalized.choices[0] && normalized.choices[0].message
+          ? normalized.choices[0].message.content
+          : '';
+        const fields = parseStructureJson(content);
+        let promptEn = assembleStructuredPrompt(fields);
+        promptEn = applyLocalEditOutbound(promptEn, core, { img2img, force: forceLocalEdit });
+        promptEn = applyCoreFidelityLead(promptEn);
+        if (!promptEn) throw new Error('结构化提示词为空');
+        return res.status(200).json({
+          ok: true,
+          source: 'chat',
+          model,
+          fields,
+          promptEn,
+          durationMs: Date.now() - started,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (error) {
+      lastError = error;
+      if (error && error.name === 'AbortError') break;
+    }
+  }
+  const fallback = heuristicStructureFromText(core, { anime, img2img });
+  fallback.promptEn = applyLocalEditOutbound(fallback.promptEn, core, { img2img, force: forceLocalEdit });
+  fallback.promptEn = applyCoreFidelityLead(fallback.promptEn);
+  if (!fallback.promptEn) {
+    return workshopImageError(res, 502, (lastError && lastError.message) || '结构化提示词失败', {
+      record: true,
+      platform: 'structure-prompt',
+      durationMs: Date.now() - started,
+      name: lastError && lastError.name,
+    });
+  }
+  return res.status(200).json({
+    ok: true,
+    source: 'heuristic',
+    model: null,
+    fields: fallback.fields,
+    promptEn: fallback.promptEn,
+    note: lastError ? '对话结构化未完成，已用本地结构化回落' : '本地结构化',
+    durationMs: Date.now() - started,
+  });
+});
 
 app.post('/api/workshop/chat', async (req, res) => {
   const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '未登录或工坊票据无效，请刷新后重试');
-  const requested = String((req.body && req.body.model) || 'openai');
-  if (!CHAT_MODELS.has(requested) && requested !== 'openai' && requested !== 'horde' && requested !== 'grok') {
+  const requestedRaw = String((req.body && req.body.model) || 'openai').trim();
+  const requested = requestedRaw.toLowerCase();
+  if (!CHAT_MODELS.has(requested)) {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const model = normalizeChatModel(requested);
-  if (model !== 'deepseek' && model !== 'openai' && model !== 'horde' && model !== 'grok') {
+  if (!['deepseek', 'openai', 'horde', 'grok', 'groq', 'gemini', 'openrouter', 'glm'].includes(model)) {
     return workshopImageError(res, 400, '不支持的对话模型');
   }
   const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-48) : [];
   if (!messages.length) return workshopImageError(res, 400, '对话内容不能为空');
   if (model === 'deepseek' && !DEEPSEEK_API_KEY) {
-    return workshopImageError(res, 503, 'DeepSeek 尚未配置，请改用其他对话通道或稍后重试');
+    return workshopImageError(res, 503, missingChatApiKeyMessage('deepseek'));
   }
   if (model === 'grok' && !XAI_API_KEY) {
-    return workshopImageError(res, 503, 'Grok 尚未配置（未设置 XAI_API_KEY），请改用其他对话通道或稍后重试');
+    return workshopImageError(res, 503, missingChatApiKeyMessage('grok'));
+  }
+  if (model === 'groq' && !GROQ_API_KEY) {
+    return workshopImageError(res, 503, missingChatApiKeyMessage('groq'));
+  }
+  if (model === 'gemini' && !GEMINI_API_KEY) {
+    return workshopImageError(res, 503, missingChatApiKeyMessage('gemini'));
+  }
+  if (model === 'openrouter' && !OPENROUTER_API_KEY) {
+    return workshopImageError(res, 503, missingChatApiKeyMessage('openrouter'));
+  }
+  if (model === 'glm' && !GLM_API_KEY) {
+    return workshopImageError(res, 503, missingChatApiKeyMessage('glm'));
   }
 
   const controller = new AbortController();
@@ -1377,37 +1564,24 @@ app.post('/api/workshop/chat', async (req, res) => {
       return res.status(200).json(payload);
     }
 
-    const endpoint = model === 'deepseek'
-      ? 'https://api.deepseek.com/chat/completions'
-      : model === 'grok'
-        ? 'https://api.x.ai/v1/chat/completions'
-        : 'https://text.pollinations.ai/openai';
-    const upstreamModel = model === 'deepseek'
-      ? DEEPSEEK_MODEL
-      : model === 'grok'
-        ? GROK_MODEL
-        : 'openai';
-    const requestBody = model === 'deepseek'
-      ? {
-          model: upstreamModel,
-          messages,
-          max_tokens: 800,
-          temperature: 0.7,
-          thinking: { type: 'disabled' },
-        }
-      : model === 'grok'
-        ? {
-            model: upstreamModel,
-            messages,
-            max_tokens: 800,
-            temperature: 0.7,
-          }
-      : { model: upstreamModel, messages };
-    const authHeader = model === 'deepseek'
-      ? { Authorization: 'Bearer ' + DEEPSEEK_API_KEY }
-      : model === 'grok'
-        ? { Authorization: 'Bearer ' + XAI_API_KEY }
-        : {};
+    const keyed = buildKeyedChatRequest(model, messages, {
+      groqKey: GROQ_API_KEY,
+      groqModel: GROQ_MODEL,
+      geminiKey: GEMINI_API_KEY,
+      geminiModel: GEMINI_MODEL,
+      openrouterKey: OPENROUTER_API_KEY,
+      openrouterModel: OPENROUTER_MODEL,
+      xaiKey: XAI_API_KEY,
+      grokModel: GROK_MODEL,
+      deepseekKey: DEEPSEEK_API_KEY,
+      deepseekModel: DEEPSEEK_MODEL,
+      glmKey: GLM_API_KEY,
+      glmModel: GLM_MODEL,
+      glmBase: GLM_BASE_URL,
+    });
+    const endpoint = keyed.endpoint;
+    const requestBody = keyed.body;
+    const authHeader = keyed.headers || {};
     let upstream = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
@@ -1447,10 +1621,9 @@ app.post('/api/workshop/chat', async (req, res) => {
         return workshopImageError(res, 402, '快速对话通道暂时需要付费额度，请改用 Horde 或其他通道');
       }
       if (upstream.status === 429) {
-        const busyLabel = model === 'deepseek' ? 'DeepSeek' : model === 'grok' ? 'Grok' : '快速对话';
-        return workshopImageError(res, 429, busyLabel + '通道繁忙，请稍后重试');
+        return workshopImageError(res, 429, chatChannelLabel(model) + '通道繁忙，请稍后重试');
       }
-      const label = model === 'deepseek' ? 'DeepSeek' : model === 'grok' ? 'Grok' : '快速对话';
+      const label = chatChannelLabel(model);
       const status = upstream.status === 401 ? 401 : 502;
       return workshopImageError(res, status, `${label}暂时不可用${detail ? '：' + detail : ''}，请改用其他通道`);
     }
@@ -1470,6 +1643,7 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
   if (req.user.banned) return workshopImageError(res, 403, '账号已被封禁');
   const model = normalizeImageModel((req.body && req.body.model) || 'flux-realism');
   if (!IMAGE_MODELS.has(model)) return workshopImageError(res, 400, '不支持的生图模型');
+  if (model !== 'sana') return workshopImageError(res, 422, '此接口仅支持 Sana，所选通道未接入，未切换平台');
   const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
   const width = Math.min(1024, Math.max(256, Number(req.body && req.body.width) || 768));
@@ -1479,20 +1653,20 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
   const timer = setTimeout(() => controller.abort(), 90_000);
   const tryOnce = async (attempt) => {
     const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
-    upstream.searchParams.set('model', model);
+    upstream.searchParams.set('model', pollinationsModelFor(model));
     upstream.searchParams.set('width', String(width));
     upstream.searchParams.set('height', String(height));
     upstream.searchParams.set('seed', String(seed + attempt * 97));
     upstream.searchParams.set('nologo', 'true');
     upstream.searchParams.set('enhance', 'false');
     upstream.searchParams.set('safe', 'false');
-    const upstreamResponse = await fetch(upstream, {
+    const upstreamResponse = await fetchLimitedRetry(upstream, {
       signal: controller.signal,
       headers: {
         Accept: 'image/*',
         Referer: 'https://sushi-ai-server.vercel.app/',
       },
-    });
+    }, { retries: 1, baseDelayMs: 400 });
     if (!upstreamResponse.ok || !upstreamResponse.body) {
       const err = new Error(upstreamResponse.status === 429 ? '生图通道繁忙，请稍后重试' : (`上游生图服务返回 ${upstreamResponse.status}`));
       err.status = upstreamResponse.status === 429 ? 429 : (upstreamResponse.status || 502);
@@ -1512,16 +1686,18 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
     }
     return { buf, contentType: contentType || 'image/jpeg' };
   };
+  const chatImageStarted = Date.now();
   try {
     let lastError = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const maxAttempts = model === 'perchance' ? 1 : 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
-        const got = await tryOnce(attempt);
+        const got = await imageUpstreamQueue(() => tryOnce(attempt));
         const mime = got.contentType.split(';')[0].trim() || 'image/jpeg';
         return res.status(200).json({
           ok: true,
           model,
-          channel: model === 'flux-realism' ? 'Flux写实' : model,
+          channel: model === 'perchance' ? 'Perch写实' : (model === 'sana' ? 'Sana' : 'Sana'),
           contentType: mime,
           url: 'data:' + mime + ';base64,' + got.buf.toString('base64'),
         });
@@ -1535,11 +1711,11 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
       }
     }
     if (lastError && lastError.name === 'AbortError') {
-      return workshopImageError(res, 504, '生图超时，请稍后重试');
+      return workshopImageError(res, 504, '生图超时，请稍后重试', { record: true, platform: 'chat-image:' + model, durationMs: Date.now() - chatImageStarted, name: 'AbortError' });
     }
-    return workshopImageError(res, (lastError && lastError.status) || 502, (lastError && lastError.message) || '生图失败，请换描述再试');
+    return workshopImageError(res, (lastError && lastError.status) || 502, (lastError && lastError.message) || '生图失败，请换描述再试', { record: true, platform: 'chat-image:' + model, durationMs: Date.now() - chatImageStarted });
   } catch (error) {
-    return workshopImageError(res, 504, error && error.name === 'AbortError' ? '生图超时，请稍后重试' : '生图服务连接失败');
+    return workshopImageError(res, 504, error && error.name === 'AbortError' ? '生图超时，请稍后重试' : '生图服务连接失败', { record: true, platform: 'chat-image:' + model, durationMs: Date.now() - chatImageStarted, name: error && error.name });
   } finally {
     clearTimeout(timer);
   }
@@ -1554,6 +1730,7 @@ app.get('/api/workshop/image', async (req, res) => {
 
   const model = normalizeImageModel(req.query.model || 'turbo');
   if (!IMAGE_MODELS.has(model)) return workshopImageError(res, 400, '不支持的生图模型');
+  if (model !== 'sana') return workshopImageError(res, 422, '此接口仅支持 Sana，所选通道未接入，未切换平台');
 
   const prompt = String(req.query.prompt || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
@@ -1563,10 +1740,12 @@ app.get('/api/workshop/image', async (req, res) => {
   let seed = Number.isFinite(Number(req.query.seed)) ? Math.trunc(Number(req.query.seed)) : Math.floor(Math.random() * 2147483646);
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90_000);
+  const abortOnDisconnect = () => controller.abort();
+  req.once('close', abortOnDisconnect);
+  const timer = setTimeout(() => controller.abort(), 30_000);
   const tryOnce = async (attempt) => {
     const upstream = new URL(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`);
-    upstream.searchParams.set('model', model);
+    upstream.searchParams.set('model', pollinationsModelFor(model));
     upstream.searchParams.set('width', String(width));
     upstream.searchParams.set('height', String(height));
     upstream.searchParams.set('seed', String(seed + attempt * 97));
@@ -1608,7 +1787,7 @@ app.get('/api/workshop/image', async (req, res) => {
         res.status(200);
         res.set('Content-Type', got.contentType);
         res.set('Cache-Control', 'no-store');
-        res.set('X-Sushi-Image-Proxy', 'pollinations');
+        res.set('X-Sushi-Image-Proxy', model === 'perchance' ? 'perchance' : 'pollinations');
         res.set('X-Sushi-Image-Model', model);
         return res.end(got.buf);
       } catch (error) {
@@ -1626,35 +1805,81 @@ app.get('/api/workshop/image', async (req, res) => {
     else res.destroy(error);
   } finally {
     clearTimeout(timer);
+    req.removeListener('close', abortOnDisconnect);
   }
 });
 
 app.post('/api/workshop/horde-image', async (req, res) => {
   const access = await getWorkshopAccess(req, String((req.body && req.body.k) || ''));
   if (!access) return workshopImageError(res, 401, '工坊票据无效或已过期，请刷新工坊');
-  const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
+  const style = String((req.body && req.body.style) || '').trim().toLowerCase();
+  const isAnime = style === 'anime' || style === 'horde-anime' || style === 'auto-anime';
+  let prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
   const width = Math.min(768, Math.max(512, Number(req.body.width) || 512));
   const height = Math.min(768, Math.max(512, Number(req.body.height) || 512));
   const seed = Number.isFinite(Number(req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
+  const models = isAnime ? HORDE_ANIME_MODELS : HORDE_REAL_MODELS;
+  let hordePrompt = prompt;
+  try {
+    const built = generationPayload({
+      prompt,
+      width,
+      height,
+      style: isAnime ? 'anime' : 'real',
+      enrichPrompt: req.body && req.body.enrichPrompt !== false,
+      seed: seed === undefined ? '' : String(seed),
+    });
+    hordePrompt = built.prompt;
+  } catch {
+    if (!isAnime) hordePrompt = prompt + ' ### ' + 'anime, manga, cartoon, illustration';
+  }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 55_000);
+  const timer = setTimeout(() => controller.abort(), 180_000);
   try {
     const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
       method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', apikey: '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
-      body: JSON.stringify({ prompt, nsfw: true, censor_nsfw: false, params: { n: 1, width, height, steps: 15, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
+      headers: { 'Content-Type': 'application/json', apikey: process.env.HORDE_API_KEY || '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
+      body: JSON.stringify({ prompt: hordePrompt, nsfw: true, censor_nsfw: false, slow_workers: true, models, params: { n: 1, width, height, steps: 16, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
     });
     const acceptedJson = await accepted.json().catch(() => ({}));
     if (!accepted.ok || !acceptedJson.id) return workshopImageError(res, accepted.status === 429 ? 429 : 502, 'Horde 生图服务器未受理请求');
-    for (let i = 0; i < 48; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    let jobId = acceptedJson.id;
+    let censoredRetries = 0;
+    const maxCensoredRetries = 3;
+    for (let i = 0; i < 150; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
       if (controller.signal.aborted) break;
-      const status = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(acceptedJson.id), { signal: controller.signal, headers: { apikey: '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' } });
+      const status = await fetch('https://aihorde.net/api/v2/generate/status/' + encodeURIComponent(jobId), { signal: controller.signal, headers: { apikey: process.env.HORDE_API_KEY || '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' } });
       const statusJson = await status.json().catch(() => ({}));
       if (statusJson && statusJson.faulted) return workshopImageError(res, 502, 'Horde 生图服务器生成失败');
-      const image = statusJson && statusJson.generations && statusJson.generations[0] && statusJson.generations[0].img;
-      if (image) { res.set('Cache-Control', 'no-store'); return res.json({ url: image, provider: 'aihorde' }); }
+      const gens = statusJson && Array.isArray(statusJson.generations) ? statusJson.generations : [];
+      if (!gens.length && !(statusJson && statusJson.done)) continue;
+      const image = gens.find((g) => g && g.img && !g.censored);
+      if (image && image.img) { res.set('Cache-Control', 'no-store'); return res.json({ url: image.img, provider: 'aihorde' }); }
+      if (statusJson && statusJson.done) {
+        const hadCensored = gens.some((g) => g && g.censored);
+        if (hadCensored && censoredRetries < maxCensoredRetries) {
+          censoredRetries += 1;
+          const retryModels = isAnime
+            ? ['WAI-NSFW-illustrious-SDXL', ...models.filter((m) => m !== 'WAI-NSFW-illustrious-SDXL')].slice(0, Math.max(3, models.length))
+            : ['Realistic Vision', 'majicMIX realistic', 'AbsoluteReality', ...models].filter((m, idx, arr) => arr.indexOf(m) === idx);
+          const retry = await fetch('https://aihorde.net/api/v2/generate/async', {
+            method: 'POST', signal: controller.signal,
+            headers: { 'Content-Type': 'application/json', apikey: process.env.HORDE_API_KEY || '0000000000', 'Client-Agent': 'woshisushi:1.1.24:server-horde-image' },
+            body: JSON.stringify({ prompt: hordePrompt, nsfw: true, censor_nsfw: false, slow_workers: true, models: retryModels, params: { n: 1, width, height, steps: 16, ...(seed === undefined ? {} : { seed: String(seed) }) } }),
+          });
+          const retryJson = await retry.json().catch(() => ({}));
+          if (!retry.ok || !retryJson.id) {
+            return workshopImageError(res, 502, '成人内容被生图节点审查，请换写实/动漫通道或稍后再试');
+          }
+          jobId = retryJson.id;
+          continue;
+        }
+        return workshopImageError(res, 502, hadCensored
+          ? '成人内容被生图节点审查，请换写实/动漫通道或稍后再试'
+          : '任务结束但没有可显示的图片，请修改描述后重试');
+      }
     }
     return workshopImageError(res, 504, 'Horde 生图服务器排队超时');
   } catch (error) {
@@ -1678,40 +1903,56 @@ app.post('/api/workshop/img2img', async (req, res) => {
   }
   const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
-  const width = Math.min(1024, Math.max(256, Number(req.body.width) || 768));
-  const height = Math.min(1024, Math.max(256, Number(req.body.height) || 768));
-  const strength = Math.min(0.95, Math.max(0.05, Number(req.body.strength) || 0.52));
-  const seed = Number.isFinite(Number(req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
-  const body = {
-    prompt,
-    source_image: sourceImage,
-    source_processing: 'img2img',
-    nsfw: false,
-    censor_nsfw: true,
-    params: {
-      n: 1,
+  const snap = (value, fallback) => {
+    const number = Math.min(1024, Math.max(256, Number(value) || fallback));
+    return Math.round(number / 64) * 64;
+  };
+  const width = snap(req.body && req.body.width, 768);
+  const height = snap(req.body && req.body.height, 768);
+  const strength = Math.min(0.95, Math.max(0.05, Number(req.body && req.body.strength) || 0.52));
+  const seed = Number.isFinite(Number(req.body && req.body.seed)) ? Math.trunc(Number(req.body.seed)) : undefined;
+  const styleRaw = String((req.body && (req.body.style || req.body.engine || req.body.platform)) || '').trim().toLowerCase();
+  const isAnime = /anime|sana/.test(styleRaw);
+  let payload;
+  try {
+    payload = generationPayload({
+      prompt,
       width,
       height,
-      steps: 20,
-      denoising_strength: strength,
-      ...(seed === undefined ? {} : { seed: String(seed) }),
-    },
-  };
+      sourceImage: 'data:image/png;base64,' + sourceImage,
+      strength,
+      seed: seed === undefined ? undefined : String(Math.abs(seed)).slice(0, 10),
+      style: isAnime ? 'anime' : 'real',
+    });
+  } catch (error) {
+    return workshopImageError(res, error.status || 400, error.message || '图生图参数无效');
+  }
+  const hordeKey = String(process.env.HORDE_API_KEY || '0000000000').trim() || '0000000000';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 90_000);
   try {
-    const accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: '0000000000',
-        'Client-Agent': 'woshisushi:1.0:server-img2img',
-      },
-      body: JSON.stringify(body),
-    });
-    const acceptedJson = await accepted.json().catch(() => ({}));
-    if (!accepted.ok || !acceptedJson.id) {
+    let accepted = null;
+    let acceptedJson = {};
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      accepted = await fetch('https://aihorde.net/api/v2/generate/async', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: hordeKey,
+          'Client-Agent': 'woshisushi:1.1.39:server-img2img',
+        },
+        body: JSON.stringify(payload),
+      });
+      acceptedJson = await accepted.json().catch(() => ({}));
+      if (accepted.ok && acceptedJson.id) break;
+      if (accepted.status === 429 && attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 800 + attempt * 700));
+        continue;
+      }
+      return workshopImageError(res, accepted.status === 429 ? 429 : 502, '图生图服务器未受理请求');
+    }
+    if (!accepted || !accepted.ok || !acceptedJson.id) {
       return workshopImageError(res, 502, '图生图服务器未受理请求');
     }
     for (let i = 0; i < 75; i += 1) {
@@ -1719,8 +1960,8 @@ app.post('/api/workshop/img2img', async (req, res) => {
       const status = await fetch(`https://aihorde.net/api/v2/generate/status/${encodeURIComponent(acceptedJson.id)}`, {
         signal: controller.signal,
         headers: {
-          apikey: '0000000000',
-          'Client-Agent': 'woshisushi:1.0:server-img2img',
+          apikey: hordeKey,
+          'Client-Agent': 'woshisushi:1.1.39:server-img2img',
         },
       });
       const statusJson = await status.json().catch(() => ({}));
@@ -1728,7 +1969,7 @@ app.post('/api/workshop/img2img', async (req, res) => {
       if (statusJson.faulted) return workshopImageError(res, 502, '图生图服务器生成失败');
       if (image) {
         res.set('Cache-Control', 'no-store');
-        return res.json({ url: image, provider: 'aihorde' });
+        return res.json({ url: image, provider: 'aihorde', style: isAnime ? 'anime' : 'real' });
       }
     }
     return workshopImageError(res, 504, '图生图服务器排队超时');
@@ -1741,6 +1982,7 @@ app.post('/api/workshop/img2img', async (req, res) => {
 
 app.get('/workshop', sendWorkshopLoader);
 app.get('/workshop/', sendWorkshopLoader);
+app.get('/workshop.html', sendWorkshopLoader);
 
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'admin', 'index.html'));

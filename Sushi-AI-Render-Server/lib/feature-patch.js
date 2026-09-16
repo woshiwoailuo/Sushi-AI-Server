@@ -7,15 +7,9 @@ const previousReadFileSync = fs.readFileSync.bind(fs);
 function patchWorkshop(source) {
   let html = String(source || '');
 
-  // Provider <select> is owned by runtime-patch (Turbo/Horde/auto). Do not overwrite here.
-  html = html.replace(
-    '<div id="管理面板" class="分区" hidden>',
-    '<label class="换背景行" style="margin-top:10px">\n' +
-      '  <input id="生成记忆模式" type="checkbox" checked>\n' +
-      '  <span>生成记忆模式 · 自动记住描述、比例、参数与上次创作设置</span>\n' +
-      '</label>\n' +
-      '<div id="管理面板" class="分区" hidden>'
-  );
+  // Provider <select> is owned by runtime-patch (写实/动漫 split). Do not overwrite here.
+  // 不再注入「生成记忆模式」可见提示（与工坊「记忆模式」易混淆且已失效为冗余提示）。
+  // 脚本仍静默读写 sushi_generation_memory_v2；无勾选框时视为开启。
 
   html = html.replace(
     '<button type="button" class="次按钮" onclick="清空对话()">清空对话</button>',
@@ -74,57 +68,19 @@ function patchWorkshop(source) {
     });
   }
   function providerChanged(name){
-    var tip=byId('平台提示');
-    if(!tip) return;
-    var messages={
-      auto:'自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得',
-      turbo:'Turbo · Pollinations 极速免费通道',
-      horde:'AI Horde · 免费共享算力，繁忙时需要排队',
-      flux:'Flux · 通用高质量免费通道',
-      'flux-realism':'Flux写实 · 人像优先免费通道',
-      'flux-real':'Flux写实 · 人像优先免费通道',
-      sana:'Sana · 中文友好免费通道',
-      perchance:'Perch / Perchance · 应用内生成（不跳转官网）'
-    };
-    tip.textContent=messages[name]||messages.auto;
+    if(typeof window.设平台提示==='function') window.设平台提示(name);
   }
-  function forceDefaultProvider(){
-    var box=byId('出图引擎');
-    if(!box) return;
-    if(!box.querySelector('option[value="perchance"]')){
-      var po=document.createElement('option'); po.value='perchance'; po.textContent='Perch / Perchance · 应用内生成'; box.appendChild(po);
-    }
-    var fluxReal=box.querySelector('option[value="flux-real"]');
-    if(fluxReal) fluxReal.value='flux-realism';
-    var saved='';
-    try { saved=localStorage.getItem('角色生成器_默认平台')||''; } catch(e) {}
-    if(saved==='官方') saved='perchance';
-    if(!saved) saved='auto';
-    if(saved==='flux-real') saved='flux-realism';
-    if(!box.querySelector('option[value="'+saved+'"]')) saved='auto';
-    box.value=saved;
-    box.disabled=false;
-    box.removeAttribute('disabled');
-    window.__sushiImageProviderLock='';
-    try { localStorage.setItem('角色生成器_默认平台', box.value || 'auto'); } catch(e) {}
-    providerChanged(box.value || 'auto');
-  }
-  function lockProvider(name){
-    // Do not lock the platform picker — users must be able to switch anytime.
-    name=String(name||'').trim();
-    if(!name || name==='auto') return;
+  function recordProvider(name){
     window.__sushiLastEngine=name;
-    var box=byId('出图引擎');
-    if(box){ box.disabled=false; box.removeAttribute('disabled'); box.title='可随时切换生图平台；上次成功：'+name; }
   }
   function watchImages(){
     var area=byId('图像输出'); if(!area || area.__sushiWatching) return;
     area.__sushiWatching=true;
     function scan(){
       var img=area.querySelector('img');
-      if(img && (img.complete ? img.naturalWidth>0 : true)) lockProvider(img.getAttribute('data-engine')||'horde');
+      if(img && (img.complete ? img.naturalWidth>0 : true)) recordProvider(img.getAttribute('data-engine')||'horde');
     }
-    area.addEventListener('load',function(e){ if(e.target && e.target.tagName==='IMG') lockProvider(e.target.getAttribute('data-engine')||'horde'); },true);
+    area.addEventListener('load',function(e){ if(e.target && e.target.tagName==='IMG') recordProvider(e.target.getAttribute('data-engine')||'horde'); },true);
     new MutationObserver(scan).observe(area,{childList:true,subtree:true});
     scan();
   }
@@ -161,28 +117,11 @@ function patchWorkshop(source) {
       }
     });
   }
-  function installProviderFallback(){
-    if(window.__sushiProviderFallbackInstalled) return;
-    window.__sushiProviderFallbackInstalled=true;
-    var original=window.开始生成;
-    if(typeof original!=='function') return;
-    window.开始生成=function(){
-      var box=byId('出图引擎');
-      var chosen=box?box.value:'auto';
-      if(chosen==='krea2'||chosen==='anishort'||chosen==='liblib'||chosen==='zimage'||chosen==='sdxl'){
-        if(box) box.value = chosen==='anishort' ? 'sana' : 'flux';
-        providerChanged(box.value);
-      }
-      return original.apply(this,arguments);
-    };
-  }
   function ready(){
     removePerchanceLinks();
-    forceDefaultProvider();
     installMemory();
     installAiImage();
     installRandomRecovery();
-    installProviderFallback();
     watchImages();
     var observer=new MutationObserver(function(){ removePerchanceLinks(); installAiImage(); watchImages(); });
     observer.observe(document.documentElement,{childList:true,subtree:true});

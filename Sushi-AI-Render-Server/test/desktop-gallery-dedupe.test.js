@@ -10,10 +10,19 @@ const workshop = fs.readFileSync(path.join(__dirname, '../public/workshop.html')
 const chatLib = fs.readFileSync(path.join(__dirname, '../lib/chat-response.js'), 'utf8');
 const genJs = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
 
-test('desktop gallery enlarges on wide screens without mobile rewrite', () => {
+test('desktop gallery stacks full images downward; no oversized empty vh box', () => {
   assert.match(workshop, /@media \(min-width: 901px\)/);
-  assert.match(workshop, /minmax\(460px, 1fr\)/);
-  assert.match(workshop, /min-height: 64vh/);
+  assert.match(workshop, /gallery stacks downward/);
+  assert.match(workshop, /\.画廊\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.match(workshop, /\.画廊 img[\s\S]*?max-height:\s*none/);
+  assert.doesNotMatch(workshop, /minmax\(540px, 1fr\)/);
+  assert.doesNotMatch(workshop, /minmax\(360px, 1fr\)/);
+  assert.doesNotMatch(workshop, /min-height: 48vh/);
+  assert.doesNotMatch(workshop, /min-height: 72vh/);
+  assert.doesNotMatch(workshop, /min-height: 32vh/);
+  assert.doesNotMatch(workshop, /min-height: 34vh/);
+  assert.match(workshop, /object-fit:\s*contain/);
+  assert.match(workshop, /\.画廊\s*\{[\s\S]*?flex:\s*0 1 auto/);
   assert.match(workshop, /@media \(max-width: 800px\)/);
   assert.match(home, /@media \(min-width: 901px\)/);
   assert.match(home, /gen-wrap iframe/);
@@ -21,10 +30,20 @@ test('desktop gallery enlarges on wide screens without mobile rewrite', () => {
 
 test('client and server expose reply dedupe helpers', () => {
   assert.match(chatLib, /function collapseRepeatedText/);
-  assert.match(home, /function collapseRepeatedText/);
+  assert.doesNotMatch(home, /function collapseRepeatedText/);
   assert.match(workshop, /function 折叠重复回复/);
   assert.match(workshop, /return 折叠重复回复\(文\)/);
-  assert.match(home, /collapseRepeatedText\(content\)/);
+});
+
+test('lightbox close + history fit + two-step zoom CSS present', () => {
+  assert.match(workshop, /\.图片预览关闭/);
+  assert.match(workshop, /position:\s*fixed/);
+  assert.match(workshop, /safe-area-inset-top/);
+  assert.match(workshop, /\.图片预览层\.放大/);
+  assert.match(genJs, /点击图片再放大/);
+  assert.match(workshop, /\.历史卡片 img[\s\S]*?object-fit:\s*contain/);
+  assert.match(genJs, /classList\.toggle\('放大'\)/);
+  assert.match(genJs, /preferPortraitAspectForFullBody/);
 });
 
 test('success hides bulky 已生成 status so gallery sits under 角色画廊', () => {
@@ -32,4 +51,15 @@ test('success hides bulky 已生成 status so gallery sits under 角色画廊', 
   assert.match(genJs, /function hideStatusPanel/);
   assert.match(genJs, /hideStatusPanel\(\);/);
   assert.doesNotMatch(genJs, /status\('已生成 ' \+ run\.completed \+ ' 张图片'/);
+  assert.match(genJs, /data-full-url/);
+  assert.match(workshop, /图片预览层/);
+  assert.match(workshop, /function 含生图指令/);
+  assert.match(workshop, /按对话生成图片\(文本\)/);
+});
+
+test('result gallery has breathing room and smaller idle status box', () => {
+  assert.match(workshop, /\.结果区[\s\S]*?gap:\s*1[4-9]px|gap:\s*1[4-9]px/);
+  assert.match(workshop, /\.画廊[\s\S]*?gap:\s*2[0-9]px/);
+  assert.doesNotMatch(workshop, /\.状态提示\s*\{[\s\S]*?min-height:\s*320px/);
+  assert.match(workshop, /sjdwukai2@163\.com/);
 });

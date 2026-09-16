@@ -19,8 +19,6 @@
       --radius: 12px;
       --safe-t: env(safe-area-inset-top);
       --safe-b: env(safe-area-inset-bottom);
-      --user-bg: #3B6FF5;
-      --bot-bg: #EEF2FF;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
@@ -28,7 +26,6 @@
     button, input, textarea, select { font: inherit; color: inherit; }
     input, textarea, select { background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; width: 100%; outline: none; }
     input:focus, textarea:focus, select:focus { border-color: rgba(59,111,245,.55); box-shadow: 0 0 0 3px rgba(59,111,245,.12); }
-    textarea { resize: none; }
     .screen { position: absolute; inset: 0; display: none; flex-direction: column; }
     .screen.on { display: flex; }
     .splash { align-items: center; justify-content: center; background: var(--bg); }
@@ -53,7 +50,7 @@
     .muted { color: var(--muted); font-size: 13px; }
     .content { flex: 1; overflow: auto; padding: 8px 16px 110px; }
     .card { background: var(--card); border-radius: var(--radius); padding: 16px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(27,31,42,.04); }
-    .nav { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); height: 64px; background: #FFFFFF; border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; box-shadow: 0 8px 24px rgba(27,31,42,.08); }
+    .nav { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); height: 64px; background: #FFFFFF; border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr; box-shadow: 0 8px 24px rgba(27,31,42,.08); }
     .nav button { background: none; border: 0; color: var(--muted); font-size: 12px; }
     .nav button.active { color: var(--accent); font-weight: 640; }
     .gen-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -63,34 +60,7 @@
     .hidden { display: none !important; }
     .profile dt { color: var(--muted); font-size: 12px; margin-top: 14px; }
     .profile dd { margin-top: 4px; font-size: 16px; }
-    .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-    .chip.on { background: rgba(59,111,245,.1); color: var(--accent); border-color: rgba(59,111,245,.35); }
-    .mem-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-    .chat-shell { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0 12px 96px; }
-    .chat-list { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 10px; padding: 8px 4px 12px; }
-    .bubble { max-width: 92%; padding: 12px 14px; border-radius: 16px; line-height: 1.55; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
-    .bubble.user { align-self: flex-end; background: var(--user-bg); color: #fff; border-bottom-right-radius: 6px; }
-    .bubble.bot { align-self: flex-start; background: var(--bot-bg); color: var(--text); border-bottom-left-radius: 6px; }
-    .bubble.wait { opacity: .72; font-style: italic; }
-    .bubble .meta { display: block; margin-top: 6px; font-size: 11px; opacity: .75; }
-    .chat-empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.7; padding: 24px 12px; }
-    .composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 10px; }
-    .composer textarea { border: 0; box-shadow: none; padding: 8px; min-height: 48px; max-height: 120px; }
-    .composer .send { width: auto; min-width: 76px; padding: 12px 16px; }
-    .home-tools { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-    .home-tools .btn { width: auto; padding: 10px 14px; font-size: 13px; }
-    .chat-channel-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-    .chat-channel-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
-    .chat-channel-row select { width: auto; min-width: 160px; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-    .bubble img.chat-img { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 12px; margin: 4px 0 8px; background: #fff; }
-    .bubble.bot img.chat-img { box-shadow: 0 8px 24px rgba(27,31,42,.08); }
-    .limit-note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 8px; }
-    .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-    .tpl-btn { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 10px; width: 100%; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; color: var(--text); }
-    .core { color: var(--muted); font-size: 13px; line-height: 1.5; }
     @media (min-width: 901px) {
-      .chat-shell { max-width: 920px; margin: 0 auto; width: 100%; padding: 0 20px 96px; }
-      .bubble { max-width: 78%; font-size: 16px; padding: 14px 16px; }
       .gen-wrap { padding: 0 8px 96px; }
       .gen-wrap iframe { min-height: calc(100dvh - 140px); }
       .content.gen-wrap { max-width: none; }
@@ -101,14 +71,14 @@
   <section id="splash" class="screen splash on">
     <div class="mark">苏</div>
     <h1>苏轼AI</h1>
-    <p>正经娱乐 · AI 对话与创作</p>
+    <p>正经娱乐 · 角色馆与创作</p>
   </section>
 
   <section id="auth" class="screen auth">
     <div class="brand">
       <div class="kicker">苏轼AI</div>
       <h2 id="authTitle">登录</h2>
-      <p class="sub">正经娱乐 · 对话优先，工坊随时可进</p>
+      <p class="sub">正经娱乐 · 工坊随时可进</p>
     </div>
     <form id="authForm">
       <div class="field" id="nameField" style="display:none">
@@ -150,48 +120,6 @@
     </form>
   </section>
 
-  <section id="home" class="screen app">
-    <div class="top">
-      <div>
-        <div class="hello">AI 对话</div>
-        <div class="core" id="coreDesc">默认长记忆 · 本机保存历史</div>
-      </div>
-      <button type="button" class="chip" id="openWorkshopBtn">去工坊</button>
-    </div>
-    <div style="padding: 0 16px 8px;">
-      <div class="mem-row" id="memRow" role="group" aria-label="记忆模式">
-        <button type="button" class="chip" data-mem="long">长记忆 · 大数据</button>
-        <button type="button" class="chip" data-mem="short">短记忆</button>
-        <button type="button" class="chip" data-mem="off">关闭记忆</button>
-      </div>
-      <p class="limit-note">长记忆把大量对话与摘要保存在本机 localStorage（单域约数 MB）。Vercel 上 SQLite 会重置，故跨设备不以服务端为准；本页会调用已有对话接口。</p>
-      <div class="chat-channel-row">
-        <label for="chatChannel">回答通道</label>
-        <select id="chatChannel" aria-label="AI 回答通道">
-          <option value="auto" selected>自动抢答 · 推荐</option>
-          <option value="horde">Horde · 免费可用</option>
-          <option value="grok">Grok · xAI（需配置密钥）</option>
-        </select>
-        <p class="limit-note" id="grokSetupHint" style="margin:6px 0 0">自动抢答优先 Horde；Grok 需在 Vercel 设置 <code>XAI_API_KEY</code>（或 <code>GROK_API_KEY</code>），未配置时请改用 Horde。</p>
-      </div>
-    </div>
-    <div class="chat-shell">
-      <div class="chat-list" id="chatList" aria-live="polite"></div>
-      <div class="composer">
-        <textarea id="chatInput" rows="2" placeholder="说点什么…（正经娱乐向）"></textarea>
-        <button class="btn btn-lime send" type="button" id="chatSend">发送</button>
-      </div>
-      <div class="home-tools">
-        <button class="btn btn-ghost" type="button" id="clearChatBtn" style="margin:0;background:var(--card);border:1px solid var(--line);color:var(--text)">清空对话</button>
-        <button class="btn btn-ghost" type="button" id="toImageTools" style="margin:0;background:var(--card);border:1px solid var(--line);color:var(--text)">图生图 / 换背景</button>
-      </div>
-      <details style="margin-top:12px">
-        <summary class="muted" style="cursor:pointer">文生图快捷模板（填入对话后发送，首页直出图）</summary>
-        <div class="tpl-grid" id="tplGrid"></div>
-      </details>
-    </div>
-  </section>
-
   <section id="gen" class="screen app">
     <div class="top">
       <div class="hello">创作工坊</div>
@@ -215,7 +143,7 @@
         <dt>每日额度</dt><dd id="meQuota">—</dd>
         <dt>会员至</dt><dd id="meVip">—</dd>
         <dt>今日剩余</dt><dd id="meRemain">—</dd>
-        <dt>版本</dt><dd id="meVer">1.1.20</dd>
+        <dt>版本</dt><dd id="meVer">1.1.21</dd>
       </div>
       <button class="btn btn-ghost" type="button" id="checkUpdateBtn" style="margin-top:16px;background:var(--card);border:1px solid var(--line);color:var(--text)">检查更新</button>
       <button class="btn btn-ghost" type="button" id="downloadApkBtn" style="margin-top:10px;background:var(--card);border:1px solid var(--line);color:var(--text)">下载安装包</button>
@@ -224,8 +152,7 @@
   </section>
 
   <nav class="nav hidden" id="tabbar">
-    <button data-tab="home" class="active">对话</button>
-    <button data-tab="gen">工坊</button>
+    <button data-tab="gen" class="active">工坊</button>
     <button data-tab="me">我的</button>
   </nav>
 
@@ -237,9 +164,6 @@
     let me = null;
     let genLoaded = false;
     let pendingEmail = '';
-    let chatBusy = false;
-    let chatHistory = [];
-    let memorySummary = '';
 
     function token() { return localStorage.getItem('sushi_jwt') || ''; }
     function setToken(t) {
@@ -292,12 +216,6 @@
       } catch (e) { me = null; }
       return me;
     }
-    function emailKey() {
-      try { return (me && me.email) || localStorage.getItem('sushi_email') || ''; } catch (e) { return ''; }
-    }
-    function chatStoreKey() { return '苏轼AI_首页对话_' + (emailKey() || 'guest'); }
-    function memModeKey() { return '苏轼AI_首页记忆模式_' + (emailKey() || 'guest'); }
-    function memSumKey() { return '苏轼AI_首页记忆摘要_' + (emailKey() || 'guest'); }
     function workshopUrl(ticket, key, iv) {
       const hash = (key && iv) ? ('#' + key + '.' + iv) : '';
       return '/workshop?k=' + encodeURIComponent(ticket) + hash;
@@ -326,13 +244,9 @@
     function show(id) {
       document.querySelectorAll('.screen').forEach((el) => el.classList.remove('on'));
       $(id).classList.add('on');
-      const app = ['home','gen','me'].includes(id);
+      const app = ['gen','me'].includes(id);
       $('tabbar').classList.toggle('hidden', !app);
       document.querySelectorAll('.nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
-      if (id === 'home') {
-        loadChat();
-        renderMemChips();
-      }
     }
 
     function renderMe() {
@@ -352,430 +266,10 @@
       return q;
     }
 
-    function memMode() {
-      try {
-        var v = localStorage.getItem(memModeKey()) || 'long';
-        return v === 'short' || v === 'off' || v === 'long' ? v : 'long';
-      } catch (e) { return 'long'; }
-    }
-    function setMemMode(v) {
-      v = v === 'short' || v === 'off' ? v : 'long';
-      try { localStorage.setItem(memModeKey(), v); } catch (e) {}
-      renderMemChips();
-      var desc = $('coreDesc');
-      if (desc) {
-        desc.textContent = v === 'long' ? '默认长记忆 · 本机大数据历史'
-          : (v === 'short' ? '短记忆 · 仅近轮对话' : '记忆已关闭');
-      }
-    }
-    function renderMemChips() {
-      var cur = memMode();
-      document.querySelectorAll('#memRow [data-mem]').forEach(function (b) {
-        b.classList.toggle('on', b.getAttribute('data-mem') === cur);
-      });
-    }
-    function chatCap() {
-      var m = memMode();
-      if (m === 'off') return 6;
-      if (m === 'short') return 24;
-      return 200;
-    }
-    function summaryCap() {
-      var m = memMode();
-      if (m === 'off') return 0;
-      if (m === 'short') return 1200;
-      return 12000;
-    }
-    function loadChat() {
-      chatHistory = [];
-      memorySummary = '';
-      try {
-        var raw = localStorage.getItem(chatStoreKey());
-        var list = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(list)) chatHistory = list.slice(-chatCap());
-      } catch (e) { chatHistory = []; }
-      try { memorySummary = String(localStorage.getItem(memSumKey()) || ''); } catch (e) { memorySummary = ''; }
-      renderChat();
-    }
-    function saveChat() {
-      try {
-        chatHistory = chatHistory.slice(-chatCap());
-        localStorage.setItem(chatStoreKey(), JSON.stringify(chatHistory));
-        if (summaryCap()) localStorage.setItem(memSumKey(), String(memorySummary || '').slice(-summaryCap()));
-        else localStorage.removeItem(memSumKey());
-      } catch (e) {}
-    }
-    function escapeHtml(s) {
-      return String(s || '').replace(/[&<>"']/g, function (c) {
-        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
-      });
-    }
-    function renderChat() {
-      var box = $('chatList');
-      if (!box) return;
-      if (!chatHistory.length) {
-        box.innerHTML = '<div class="chat-empty">先聊起来。<br>默认「长记忆 · 大数据」会记住设定与前情（保存在本机）。<br>可说「画一张… / 生成图片…」直接出图；精细图生图、换背景仍可去工坊。</div>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < chatHistory.length; i++) {
-        var item = chatHistory[i] || {};
-        var cls = item.role === 'user' ? 'user' : 'bot';
-        var meta = item.channel ? '<span class="meta">' + escapeHtml(item.channel) + '</span>' : '';
-        var img = item.image ? '<img class="chat-img" alt="生成图片" src="' + escapeHtml(item.image) + '" />' : '';
-        html += '<div class="bubble ' + cls + '">' + img + escapeHtml(item.role === 'assistant' ? collapseRepeatedText(item.text) : item.text) + meta + '</div>';
-      }
-      box.innerHTML = html;
-      box.scrollTop = box.scrollHeight;
-    }
-    function appendTemp(text) {
-      var box = $('chatList');
-      if (!box) return null;
-      var empty = box.querySelector('.chat-empty');
-      if (empty) empty.remove();
-      var el = document.createElement('div');
-      el.className = 'bubble bot wait';
-      el.textContent = text || '思考中…';
-      box.appendChild(el);
-      box.scrollTop = box.scrollHeight;
-      return el;
-    }
-    function rollMemory(userText, botText) {
-      if (memMode() === 'off') return;
-      var long = memMode() === 'long';
-      var piece = '';
-      if (userText) piece += '用户：' + String(userText).slice(0, long ? 400 : 120) + '。';
-      if (botText) piece += '助手：' + String(botText).slice(0, long ? 600 : 160) + '。';
-      memorySummary = String((memorySummary || '') + piece).slice(-summaryCap());
-    }
-    function buildMessages(question) {
-      var msgs = [];
-      var m = memMode();
-      if (m !== 'off' && memorySummary) {
-        msgs.push({
-          role: 'system',
-          content: '用简体中文回复，风格正经娱乐、不涉低俗夜场措辞。延续记忆：' + String(memorySummary).slice(-(m === 'long' ? 6000 : 800))
-        });
-      } else {
-        msgs.push({ role: 'system', content: '用简体中文回复，风格正经娱乐、不涉低俗夜场措辞。' });
-      }
-      if (m !== 'off') {
-        var keep = m === 'long' ? 80 : 12;
-        var start = Math.max(0, chatHistory.length - keep);
-        for (var i = start; i < chatHistory.length; i++) {
-          var item = chatHistory[i];
-          if (!item || !item.text) continue;
-          msgs.push({
-            role: item.role === 'user' ? 'user' : 'assistant',
-            content: String(item.text).slice(0, m === 'long' ? 900 : 520)
-          });
-        }
-      }
-      msgs.push({ role: 'user', content: String(question || '').slice(0, 800) });
-      return msgs;
-    }
-    function collapseRepeatedText(raw) {
-      var s = String(raw == null ? '' : raw).replace(/\r\n/g, '\n').trim();
-      if (!s) return s;
-      var guard = 0;
-      for (guard = 0; guard < 6; guard++) {
-        var changed = false;
-        if (s.length >= 12) {
-          var half = Math.floor(s.length / 2);
-          var a = s.slice(0, half).trim();
-          var b = s.slice(half).trim();
-          if (a.length >= 6 && a === b) { s = a; changed = true; }
-        }
-        if (!changed && s.length >= 18) {
-          var third = Math.floor(s.length / 3);
-          var a2 = s.slice(0, third).trim();
-          var b2 = s.slice(third, third * 2).trim();
-          var c2 = s.slice(third * 2).trim();
-          if (a2.length >= 6 && a2 === b2 && b2 === c2) { s = a2; changed = true; }
-        }
-        if (!changed) break;
-      }
-      var lines = s.split('\n');
-      var lineOut = [];
-      var prevLineKey = null;
-      var i = 0;
-      for (i = 0; i < lines.length; i++) {
-        var line = lines[i];
-        var key = line.trim().toLowerCase().replace(/\s+/g, ' ');
-        if (!key) { lineOut.push(line); continue; }
-        if (key === prevLineKey) continue;
-        lineOut.push(line);
-        prevLineKey = key;
-      }
-      s = lineOut.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-      var pieces = s.match(/[^。！？.!?]+[。！？.!?]*|\n+/g);
-      if (!pieces) return s;
-      var out = [];
-      var prevKey = null;
-      for (i = 0; i < pieces.length; i++) {
-        var piece = pieces[i];
-        if (/^\n+$/.test(piece)) { out.push(piece); continue; }
-        var k = piece.trim().toLowerCase().replace(/\s+/g, ' ');
-        if (!k) { out.push(piece); continue; }
-        if (k === prevKey) continue;
-        out.push(piece);
-        prevKey = k;
-      }
-      return out.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-    }
-    async function askModel(model, messages) {
-      // Align with workshop (#14): 20s / Horde 38s; short replies length>=1 OK.
-      var timeoutMs = model === 'horde' ? 38000 : 20000;
-      try {
-        var data = await api('/api/workshop/chat', {
-          method: 'POST',
-          body: JSON.stringify({ model: model, messages: messages }),
-          timeoutMs: timeoutMs
-        });
-      } catch (err) {
-        var msg = (err && err.message) || '通道失败';
-        if (err && err.status === 402) msg = '快速对话通道暂时不可用（需付费额度）';
-        else if (err && err.status === 503 && /Grok/i.test(msg)) msg = 'Grok 未配置：请在 Vercel 环境变量填写 XAI_API_KEY（或 GROK_API_KEY）后重新部署；也可改用 Horde';
-        else if (err && err.status === 503 && /DeepSeek/i.test(msg)) msg = 'DeepSeek 未配置';
-        else if (err && err.name === 'AbortError') msg = model === 'horde' ? 'Horde 排队超时' : '通道超时';
-        throw new Error(msg);
-      }
-      // Server already normalizeChatPayload; client still collapses repeats for cached / edge paths.
-      var content = data && data.choices && data.choices[0] && data.choices[0].message
-        ? data.choices[0].message.content : '';
-      content = collapseRepeatedText(content);
-      if (content.length < 1) throw new Error('空回复');
-      if (/payment required|invalid api key|queue full|model not found/i.test(content.slice(0, 200))) throw new Error('通道繁忙');
-      return content;
-    }
-    var CHAT_LABELS = { grok: 'Grok', horde: 'Horde', openai: '快速对话', deepseek: 'DeepSeek', turbo: '快速对话', 'openai-fast': '快速对话', auto: '自动抢答' };
-    function chatChannelKey() { return '苏轼AI_首页对话通道_' + (emailKey() || 'guest'); }
-    function normalizeChatChannel(raw) {
-      var v = String(raw || 'auto').trim().toLowerCase();
-      // Drop dead-end channels from picker (OpenAI 402 / DeepSeek 未配置); map stale localStorage to auto.
-      if (v === 'openai' || v === 'turbo' || v === 'openai-fast' || v === 'fast' || v === 'deepseek') return 'auto';
-      if (v === 'xai' || v === 'x-ai') return 'grok';
-      if (v === 'grok' || v === 'horde' || v === 'auto') return v;
-      return 'auto';
-    }
-    function loadChatChannel() {
-      var v = 'auto';
-      try { v = normalizeChatChannel(localStorage.getItem(chatChannelKey()) || 'auto'); } catch (e) {}
-      var box = $('chatChannel');
-      if (box) box.value = v;
-      return v;
-    }
-    function saveChatChannel(v) {
-      v = normalizeChatChannel(v);
-      try { localStorage.setItem(chatChannelKey(), v); } catch (e) {}
-      var box = $('chatChannel');
-      if (box) box.value = v;
-      return v;
-    }
-    function selectedChatChannel() {
-      var box = $('chatChannel');
-      return normalizeChatChannel(box && box.value ? box.value : loadChatChannel());
-    }
-    function wantsImageGen(text) {
-      return /生成.*(图|照片|图片)|画一[张幅]|帮我画|来[张幅]图|出图|文生图|角色图|做[张幅]图|画张|画个|给我.*(图|照片)|draw\s+(a|me|an)|generate\s+(an?\s+)?(image|picture|photo)|txt2img|text.?to.?image/i.test(String(text || ''));
-    }
-    function hasExplicitArtStyle(text) {
-      return /anime|manga|cartoon|chibi|二次元|动漫|卡通|漫画|插画|illustration|cel[\s-]?shad|pixar|disney|comic(?:\s|-)?style|手绘|赛璐璐|2d\s*art|视觉小说/i.test(String(text || ''));
-    }
-    function photorealHomePrompt(text) {
-      var t = String(text || '').trim();
-      // Strip only the intent prefix; keep the user's core description for the generator.
-      t = t.replace(/^(请)?(帮我)?(生成|画|做)(一)?[张幅]?(图|图片|照片)?[：:\s]*/i, '').trim() || t;
-      if (hasExplicitArtStyle(t)) {
-        if (!/fictional adult|18\+|no minors|虚构成年/i.test(t)) {
-          t += ', fictional adult 18+ only, no minors';
-        }
-        return t.slice(0, 1200);
-      }
-      // Default photoreal rhetoric — enrich generator prompt only (chat bubble text stays original).
-      var lead = 'photorealistic RAW photo, shot on DSLR, 85mm, natural skin pores, realistic fabric texture';
-      if (!/photoreal|写实|摄影|RAW photo|DSLR|cinematic still/i.test(t)) {
-        t = lead + ', ' + t + ', natural light, cinematic still, shallow depth of field, sharp focus, real human, fictional adult 18+, not anime, not manga, not cartoon, not illustration';
-      } else {
-        if (!/^\s*photoreal/i.test(t)) t = 'photorealistic photograph of ' + t;
-        if (!/not anime|no anime/i.test(t)) t += ', not anime, not manga, not cartoon, not illustration';
-      }
-      return t.slice(0, 1200);
-    }
-    function homeImageError(err) {
-      var status = err && err.status;
-      var msg = (err && err.message) || '';
-      if (status === 401 || /未登录|401/.test(msg)) return '请先登录后再出图';
-      if (status === 402 || /额度|用尽/.test(msg)) return '今日出图额度已用尽，请明天再试或升级会员';
-      if (status === 429 || /繁忙|频繁|rate/i.test(msg)) return '生图通道繁忙，请稍后再试';
-      if (status === 403 || /封禁/.test(msg)) return '账号不可用，无法出图';
-      if (err && err.name === 'AbortError') return '出图超时，请稍后重试';
-      return msg || '出图失败，请换描述再试';
-    }
-    async function generateHomeImage(promptText) {
-      // Stay on homepage chat: authenticated API only. Never open /workshop or mint workshop HTML tickets.
-      // Enrich only the generator prompt; user chat text / captions stay as typed.
-      var prompt = photorealHomePrompt(promptText);
-      var styleAware = hasExplicitArtStyle(promptText);
-      var negative = styleAware
-        ? 'blurry, child, minor, watermark, text, lowres'
-        : 'anime, manga, cartoon, illustration, blurry, child, minor, watermark, text';
-      try {
-        var direct = await api('/api/chat/image', {
-          method: 'POST',
-          body: JSON.stringify({
-            prompt: prompt,
-            model: 'flux-realism',
-            width: 768,
-            height: 768,
-            seed: Math.floor(Math.random() * 1e9),
-            negativePrompt: negative
-          }),
-          timeoutMs: 95000
-        });
-        if (direct && direct.url && String(direct.url).indexOf('data:image') === 0) {
-          return { url: direct.url, channel: direct.channel || 'Flux写实' };
-        }
-        throw new Error('图片无效，请换描述再试');
-      } catch (err) {
-        if (err && (err.status === 401 || err.status === 403 || err.status === 402)) {
-          throw new Error(homeImageError(err));
-        }
-        // Fallback: authenticated Horde job API (still no workshop page).
-        try {
-          var created = await api('/api/images', {
-            method: 'POST',
-            body: JSON.stringify({
-              prompt: prompt,
-              width: 768,
-              height: 768,
-              negativePrompt: negative
-            }),
-            timeoutMs: 90000
-          });
-          var job = created && (created.job || created);
-          if (!job || !job.id) throw err;
-          var deadline = Date.now() + 180000;
-          while (Date.now() < deadline) {
-            var st = await api('/api/images/' + encodeURIComponent(job.id), { method: 'GET', timeoutMs: 20000 });
-            var cur = st && (st.job || st);
-            if (cur && cur.state === 'done' && cur.image && cur.image.url) {
-              return { url: cur.image.url, channel: 'Horde' };
-            }
-            if (cur && (cur.state === 'failed' || cur.state === 'cancelled')) {
-              throw new Error((cur && cur.error) || '出图失败');
-            }
-            await new Promise(function (r) { setTimeout(r, 2500); });
-          }
-          throw new Error('出图超时，请稍后重试');
-        } catch (fallbackErr) {
-          throw new Error(homeImageError(fallbackErr || err));
-        }
-      }
-    }
-    async function askOneChat(question, model) {
-      var messages = buildMessages(question);
-      var text = await askModel(model, messages);
-      return { text: text, channel: CHAT_LABELS[model] || model };
-    }
-    async function raceChat(question, channel) {
-      channel = normalizeChatChannel(channel);
-      // Explicit channel: answer only on that platform.
-      if (channel && channel !== 'auto') return askOneChat(question, channel);
-      var messages = buildMessages(question);
-      // auto：Horde 优先（Grok 未配置时不挡路），再并行 Grok；整体抢答上限 30s。
-      var models = ['horde', 'grok'];
-      return await new Promise(function (resolve, reject) {
-        var left = models.length;
-        var failed = 0;
-        var settled = false;
-        var lastErr = '';
-        var raceTimer = setTimeout(function () {
-          if (settled) return;
-          settled = true;
-          reject(new Error('抢答超时'));
-        }, 30000);
-        models.forEach(function (model) {
-          askModel(model, messages).then(function (text) {
-            if (settled) return;
-            settled = true;
-            clearTimeout(raceTimer);
-            resolve({ text: text, channel: CHAT_LABELS[model] || model });
-          }).catch(function (err) {
-            lastErr = (err && err.message) || lastErr;
-            failed += 1;
-            if (!settled && failed >= left) {
-              settled = true;
-              clearTimeout(raceTimer);
-              reject(new Error(lastErr && /未登录|401/.test(lastErr) ? '请先登录后再对话' : (lastErr || '各路对话暂时不可用，请稍后重试')));
-            }
-          });
-        });
-      });
-    }
-    async function sendChat() {
-      if (chatBusy) return;
-      var input = $('chatInput');
-      var text = input ? String(input.value || '').trim() : '';
-      if (!text) { if (input) input.focus(); return; }
-      chatBusy = true;
-      $('chatSend').disabled = true;
-      if (input) input.value = '';
-      var channel = selectedChatChannel();
-      chatHistory.push({ role: 'user', text: text, at: Date.now() });
-      saveChat();
-      renderChat();
-      var waiting = appendTemp(wantsImageGen(text) ? '正在出图…' : '思考中…');
-      try {
-        if (wantsImageGen(text)) {
-          var imgResult = await generateHomeImage(text);
-          if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
-          chatHistory.push({
-            role: 'assistant',
-            text: '已按你的描述生成图片。还可继续描述微调，或去工坊做图生图/换背景。',
-            image: imgResult.url,
-            channel: imgResult.channel,
-            at: Date.now()
-          });
-          rollMemory(text, '已生成图片');
-          saveChat();
-          renderChat();
-          return;
-        }
-        var result = await raceChat(text, channel);
-        if (waiting && waiting.parentNode) waiting.parentNode.removeChild(waiting);
-        chatHistory.push({ role: 'assistant', text: result.text, channel: result.channel, at: Date.now() });
-        rollMemory(text, result.text);
-        saveChat();
-        renderChat();
-      } catch (err) {
-        if (waiting) {
-          waiting.classList.remove('wait');
-          waiting.textContent = (err && err.message) || '发送失败';
-        }
-      } finally {
-        chatBusy = false;
-        $('chatSend').disabled = false;
-      }
-    }
-
-    async function enterHome() {
-      show('home');
-      loadChat();
-      loadChatChannel();
-      setMemMode(memMode());
-      try {
-        const data = await api('/api/me');
-        cacheMe(data.user);
-        renderMe();
-        refreshQuota().catch(function () {});
-      } catch (e) {}
-    }
-
-    async function bootSession() {
+    async function enterApp() {
       restoreMe();
       if (me) renderMe();
-      await enterHome();
+      await enterGen();
     }
 
     $('authSwitch').onclick = () => {
@@ -813,7 +307,7 @@
         cacheMe(data.user);
         renderMe();
         refreshQuota().catch(function () {});
-        await enterHome();
+        await enterApp();
       } catch (err) {
         if (err.data && err.data.need_verify) {
           showVerify($('email').value.trim().toLowerCase());
@@ -835,7 +329,7 @@
         cacheMe(data.user);
         renderMe();
         refreshQuota().catch(function () {});
-        await enterHome();
+        await enterApp();
       } catch (err) {
         $('verifyErr').textContent = err.message;
       }
@@ -858,63 +352,6 @@
       }
     };
 
-    const TPLS = [
-      ['古风书生月下', '虚构成年书生立于庭院月下，青衫长袍，手持卷轴，月光清冷，写实摄影与电影剧照质感，全身构图，皮肤与布料纹理清晰，非动漫'],
-      ['赛博夜市', '虚构成年旅人走在霓虹夜市雨后街道，全息招牌与蒸汽小吃摊，潮湿地面反光，电影广角，未来市集氛围'],
-      ['写实肖像', '虚构成年角色半身写实肖像，伦勃朗式侧光，自然皮肤质感，古典画室背景，神情平静，摄影棚光影，非卡通'],
-      ['雨巷旗袍', '虚构成年女子撑油纸伞走在江南雨巷，旗袍剪裁端庄，青石板湿润反光，电影胶片色，全身中景'],
-      ['山巅旅人', '虚构成年旅人立于云海孤峰，写实摄影，广袖风衣，远山薄雾，清冷空气感，全身构图，非动漫'],
-      ['室内光影', '虚构成年角色坐在落地窗前阅读，午后阳光切进室内，体积光与柔和阴影，写实摄影，安静生活感'],
-      ['电影分镜', '虚构成年角色在列车车厢靠窗，过道景深虚化，电影分镜中景，自然光，纪实与剧情片质感'],
-      ['角色三视图', '虚构成年角色设定三视图，正面侧面背面并列，干净白底，服装结构清晰，概念设定图风格'],
-      ['图书馆午后', '虚构成年学者坐在木质图书馆长桌，阳光透过高窗，书堆与尘埃光柱，安静氛围，写实光影'],
-      ['雪原旅人', '虚构成年旅人立于雪原与松林之间，厚实冬装，远山淡蓝，清冷空气感，全身远中景'],
-      ['工坊静物', '虚构角色工作室一角，画架颜料与台灯暖光，静物构图，细节丰富，室内写实'],
-      ['星空屋顶', '虚构成年角色坐在老城区屋顶看星空，城市灯火在脚下，仰角构图，安静夜色，电影感']
-    ];
-    (function fillTpl() {
-      var g = $('tplGrid');
-      if (!g) return;
-      TPLS.forEach(function (item) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'tpl-btn';
-        b.textContent = item[0];
-        b.onclick = function () {
-          var input = $('chatInput');
-          if (input) {
-            input.value = '画一张：' + item[1];
-            input.focus();
-          }
-        };
-        g.appendChild(b);
-      });
-    })();
-
-    document.querySelectorAll('#memRow [data-mem]').forEach(function (btn) {
-      btn.onclick = function () { setMemMode(btn.getAttribute('data-mem')); };
-    });
-    if ($('chatChannel')) {
-      loadChatChannel();
-      $('chatChannel').onchange = function () { saveChatChannel($('chatChannel').value); };
-    }
-    $('chatSend').onclick = sendChat;
-    $('chatInput').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendChat();
-      }
-    });
-    $('clearChatBtn').onclick = function () {
-      if (!confirm('清空后本页不再记得这次对话。确定？')) return;
-      chatHistory = [];
-      memorySummary = '';
-      saveChat();
-      renderChat();
-    };
-    function goWorkshop() { document.querySelector('[data-tab="gen"]').click(); }
-    $('openWorkshopBtn').onclick = goWorkshop;
-    $('toImageTools').onclick = goWorkshop;
     $('logoutBtn').onclick = () => { setToken(''); me = null; genLoaded = false; show('auth'); };
     var chk = $('checkUpdateBtn');
     if (chk) chk.onclick = async function () {
@@ -931,7 +368,6 @@
       btn.onclick = async () => {
         const tab = btn.dataset.tab;
         if (tab === 'gen') await enterGen();
-        else if (tab === 'home') await enterHome();
         else show(tab);
       };
     });
@@ -1034,16 +470,22 @@
       }
     }
 
+    async function bootSession() {
+      restoreMe();
+      if (me) renderMe();
+      await enterGen();
+    }
+
     setTimeout(async () => {
       if (!token()) { show('auth'); return; }
       restoreMe();
       if (me) renderMe();
       if (sessionFresh()) {
-        await enterHome();
+        await enterGen();
         bootSession().catch(function () {});
         return;
       }
-      try { await bootSession(); } catch { await enterHome(); }
+      try { await bootSession(); } catch { await enterGen(); }
     }, 200);
   </script>
 </body>
