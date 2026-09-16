@@ -3107,6 +3107,41 @@
     status('正在取消', '等待服务器确认后即可开始下一次。', false);
   };
 
+  window.复制核心并打开Perchance = async function () {
+    var core = String(value('角色描述') || value('英文描述') || '').trim();
+    if (!core) {
+      status('请先填写核心描述', '填写后可复制描述并打开 Perchance 官方生成器。', false);
+      return;
+    }
+    // Explicit user action only: open the official page and copy the core for manual paste.
+    // Perchance blocks cross-site embedding and does not expose a server API here.
+    try { window.open('https://perchance.org/3klkwmez96', '_blank', 'noopener'); } catch (eOpen) {}
+    var copied = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(core);
+        copied = true;
+      }
+    } catch (eClipboard) {}
+    if (!copied) {
+      try {
+        var box = document.createElement('textarea');
+        box.value = core;
+        box.setAttribute('readonly', '');
+        box.style.position = 'fixed';
+        box.style.opacity = '0';
+        document.body.appendChild(box);
+        box.select();
+        copied = !!document.execCommand('copy');
+        document.body.removeChild(box);
+      } catch (eFallback) {}
+    }
+    status(
+      copied ? '已复制核心描述并打开 Perchance' : '已打开 Perchance，请手动复制核心描述',
+      copied ? '在 Perchance 粘贴后即可用官方网页生成。' : '由于浏览器权限未能写入剪贴板，描述仍保留在 SushiAI。',
+      false
+    );
+  };
   window.当前引擎 = function () { return resolveEngine(); };
   window.photorealPrompt = photorealPrompt;
   window.forcePhotorealPrompt = forcePhotorealPrompt;
