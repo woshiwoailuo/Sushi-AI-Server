@@ -3279,84 +3279,10 @@
   }
 
   function 用官方插件出图(竞速) {
-    // 应用内 Perchance：有嵌入插件则走官方画廊；否则回落到应用内免费通道（绝不 window.open 官网）
-    if (typeof update !== "function") {
+    if (typeof window.显示Perchance嵌入 === "function") {
+      window.显示Perchance嵌入();
       设平台提示("perchance");
-      用写实引擎出图("turbo");
-      用群体出图探测();
-      return;
     }
-    上次官方张数 = 0;
-    var 输出区 = document.getElementById("官方画廊") || document.getElementById("图像输出");
-    var 备用区 = document.getElementById("图像输出");
-    if (备用区 && !竞速) 备用区.innerHTML = "";
-    输出区.style.display = "";
-    var 状态区 = document.getElementById("状态提示");
-    var 执行生成 = document.getElementById("执行生成");
-    if (typeof update !== "function") {
-      输出区.innerHTML = "";
-      状态区.style.display = "flex";
-      状态区.innerHTML = '<div class="加载动画"></div><b>Perchance 官方组件未加载</b><p>已自动切换免费写实线路，请稍候。</p>';
-      记录失败原因("Perchance 官方组件未加载，已切换 Turbo 备用线路");
-      用写实引擎出图("turbo", 0);
-      return;
-    }
-    执行生成.value =
-      String(Date.now()) + "-" + String(Math.floor(Math.random() * 1000000));
-    try {
-      执行生成.dispatchEvent(new Event("input", { bubbles: true }));
-      执行生成.dispatchEvent(new Event("change", { bubbles: true }));
-    } catch (e) {}
-    状态区.style.display = "flex";
-    状态区.innerHTML =
-      '<div class="加载动画"></div>' +
-      (竞速
-        ? ("<b>正在抢出 " + 计划张数 + " 张</b><p>Turbo 已开跑，官方若先到也算。</p>")
-        : ("<b>正在用官方插件生成 " + 计划张数 + " 张</b><p>本轮只用这一路。</p>"));
-    try {
-      update(输出区);
-    } catch (错误) {
-      console.error(错误);
-      切换备用引擎("官方插件没有启动");
-      return;
-    }
-    var 检查次数 = 0;
-    if (生成检查器) clearInterval(生成检查器);
-    生成检查器 = setInterval(function () {
-      if (当前出图令牌 !== 出图令牌) {
-        clearInterval(生成检查器);
-        生成检查器 = null;
-        return;
-      }
-      检查次数++;
-      var 当前结果 = 输出区.querySelectorAll("iframe, img, canvas");
-      var 已出 = Math.min(当前结果.length, 计划张数);
-      while (上次官方张数 < 已出) {
-        记一张结果(true);
-        上次官方张数 += 1;
-        选定抢出平台("perchance");
-      }
-      刷新出图进度(已出, 已出);
-      if (当前结果.length > 0 && 检查次数 >= 2) {
-        状态区.style.display = "none";
-      }
-      if (当前结果.length >= 计划张数 && 检查次数 >= 3) {
-        结束本次生成("生成角色图片");
-      } else if (检查次数 >= 17) {
-        if (当前结果.length > 0) {
-          结束本次生成("生成角色图片");
-        } else if (竞速) {
-          /* Turbo / Horde 已在跑，官方迟到不再挡 */
-        } else if (!抢出已定) {
-          var 行 = document.getElementById("平台提示");
-          if (行) 行.textContent = "生图平台：官方超时，改抢 Turbo";
-          用写实引擎出图("turbo");
-          用群体出图探测();
-        } else {
-          结束本次生成("生成角色图片");
-        }
-      }
-    }, 600);
   }
 
   function 设平台提示(引擎) {
@@ -3448,7 +3374,7 @@
     }
   }
 </script>
-<script src="/assets/workshop-generation.js?v=1.1.29" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
+<script src="/assets/workshop-generation.js?v=1.1.30" onerror="window.__sushiLoadError='生图组件加载失败，请返回后重试';var s=document.getElementById('状态提示');if(s)s.textContent=window.__sushiLoadError;"></script>
 
 <style>
   :root {
@@ -4707,3 +4633,4 @@
 
 </body>
 </html>
+
