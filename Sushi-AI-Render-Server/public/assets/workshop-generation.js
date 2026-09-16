@@ -484,7 +484,8 @@
     return msgs.length ? msgs.join('；') : '自动抢出失败：各平台均未成功';
   }
 
-  var FREE_RACE_ENGINES = ['flux-realism', 'turbo', 'flux', 'sana', 'horde', 'perchance'];
+  var FREE_RACE_ENGINES = ['flux-realism', 'turbo', 'flux', 'sana', 'horde'];
+  var PERCHANCE_EMBED_URL = 'https://null.perchance.org/x9ryx0eh81';
 
   function normalizeEngineName(raw) {
     var name = String(raw || '').trim().toLowerCase();
@@ -503,77 +504,38 @@
     return map[name] || name;
   }
 
-  function nodeImageUrl(node) {
-    if (!node) return '';
-    if (node.tagName === 'IMG' && node.src) return node.src;
-    if (node.tagName === 'CANVAS' && typeof node.toDataURL === 'function') {
-      try { return node.toDataURL('image/png'); } catch (e) { return ''; }
+  function showPerchanceEmbed() {
+    var gallery = $('官方画廊');
+    var output = $('图像输出');
+    if (!gallery) {
+      status('Perchance 页面无法显示', '页面缺少官方画廊容器，请刷新后重试。', false);
+      return false;
     }
-    if (node.tagName === 'IFRAME') {
-      try {
-        var doc = node.contentDocument || (node.contentWindow && node.contentWindow.document);
-        if (!doc) return '';
-        var img = doc.querySelector('img');
-        return img && img.src ? img.src : '';
-      } catch (e) { return ''; }
-    }
-    return '';
+    if (output) output.replaceChildren();
+    gallery.replaceChildren();
+    gallery.hidden = false;
+    gallery.style.display = 'block';
+
+    var frame = document.createElement('iframe');
+    frame.src = PERCHANCE_EMBED_URL;
+    frame.title = 'Perchance 生图页面';
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads');
+    frame.setAttribute('allow', 'fullscreen; clipboard-write; camera; microphone');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.style.cssText = 'display:block;width:100%;min-height:760px;border:0;border-radius:16px;background:#0b1020;';
+    frame.addEventListener('load', function () {
+      status('Perchance 已在苏轼AI内打开', '请直接在下方页面输入描述并生成图片。', false);
+    }, { once: true });
+    gallery.appendChild(frame);
+    status('正在加载 Perchance', '首次打开可能需要完成 Perchance 的浏览器验证。', true);
+    return true;
   }
 
-  async function generatePerchance(run, prompt, index) {
-    // In-app Perchance/Perch only — never open perchance.org; no cool-down gate.
-    // Prompt comes from visible 核心描述 (source of truth); only touch hidden 安全英文 temporarily.
-    var safeBox = $('安全英文');
-    var prevSafe = safeBox ? safeBox.value : '';
-    var styleBox = $('艺术风格');
-    var prevStyle = styleBox ? styleBox.value : '';
-    try {
-      if (typeof window.update !== 'function') throw new Error('Perchance 组件未加载');
-      var gallery = $('官方画廊');
-      var trigger = $('执行生成');
-      if (!gallery || !trigger) throw new Error('Perchance 界面未就绪');
-      if (safeBox) safeBox.value = prompt;
-      // Also reinforce photoreal style token the plugin may read.
-      if (styleBox && !hasExplicitArtStyle(prompt)) {
-        styleBox.value = '写实摄影，电影剧照，自然皮肤质感，非卡通，非动漫，非插画，真实照片';
-      }
-      gallery.hidden = false;
-      var before = gallery.querySelectorAll('iframe, img, canvas').length;
-      trigger.value = String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000)) + '-p' + String(index || 0);
-      try {
-        trigger.dispatchEvent(new Event('input', { bubbles: true }));
-        trigger.dispatchEvent(new Event('change', { bubbles: true }));
-      } catch (e) {}
-      try { window.update(gallery); } catch (error) { throw new Error('Perchance 未能启动'); }
-      var deadline = Date.now() + 45000;
-      while (Date.now() < deadline) {
-        ensureActive(run);
-        // Another free-race engine already won — exit quietly, do NOT enter cool-down.
-        if (run && run._raceSettled) throw new Error('lost-race');
-        var nodes = gallery.querySelectorAll('iframe, img, canvas');
-        if (nodes.length > before) {
-          var i = nodes.length - 1;
-          for (; i >= before; i -= 1) {
-            var url = nodeImageUrl(nodes[i]);
-            if (url && String(url).length > 32) {
-              perchanceCooldownUntil = 0;
-              return { url: url, engine: 'perchance' };
-            }
-          }
-        }
-        await pause(run, 600);
-      }
-      throw new Error('Perchance 出图超时');
-    } catch (error) {
-      var msg = String(error && error.message || error || '');
-      // lost-race / cancel: exit quietly. Cool-down cancelled — markPerchanceFailure is a no-op.
-      if (!error || /已取消生成|短暂冷却中|lost-race/.test(msg)) throw error;
-      markPerchanceFailure(msg);
-      throw error;
-    } finally {
-      if (safeBox) safeBox.value = prevSafe;
-      if (styleBox) styleBox.value = prevStyle;
-    }
+  window.显示Perchance嵌入 = showPerchanceEmbed;
+
+  async function generatePerchance() {
+    showPerchanceEmbed();
+    return { embedded: true, engine: 'perchance' };
   }
 
   async function generateOne(run, prompt, index) {
@@ -713,6 +675,7 @@
         } else {
           var result = await generateOne(run, run.payload.prompt, run.completed);
           ensureActive(run);
+          if (result && result.embedded) return;
           status('图片已生成，正在加载', '', true);
           await addImage(run, result, result.engine);
         }
@@ -755,6 +718,11 @@
     var description = lastEdited === '英文描述' ? value('英文描述') : value('角色描述');
     if (!description) description = value('角色描述') || value('英文描述');
     if (!description) { status('请先填写画面描述', '也可以点击“随机生成图片”。', false); $('角色描述').focus(); return Promise.resolve(); }
+    if (resolveEngine() === 'perchance') {
+      showPerchanceEmbed();
+      window.设平台提示('perchance');
+      return Promise.resolve();
+    }
     var run = newRun(description, [1, 3, 5, 7].includes(Number(value('生成数量'))) ? Number(value('生成数量')) : 1);
     run.backgroundOnly = !!($('只换背景') && $('只换背景').checked);
     if ($('纯背景出图') && $('纯背景出图').checked) {
@@ -852,7 +820,7 @@
     else if (engine === 'flux-realism') tip.textContent = 'Flux写实 · 人像优先免费通道';
     else if (engine === 'sana') tip.textContent = 'Sana · 中文友好免费通道';
     else if (engine === 'perchance') tip.textContent = 'Perch / Perchance · 应用内生成（不跳转官网）';
-    else tip.textContent = '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde / Perchance 全平台同时开跑，先到先得';
+    else tip.textContent = '自动抢出 · Turbo / Flux / Flux写实 / Sana / Horde 同时开跑，先到先得';
   };
 
   async function init() {
@@ -914,3 +882,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
