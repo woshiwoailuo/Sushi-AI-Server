@@ -65,6 +65,15 @@ test('HTTP login, native ticket bridge, image jobs and SQLite quota accounting',
   assert.match(bridge.headers.get('set-cookie'), /HttpOnly/);
   const cookie = { Cookie: bridge.headers.get('set-cookie').split(';')[0] };
   assert.equal((await request('/api/images/config', 'GET', undefined, cookie)).status, 200);
+  const callsBeforeUnsupported = upstreamCalls;
+  for (const model of ['perchance', 'turbo', 'flux', 'flux-realism']) {
+    const chatImage = await request('/api/chat/image', 'POST', {model, prompt:'A cup'}, cookie);
+    assert.equal(chatImage.status, 422);
+    const workshopImage = await request('/api/workshop/image?model=' + model + '&prompt=cup', 'GET', undefined, cookie);
+    assert.equal(workshopImage.status, 422);
+    assert.match((await workshopImage.json()).error, /未切换平台/);
+  }
+  assert.equal(upstreamCalls, callsBeforeUnsupported, 'unsupported providers never submit another provider');
   const proxyImage = await request('/api/workshop/horde-image', 'POST', {
     prompt: 'a ceramic cup on a wooden table', width: 512, height: 512,
     style: 'real', enrichPrompt: false,
