@@ -129,6 +129,8 @@ async function setup(t, handler, imageFails = false, imageConfig = null) {
   if (engine) {
     engine.value = 'horde-real';
   }
+  // API-backed edit tests explicitly select Horde, never rely on cross-provider fallback.
+  w.document.getElementById('图生图平台').value = 'horde-real';
   return { w, calls, errors, text: () => w.document.getElementById('状态提示').textContent };
 }
 
@@ -1772,12 +1774,12 @@ test('改动 payload includes source_image from memory step image', async t => {
   f.w.document.getElementById('参考图地址').value = '';
   f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
   f.w.document.getElementById('出图引擎').value = 'perchance';
-  f.w.document.getElementById('图生图平台').value = 'perchance';
-  f.w.用户选定图生图平台 = 'perchance';
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
   f.w.同步生图方式默认(true);
   f.w.切换生图方式('改动');
   assert.equal(f.w.读取生图方式(), '改动');
-  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'horde-real');
+  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'perchance');
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   assert.ok(body.source_image, '改动必须带 source_image');
@@ -1809,13 +1811,13 @@ test('改动 ON ⇒ payload has source_image + denoising in pose band; 核心描
   f.w.document.getElementById('角色描述').value = core;
   f.w.document.getElementById('参考图地址').value = PNG;
   f.w.document.getElementById('图生图强度').value = '0.52';
-  f.w.document.getElementById('图生图平台').value = 'perchance';
-  f.w.用户选定图生图平台 = 'perchance';
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
   f.w.document.getElementById('出图引擎').value = 'perchance';
   f.w.同步生图方式默认(true);
   f.w.切换生图方式('改动');
   assert.equal(f.w.读取生图方式(), '改动');
-  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'horde-real');
+  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'perchance');
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   assert.ok(body.source_image, '改动必须带 source_image');
