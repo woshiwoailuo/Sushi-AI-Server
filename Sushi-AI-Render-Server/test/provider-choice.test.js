@@ -17,7 +17,7 @@ test('manual image choice survives both successful and failed generation',async(
   const calls=[];const run={engine,payload:{},controller:new AbortController()};
   const dispatch=async(name)=>{calls.push(name);if(fail)throw Error('upstream unavailable');return {engine:name,url:'https://example.com/image.png'}};
   const ctx={HORDE_BUDGET_MS:30000,engineFamily:e=>e==='horde-anime'||e==='sana'?'anime':'real',forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:(p)=>p,stripInjectedFemaleDefaults:(p)=>p,applyMaleGenderLocks:(p)=>p,stripExposureBiasDefaults:(p)=>p,applyClothingFidelityLocks:(p)=>p,applyCoreActionCoverage:(p)=>p,finalizeOutboundCoreLocks:(p)=>p,applyCoreFidelityLead:(p)=>p,withAdultDirective:p=>p,hasSmartModifier:()=>false,minimalOutboundPrompt:p=>p,ensureNoTextOnImage:p=>p,applyLocalEditOutbound:p=>p,value:()=>'',
-   runWithProviderBudget:(r,e,task)=>task(r.controller.signal),generatePerchance:()=>dispatch('perchance'),generateHorde:(r,p,i,s,e)=>dispatch(e),generatePollinations:(r,p,i,e)=>dispatch(e)};
+   applyClarityQuality:(p,n)=>({prompt:p,negative:n}),runWithProviderBudget:(r,e,task)=>task(r.controller.signal),generatePerchance:()=>dispatch('perchance'),generateHorde:(r,p,i,s,e)=>dispatch(e),generatePollinations:(r,p,i,e)=>dispatch(e)};
   vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
   if(fail)await assert.rejects(ctx.generateOne(run,'a landscape',0),/upstream unavailable/);else await ctx.generateOne(run,'a landscape',0);
   assert.deepEqual(calls,[engine]);assert.equal(run.engine,engine);
@@ -40,6 +40,12 @@ test('blocked official Perch reports failure without relaying Horde',async()=>{
 test('unsupported reference image remains on selected provider',async()=>{
  const ctx={hasSmartModifier:()=>false,minimalOutboundPrompt:p=>p,ensureNoTextOnImage:p=>p,forcePhotorealPrompt:p=>p,applyEastAsianEthnicity:p=>p,stripInjectedFemaleDefaults:(p)=>p,applyMaleGenderLocks:(p)=>p,stripExposureBiasDefaults:(p)=>p,applyClothingFidelityLocks:(p)=>p,applyCoreActionCoverage:(p)=>p,finalizeOutboundCoreLocks:(p)=>p,applyCoreFidelityLead:(p)=>p,withAdultDirective:p=>p,applyLocalEditOutbound:p=>p,engineFamily:()=>'real',value:()=>''};vm.createContext(ctx);vm.runInContext(extract(generation,'generateOne'),ctx);
  await assert.rejects(ctx.generateOne({engine:'sana',payload:{sourceImage:'image'}},'landscape',0),/未切换平台/);
+ await assert.rejects(ctx.generateOne({engine:'perchance',payload:{sourceImage:'image'}},'landscape',0),/未切换平台/);
+});
+test('image-to-image selection never resolves to another provider',()=>{
+ const ctx={};vm.createContext(ctx);
+ vm.runInContext(extract(generation,'normalizeEngineName')+'\n'+extract(generation,'resolveImg2imgEngine'),ctx);
+ for(const provider of ['perchance','sana','horde-real','horde-anime']) assert.equal(ctx.resolveImg2imgEngine(provider),provider);
 });
 test('workshop submits selected chat model',async()=>{
  let used;const ctx={setTimeout,clearTimeout,规范化对话通道:x=>x,问花粉:async(q,m)=>{used=m;return '回答'}};
