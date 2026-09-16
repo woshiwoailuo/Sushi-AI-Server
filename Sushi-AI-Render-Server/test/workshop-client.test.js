@@ -130,7 +130,7 @@ test('the current Chinese prompt is translated before submission, never replaced
   assert.doesNotMatch(payload.prompt, /A stale unrelated scene/);
 });
 
-test('failed translation preserves the current text, and perchance stays selectable in-app (no official redirect)', async t => {
+test('failed translation preserves the current text, and perchance opens the official embed in-app', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   f.w.document.getElementById('角色描述').value = '窗边的小猫';
   f.w.调用开源翻译 = async () => { throw new Error('translation offline'); };
@@ -160,7 +160,12 @@ test('failed translation preserves the current text, and perchance stays selecta
   assert.equal(opened.length, 0, 'must not open perchance.org');
   assert.equal(box.value, 'perchance', 'explicit perchance selection must be kept');
   assert.equal(f.w.document.querySelectorAll('#状态提示 a[href*="perchance.org"]').length, 0);
-  assert.ok(f.w.document.querySelector('#图像输出 img') || f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length >= posts);
+  const frame = f.w.document.querySelector('#官方画廊 iframe');
+  assert.ok(frame, 'official Perchance iframe must be embedded');
+  assert.equal(frame.src, 'https://null.perchance.org/x9ryx0eh81');
+  assert.match(frame.getAttribute('sandbox'), /allow-scripts/);
+  assert.match(frame.getAttribute('sandbox'), /allow-same-origin/);
+  assert.equal(f.calls.filter(c => c.method === 'POST' && String(c.url).includes('/api/images')).length, posts);
   assert.doesNotMatch(f.text(), /在 Perchance 官网生成/);
 });
 
@@ -186,7 +191,7 @@ test('auto race prefers a free platform without requiring official redirect', as
   assert.equal(opened.length, 0);
   assert.ok(f.w.document.querySelector('#图像输出 img'));
   const engine = f.w.document.querySelector('#图像输出 img').getAttribute('data-engine');
-  assert.ok(['turbo', 'flux', 'flux-realism', 'sana', 'horde', 'perchance'].includes(engine), 'engine=' + engine);
+  assert.ok(['turbo', 'flux', 'flux-realism', 'sana', 'horde'].includes(engine), 'engine=' + engine);
   // Platform picker must remain selectable after a successful run.
   assert.equal(f.w.document.getElementById('出图引擎').disabled, false);
 });
@@ -273,18 +278,18 @@ test('random generate fills rich core while managed display stays simple two-lin
   assert.match(payload.prompt, /photoreal|shallow depth of field/i);
 });
 
-test('perch/perchance is selectable and included in the free race list', async t => {
+test('perch/perchance is selectable and embeds only the requested official generator', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎');
   assert.ok(box.querySelector('option[value="perchance"]'), 'perchance option required');
   box.value = 'perchance';
   assert.equal(f.w.当前引擎(), 'perchance');
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /FREE_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
+  assert.doesNotMatch(src, /FREE_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
+  assert.match(src, /PERCHANCE_EMBED_URL = 'https:\/\/null\.perchance\.org\/x9ryx0eh81'/);
   assert.match(src, /name === 'perch'/);
   // Canonical select id is perchance; perch is accepted as an alias in normalizeEngineName.
   assert.match(src, /官方' \|\| name === 'perch'/);
-  assert.match(src, /never free-race fallback/);
   assert.match(src, /function photorealPrompt/);
   const opened = [];
   f.w.open = (url) => { opened.push(String(url)); return null; };
@@ -300,11 +305,14 @@ test('perch/perchance is selectable and included in the free race list', async t
     }
     return realFetch(url, options);
   };
-  // Without in-app Perchance plugin, explicit selection should fail closed (no race / no window.open).
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must never open perchance.org');
   assert.equal(box.value, 'perchance');
   assert.equal(pollinationHits.length, 0, 'explicit perchance must not fall back into free race');
+  const frame = f.w.document.querySelector('#官方画廊 iframe');
+  assert.ok(frame);
+  assert.equal(frame.src, 'https://null.perchance.org/x9ryx0eh81');
+  assert.match(frame.getAttribute('allow'), /fullscreen/);
 });
 
 
@@ -349,17 +357,12 @@ test('workshop source defaults to in-app perchance as the primary route', () => 
 });
 
 
-test('perchance cool-down cancelled: explicit selection retries without UI gate or free-race fallback', async t => {
+test('perchance can be reopened without cooldown and never falls back to another provider', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎');
   box.value = 'perchance';
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /PERCHANCE_COOLDOWN_MS = 0/);
-  assert.match(src, /markPerchanceFailure/);
-  assert.match(src, /function isPerchanceCooling\(\) \{\s*return false;/);
-  assert.match(src, /cool-down cancelled|no cool-down gate/i);
-  assert.doesNotMatch(src, /Perchance 短暂冷却中/);
-  assert.match(src, /never free-race fallback/);
+  assert.match(src, /PERCHANCE_EMBED_URL/);
   assert.equal(f.w.当前引擎(), 'perchance');
   const opened = [];
   f.w.open = (url) => { opened.push(String(url)); return null; };
@@ -378,11 +381,13 @@ test('perchance cool-down cancelled: explicit selection retries without UI gate 
   assert.equal(opened.length, 0, 'must never open perchance.org');
   assert.equal(box.value, 'perchance');
   assert.equal(pollinationHits.length, 0, 'explicit perchance must not fall back into free race');
+  assert.equal(f.w.document.querySelectorAll('#官方画廊 iframe').length, 1);
   const tip1 = f.w.document.getElementById('状态提示').textContent || '';
   assert.doesNotMatch(tip1, /冷却中/);
   await f.w.开始生成();
   assert.equal(pollinationHits.length, 0, 'retry still must not free-race');
   assert.equal(opened.length, 0);
+  assert.equal(f.w.document.querySelectorAll('#官方画廊 iframe').length, 1, 'retry replaces the embed instead of duplicating it');
   const tip2 = f.w.document.getElementById('状态提示').textContent || '';
   assert.doesNotMatch(tip2, /冷却中/);
 });
@@ -471,23 +476,26 @@ test('清空描述 clears core and linked prompt fields but not gallery', async 
   assert.equal(f.w.document.querySelectorAll('#图像输出 img').length, 1, 'gallery untouched');
 });
 
-test('generatePerchance source does not assign enriched prompt into 英文描述', async t => {
+test('perchance embed leaves all description fields untouched', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('出图引擎').value = 'perchance';
+  f.w.document.getElementById('角色描述').value = '用户核心描述';
+  f.w.document.getElementById('英文描述').value = 'user English description';
+  f.w.document.getElementById('安全英文').value = 'existing hidden value';
+  await f.w.开始生成();
+  assert.equal(f.w.document.getElementById('角色描述').value, '用户核心描述');
+  assert.equal(f.w.document.getElementById('英文描述').value, 'user English description');
+  assert.equal(f.w.document.getElementById('安全英文').value, 'existing hidden value');
   const src = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
-  assert.match(src, /only touch hidden 安全英文|source of truth/);
-  assert.doesNotMatch(src, /engBox\.value\s*=\s*prompt/);
-  assert.match(src, /safeBox\.value\s*=\s*prompt/);
+  assert.doesNotMatch(src, /safeBox\.value\s*=\s*prompt/);
 });
 
 
-test('auto-race loss must not hang Perchance and cool-down remains cancelled', async t => {
+test('auto race excludes the interactive Perchance iframe channel', async t => {
   const src = fs.readFileSync(path.join(__dirname, '../public/assets/workshop-generation.js'), 'utf8');
   assert.match(src, /run\._raceSettled = true/);
-  assert.match(src, /if \(run && run\._raceSettled\) throw new Error\('lost-race'\)/);
   assert.match(src, /lost-race/);
-  assert.match(src, /PERCHANCE_COOLDOWN_MS = 0/);
-  assert.match(src, /perchanceCoolHint/);
-  assert.doesNotMatch(src, /PERCHANCE_COOLDOWN_MS = 15000/);
-  assert.doesNotMatch(src, /PERCHANCE_COOLDOWN_MS = 30000/);
+  assert.doesNotMatch(src, /FREE_RACE_ENGINES = \[[^\]]*['"]perchance['"]/);
 });
 
 test('智能修饰 writes visible core modifiers and generation uses that text', async t => {
@@ -528,3 +536,4 @@ test('photorealPrompt helper still available for style-aware enrich logic', asyn
   assert.match(plain, /^photorealistic RAW photo/i);
   assert.match(plain, /not anime|not manga|not cartoon/i);
 });
+
