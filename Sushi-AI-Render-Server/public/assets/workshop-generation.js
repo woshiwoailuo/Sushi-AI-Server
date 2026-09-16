@@ -2059,17 +2059,10 @@
         }
       }
     }
-    // Prefer the same-origin proxy: it uses the configured Horde account and
-    // avoids the several-minute anonymous queue. If that proxy is unavailable,
-    // remain on the same Horde/Perch route and fall back to direct anonymous use.
+    // Select one transport per run. Never submit an anonymous duplicate after
+    // a server task fails or its result becomes uncertain.
     if (SERVER_HORDE_AVAILABLE && !(run.localEdit || (run.payload && run.payload.sourceImage))) {
-      try {
-        return await generateHordeViaServer(run, prompt, index, signal, reported);
-      } catch (serverError) {
-        lastError = serverError;
-        if (run.cancelled || (serverError && serverError.name === 'AbortError')) throw serverError;
-        status('服务器通道暂时未完成，继续同平台生成', '不会更换你选择的出图平台。', true);
-      }
+      return await generateHordeViaServer(run, prompt, index, signal, reported);
     }
     for (var attempt = 0; attempt < 8; attempt += 1) {
       ensureActive(run);
@@ -2442,6 +2435,7 @@
 
   async function generateOne(run, prompt, index) {
     var engine = run.engine;
+    if (run.payload.sourceImage && engine === 'perchance') throw new Error('Perchance 当前未接入图生图，未切换平台。');
     if (run.payload.sourceImage && engine === 'sana') throw new Error('Sana 当前未接入图生图，未切换平台。');
     var coreHint = String(run.coreSource || '') || (typeof value === 'function' ? (value('角色描述') || '') : '');
     var localEdit = !!(run.localEdit && run.payload && run.payload.sourceImage);
@@ -2469,14 +2463,7 @@
   }
 
   function resolveImg2imgEngine(selected) {
-    var name = normalizeEngineName(selected);
-    // Perchance / Sana cannot img2img — force Horde so 改动 keeps source_image path.
-    if (!name || name === 'perchance' || name === 'sana' || name === 'turbo' || name === 'flux' || name === 'flux-realism') {
-      var txt = normalizeEngineName(value('出图引擎'));
-      if (engineFamily(txt) === 'anime' || name === 'sana') return 'horde-anime';
-      return 'horde-real';
-    }
-    return name;
+    return normalizeEngineName(selected);
   }
 
   async function materializeSourceImage(src) {
