@@ -214,7 +214,7 @@
         credentials: 'include',
         cache: 'no-store',
         headers: authHeaders(),
-        body: JSON.stringify({ core: core, anime: !!anime, model: model, k: workshopTicketId(), img2img: !!(run.payload && run.payload.sourceImage), localEdit: !!run.localEdit }),
+        body: JSON.stringify({ core: core, anime: !!anime, smart: hasSmartModifier(), model: model, k: workshopTicketId(), img2img: !!(run.payload && run.payload.sourceImage), localEdit: !!run.localEdit }),
         signal: run.controller.signal
       });
       var data = await response.json().catch(function () { return {}; });
@@ -1888,11 +1888,6 @@
     if (run.localEdit && isPoseGestureEdit(run.coreSource || (run.payload && run.payload.prompt) || '')) {
       if (!(Number(params.cfg_scale) > 7)) params.cfg_scale = 8;
     }
-    // Gender/clothing locks need slightly stronger CFG so model priors cannot override leading tokens
-    var lockCore = String(run.coreSource || '');
-    if (isMaleOnlyCore(lockCore) || (!hasNudeIntent(lockCore) && !hasExposureIntent(lockCore))) {
-      if (!(Number(params.cfg_scale) >= 8)) params.cfg_scale = Math.max(Number(params.cfg_scale) || 7, 8);
-    }
     var seed = run.payload && run.payload.seed;
     if (seed !== '' && seed != null) {
       if (run.localEdit) params.seed = String(Number(seed));
@@ -2004,6 +1999,22 @@
     }
   }
 
+  async function generateHordeViaServer(run, prompt, index, signal, engineName) {
+    var reported = engineName === 'perchance' ? 'perchance' : (engineName === 'horde-anime' ? 'horde-anime' : 'horde-real');
+    var seed = run.payload && run.payload.seed;
+    var body = Object.assign({}, run.payload || {}, {
+      prompt: String(prompt || '').slice(0, 1600),
+      style: reported === 'horde-anime' ? 'anime' : 'real',
+      enrichPrompt: run.enrichPrompt !== false
+    });
+    if (seed !== '' && seed != null) body.seed = String(Number(seed) + (index || 0));
+    run.job = await api('', { method: 'POST', body: body, signal: signal });
+    ensureActive(run);
+    var done = await poll(run, run.job, signal);
+    if (!done || !done.image || !done.image.url) throw new Error('服务器生图通道没有返回图片');
+    return { url: done.image.url, engine: reported };
+  }
+
   async function generateHorde(run, prompt, index, providerSignal, engineName) {
     var reported = engineName === 'perchance' ? 'perchance' : (engineName === 'horde-anime' ? 'horde-anime' : 'horde-real');
     var styleName = reported === 'horde-anime' ? 'anime' : 'real';
@@ -2047,6 +2058,11 @@
           throw new Error('改动需要可用的参考图（base64）。请先生成至少一张图，或点记忆路线最大编号（末步）后再改动');
         }
       }
+    }
+    // Select one transport per run. Never submit an anonymous duplicate after
+    // a server task fails or its result becomes uncertain.
+    if (SERVER_HORDE_AVAILABLE && !(run.localEdit || (run.payload && run.payload.sourceImage))) {
+      return await generateHordeViaServer(run, prompt, index, signal, reported);
     }
     for (var attempt = 0; attempt < 8; attempt += 1) {
       ensureActive(run);
@@ -2138,9 +2154,10 @@
   var REAL_RACE_ENGINES = ['perchance'];
   var ANIME_RACE_ENGINES = [];
   var FREE_RACE_ENGINES = REAL_RACE_ENGINES;
+  var SERVER_HORDE_AVAILABLE = false;
 
   function applyImageConfig(cfg) {
-    void cfg;
+    SERVER_HORDE_AVAILABLE = !!(cfg && cfg.authenticatedHorde);
     var glmOpt = document.querySelector('#出图引擎 option[value="glm"]');
     var glmAdmin = document.querySelector('#管理默认平台 option[value="glm"]');
     if (glmOpt && glmOpt.parentNode) glmOpt.parentNode.removeChild(glmOpt);
@@ -2283,10 +2300,20 @@
   }
 
   async function perchanceOfficialJson(url, signal) {
-    var response = await fetch(url, { method: 'GET', cache: 'no-store', signal: signal });
+    var response;
+    try {
+      response = await fetch(url, { method: 'GET', cache: 'no-store', signal: signal });
+    } catch (fetchError) {
+      if (fetchError && fetchError.name === 'AbortError') throw fetchError;
+      var networkError = new Error('Perchance 官方接口连接失败，未更换平台');
+      networkError.code = 'PERCH_NETWORK';
+      throw networkError;
+    }
+    var challenged = response.status === 403
+      && response.headers && /challenge/i.test(String(response.headers.get('cf-mitigated') || ''));
     var text = await response.text();
-    if (!text || text.trim().charAt(0) === '<' || /Just a moment|cf-mitigated|cloudflare/i.test(text)) {
-      var blocked = new Error('官方出图接口被拦截，未转接其他平台');
+    if (challenged || !text || text.trim().charAt(0) === '<' || /Just a moment|cf-mitigated|cloudflare/i.test(text)) {
+      var blocked = new Error('Perchance 官方接口要求 Cloudflare 验证（HTTP 403），未更换平台');
       blocked.code = 'PERCH_CF';
       blocked.status = response.status;
       throw blocked;
@@ -2315,17 +2342,12 @@
       '按所选 Perchance 通道出图，失败不更换平台。',
       true
     );
-    var key = '';
-    try {
-      var verified = await perchanceOfficialJson(
-        'https://image-generation.perchance.org/api/verifyUser?thread=0&__cacheBust=' + Math.random(),
-        signal
-      );
-      key = (verified && verified.userKey) || '';
-    } catch (error) {
-      ensureActive(run);
-      if (run.cancelled || (error && error.name === 'AbortError')) throw error;
-    }
+    var verified = await perchanceOfficialJson(
+      'https://image-generation.perchance.org/api/verifyUser?thread=0&__cacheBust=' + Math.random(),
+      signal
+    );
+    var key = (verified && verified.userKey) || '';
+    if (!key) throw new Error('Perchance 官方校验未返回 userKey，未更换平台');
     var params = new URLSearchParams({
       prompt: String(prompt || ''),
       negativePrompt: String((run.payload && run.payload.negativePrompt) || ''),
@@ -2363,7 +2385,7 @@
 
   async function generatePerchance(run, prompt, index, providerSignal) {
     // Do not embed perchance.org. Do not window.open. Opening official site limits first usually does NOT unlock in-app embed (session/cookies do not transfer into iframe).
-    // Try official generate first; if the official host blocks this origin, in-app photoreal still displays.
+    // Perchance remains an exclusive route: never disguise another provider as Perchance.
     if (typeof window.update === 'function' && !(run.payload && run.payload.sourceImage)) {
       try {
         return await generatePerchancePlugin(run, prompt, index, 5000);
@@ -2373,7 +2395,9 @@
       }
     }
     var parent = providerSignal || (run && run.controller && run.controller.signal);
-    var officialSignal = signalWithTimeout(parent, 1200);
+    // 1.2 seconds aborted healthy official generations before they could return.
+    // Keep the user's 30-second provider budget while still allowing cancellation.
+    var officialSignal = signalWithTimeout(parent, 30000);
     try {
       var official = await generatePerchanceOfficial(run, prompt, index, officialSignal);
       if (officialSignal.__clearTimeout) officialSignal.__clearTimeout();
@@ -2383,45 +2407,48 @@
       var officialMsg = String(error && error.message || error || '');
       if (!error || /已取消生成|lost-race/.test(officialMsg)) throw error;
       if (parentAborted(parent, run)) throw error;
-      status(
-        '正在出图 · 第 ' + ((run.completed || 0) + 1) + '/' + (run.total || 1) + ' 张',
-        '应用内直出，有结果立即显示。',
-        true
-      );
-      var result = await generateHorde(run, prompt, index, providerSignal, 'perchance');
-      return { url: result.url, engine: 'perchance' };
+      if (error && error.name === 'AbortError') {
+        var timeoutError = new Error('Perchance 官方接口 30 秒内未返回图片，未更换平台');
+        timeoutError.code = 'PERCH_TIMEOUT';
+        throw timeoutError;
+      }
+      throw error;
     }
+  }
+
+  var CLARITY_QUALITY_LEAD =
+    'tack-sharp focus across the entire image, crisp detailed face and eyes, sharp skin and hair detail, high-resolution, clear foreground and background, no blur, no soft focus, no depth-of-field blur, no motion blur';
+  var CLARITY_NEGATIVE =
+    'blur, blurry, out of focus, soft focus, soft image, motion blur, depth of field blur, bokeh blur, smeared details, hazy image, low resolution, pixelated, facial blur, blurry face, blurry eyes';
+
+  function applyClarityQuality(prompt, negative) {
+    var text = String(prompt || '').replace(/\s+/g, ' ').trim();
+    if (!/tack-sharp focus across the entire image/i.test(text)) {
+      text = (text ? text + ', ' : '') + CLARITY_QUALITY_LEAD;
+    }
+    var neg = String(negative || '').replace(/\s+/g, ' ').trim();
+    if (!/\bblur(?:ry)?\b|out of focus|soft focus/i.test(neg)) {
+      neg = (neg ? neg + ', ' : '') + CLARITY_NEGATIVE;
+    }
+    return { prompt: text, negative: neg };
   }
 
   async function generateOne(run, prompt, index) {
     var engine = run.engine;
+    if (run.payload.sourceImage && engine === 'perchance') throw new Error('Perchance 当前未接入图生图，未切换平台。');
     if (run.payload.sourceImage && engine === 'sana') throw new Error('Sana 当前未接入图生图，未切换平台。');
     var coreHint = String(run.coreSource || '') || (typeof value === 'function' ? (value('角色描述') || '') : '');
     var localEdit = !!(run.localEdit && run.payload && run.payload.sourceImage);
     var smartOn = hasSmartModifier();
     run.enrichPrompt = smartOn;
-    if (engineFamily(engine) === 'anime') {
-      // Honor anime channel wording; still reinject East Asian cues from core when present.
-      prompt = applyEastAsianEthnicity(String(prompt || ''), coreHint);
-      prompt = stripInjectedFemaleDefaults(prompt, coreHint);
-      prompt = applyMaleGenderLocks(prompt, coreHint);
-      prompt = stripExposureBiasDefaults(prompt, coreHint);
-      prompt = applyClothingFidelityLocks(prompt, coreHint);
-      prompt = applyCoreActionCoverage(prompt, coreHint);
-      prompt = applyCoreFidelityLead(prompt);
-      prompt = ensureNoTextOnImage(prompt);
-    } else if (smartOn) {
-      prompt = forcePhotorealPrompt(prompt, { core: coreHint, localEdit: localEdit });
-      prompt = ensureNoTextOnImage(prompt);
-    } else {
-      // 未智能修饰：以核心描述翻译为主，不堆写实修饰词库
-      prompt = minimalOutboundPrompt(prompt, { core: coreHint, localEdit: localEdit });
-    }
-    // Adult/NSFW instructions from core + hidden 成人功能状态 must survive photoreal enrich.
-    prompt = withAdultDirective(prompt, { core: coreHint });
+    // The structured prompt is the detailed interpretation of the core. Do not
+    // rewrite it with automatic ethnicity, gender, clothing, exposure, framing,
+    // action, or style locks before sending it to the image provider.
+    prompt = String(prompt || coreHint).replace(/\s+/g, ' ').trim();
     if (localEdit) prompt = applyLocalEditOutbound(prompt, coreHint, { img2img: true, force: true });
-    // Gender + clothing locks FIRST (re-assert after adult/photoreal so model priors cannot dilute)
-    prompt = finalizeOutboundCoreLocks(prompt, coreHint);
+    var clarity = applyClarityQuality(prompt, run.payload.negativePrompt);
+    prompt = clarity.prompt;
+    run.payload.negativePrompt = clarity.negative;
     run.payload.prompt = prompt;
     return runWithProviderBudget(run, engine, function (signal) {
       if (engine === 'perchance') return generatePerchance(run, prompt, index, signal);
@@ -2436,14 +2463,7 @@
   }
 
   function resolveImg2imgEngine(selected) {
-    var name = normalizeEngineName(selected);
-    // Perchance / Sana cannot img2img — force Horde so 改动 keeps source_image path.
-    if (!name || name === 'perchance' || name === 'sana' || name === 'turbo' || name === 'flux' || name === 'flux-realism') {
-      var txt = normalizeEngineName(value('出图引擎'));
-      if (engineFamily(txt) === 'anime' || name === 'sana') return 'horde-anime';
-      return 'horde-real';
-    }
-    return name;
+    return normalizeEngineName(selected);
   }
 
   async function materializeSourceImage(src) {
@@ -3049,22 +3069,7 @@
     var simpleEn = item.英文 || '';
     var core = item.核心 || simpleZh;
     var richEn = item.详英 || simpleEn;
-    // 随机发明着装已在 扩写随机核心 / 本地池写入；此处仅净化详英出站，不改写可见核心。
-    try {
-      var inventSrc = String(core || '') + ' ' + String(richEn || '');
-      var hasExp = typeof hasExposureIntent === 'function' ? hasExposureIntent(inventSrc) : /lingerie|nude|naked|内衣|裸体|暴露|性感/i.test(inventSrc);
-      if (!hasExp) {
-        if (typeof stripExposureBiasDefaults === 'function') {
-          richEn = stripExposureBiasDefaults(richEn, core);
-        }
-        if (!/ordinary everyday clothing|fully clothed|clothing matching the core/i.test(richEn)
-            && !(typeof hasClothingCue === 'function' ? hasClothingCue(core) : /衣|衫|sweater|coat|wearing|针织|围裙/i.test(core))) {
-          richEn = String(richEn || '') + ', wearing ordinary everyday clothing, fully clothed, modest attire, not lingerie, not nude';
-        } else if (!/not lingerie|not nude|fully clothed/i.test(richEn)) {
-          richEn = String(richEn || '') + ', fully clothed as described, not lingerie, not nude';
-        }
-      }
-    } catch (eClothRand) {}
+    // 随机生成不决定衣着或暴露程度；只保留随机项自身明确写出的核心事实。
     randomPair = {
       chinese: core,
       english: richEn,

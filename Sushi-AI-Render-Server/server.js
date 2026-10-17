@@ -681,6 +681,7 @@ function imageRoute(handler) {
 app.get('/api/images/config', authMiddleware, imageAccount, (req, res) => {
   res.json({
     provider: 'horde',
+    authenticatedHorde: !!process.env.HORDE_API_KEY && process.env.HORDE_API_KEY !== '0000000000',
     free: true,
     maxWaitSeconds: 600,
     race: ['perchance'],
@@ -1423,10 +1424,11 @@ app.post('/api/workshop/structure-prompt', async (req, res) => {
   const anime = !!(req.body && req.body.anime);
   const img2img = !!(req.body && (req.body.img2img || req.body.hasSourceImage || req.body.sourceImage));
   const forceLocalEdit = !!(req.body && (req.body.localEdit || req.body.forceLocalEdit));
+  const smart = !!(req.body && req.body.smart);
   const started = Date.now();
-  const messages = buildStructureMessages(core, { anime, img2img: img2img || forceLocalEdit });
+  const messages = buildStructureMessages(core, { anime, smart, img2img: img2img || forceLocalEdit });
   const preferred = normalizeChatModel((req.body && req.body.model) || 'glm');
-  const tryModels = [preferred, 'glm', 'groq', 'gemini', 'openrouter', 'deepseek', 'grok'].filter((v, i, a) => v && a.indexOf(v) === i);
+  const tryModels = [preferred];
   const keyedCfg = {
     groqKey: GROQ_API_KEY,
     groqModel: GROQ_MODEL,
@@ -1641,6 +1643,7 @@ app.post('/api/chat/image', authMiddleware, async (req, res) => {
   if (req.user.banned) return workshopImageError(res, 403, '账号已被封禁');
   const model = normalizeImageModel((req.body && req.body.model) || 'flux-realism');
   if (!IMAGE_MODELS.has(model)) return workshopImageError(res, 400, '不支持的生图模型');
+  if (model !== 'sana') return workshopImageError(res, 422, '此接口仅支持 Sana，所选通道未接入，未切换平台');
   const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
   const width = Math.min(1024, Math.max(256, Number(req.body && req.body.width) || 768));
@@ -1727,6 +1730,7 @@ app.get('/api/workshop/image', async (req, res) => {
 
   const model = normalizeImageModel(req.query.model || 'turbo');
   if (!IMAGE_MODELS.has(model)) return workshopImageError(res, 400, '不支持的生图模型');
+  if (model !== 'sana') return workshopImageError(res, 422, '此接口仅支持 Sana，所选通道未接入，未切换平台');
 
   const prompt = String(req.query.prompt || '').trim().slice(0, 1600);
   if (!prompt) return workshopImageError(res, 400, '提示词不能为空');
@@ -1823,6 +1827,7 @@ app.post('/api/workshop/horde-image', async (req, res) => {
       width,
       height,
       style: isAnime ? 'anime' : 'real',
+      enrichPrompt: req.body && req.body.enrichPrompt !== false,
       seed: seed === undefined ? '' : String(seed),
     });
     hordePrompt = built.prompt;

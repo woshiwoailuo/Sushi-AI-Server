@@ -40,7 +40,7 @@ async function until(condition, label) {
   }
 }
 
-async function setup(t, handler, imageFails = false) {
+async function setup(t, handler, imageFails = false, imageConfig = null) {
   const errors = [], calls = [];
   const console = new VirtualConsole();
   console.on('jsdomError', e => { if (e.type === 'unhandled exception') errors.push(e); });
@@ -82,7 +82,7 @@ async function setup(t, handler, imageFails = false) {
       return response({ error: 'structure unavailable in unit test' }, 503);
     }
     if (href.includes('/api/image-failure-stats')) return response({ ok: true, counts: {} });
-    if (href.includes('/api/images/config')) return response({ perchanceUrl: 'https://perchance.org/ai-text-to-image-generator' });
+    if (href.includes('/api/images/config')) return response(imageConfig || { perchanceUrl: 'https://perchance.org/ai-text-to-image-generator' });
     if (href.includes('/api/images/current')) return response({ job: null });
     if (href.includes('aihorde.net')) {
       const method = options.method || 'GET';
@@ -129,6 +129,8 @@ async function setup(t, handler, imageFails = false) {
   if (engine) {
     engine.value = 'horde-real';
   }
+  // API-backed edit tests explicitly select Horde, never rely on cross-provider fallback.
+  w.document.getElementById('图生图平台').value = 'horde-real';
   return { w, calls, errors, text: () => w.document.getElementById('状态提示').textContent };
 }
 
@@ -435,7 +437,7 @@ test('failed Perchance page plugin uses official generate without Horde', async 
   assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
 });
 
-test('Perch official Load failed uses in-app photoreal', async t => {
+test('Perch official Load failed stays on Perchance and reports the failure', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   const box = f.w.document.getElementById('出图引擎'); box.value = 'perchance';
   const inner = f.w.fetch;
@@ -449,9 +451,31 @@ test('Perch official Load failed uses in-app photoreal', async t => {
   f.w.open = (url) => { opened.push(String(url)); return null; };
   await f.w.开始生成();
   assert.equal(opened.length, 0, 'must never open perchance.org');
-  assert.ok(f.calls.filter(isImageSubmit).length >= 1, 'blocked official uses in-app photoreal');
-  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'perchance');
-  assert.doesNotMatch(f.text(), /Load failed/);
+  assert.equal(f.calls.filter(isImageSubmit).length, 0, 'must not relay Horde under the Perchance label');
+  assert.equal(f.w.document.querySelector('#图像输出 img'), null);
+  assert.match(f.text(), /Perchance 官方接口连接失败/);
+});
+
+test('Perchance Cloudflare challenge stops after verification and never submits another provider', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
+  f.w.document.getElementById('出图引擎').value = 'perchance';
+  const inner = f.w.fetch;
+  f.w.fetch = (url, options) => {
+    if (/image-generation\.perchance\.org\/api\/verifyUser/.test(String(url))) {
+      return Promise.resolve({
+        ok: false,
+        status: 403,
+        headers: { get: name => String(name).toLowerCase() === 'cf-mitigated' ? 'challenge' : '' },
+        text: async () => '<!DOCTYPE html><title>Just a moment...</title>'
+      });
+    }
+    return inner(url, options);
+  };
+  await f.w.开始生成();
+  assert.equal(f.calls.filter(isImageSubmit).length, 0);
+  assert.equal(f.calls.filter(isPerchOfficial).length, 0, 'generate endpoint is not retried with an empty userKey');
+  assert.match(f.text(), /Cloudflare.*403/);
+  assert.equal(f.w.document.getElementById('出图引擎').value, 'perchance');
 });
 
 test('photorealPrompt enriches by default but style-keyword bypass keeps anime/二次元/插画', async t => {
@@ -1750,12 +1774,12 @@ test('改动 payload includes source_image from memory step image', async t => {
   f.w.document.getElementById('参考图地址').value = '';
   f.w.document.getElementById('角色描述').value = '图中人物抬起左手';
   f.w.document.getElementById('出图引擎').value = 'perchance';
-  f.w.document.getElementById('图生图平台').value = 'perchance';
-  f.w.用户选定图生图平台 = 'perchance';
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
   f.w.同步生图方式默认(true);
   f.w.切换生图方式('改动');
   assert.equal(f.w.读取生图方式(), '改动');
-  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'horde-real');
+  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'perchance');
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   assert.ok(body.source_image, '改动必须带 source_image');
@@ -1787,13 +1811,13 @@ test('改动 ON ⇒ payload has source_image + denoising in pose band; 核心描
   f.w.document.getElementById('角色描述').value = core;
   f.w.document.getElementById('参考图地址').value = PNG;
   f.w.document.getElementById('图生图强度').value = '0.52';
-  f.w.document.getElementById('图生图平台').value = 'perchance';
-  f.w.用户选定图生图平台 = 'perchance';
+  f.w.document.getElementById('图生图平台').value = 'horde-real';
+  f.w.用户选定图生图平台 = 'horde-real';
   f.w.document.getElementById('出图引擎').value = 'perchance';
   f.w.同步生图方式默认(true);
   f.w.切换生图方式('改动');
   assert.equal(f.w.读取生图方式(), '改动');
-  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'horde-real');
+  assert.equal(f.w.resolveImg2imgEngine('perchance'), 'perchance');
   await f.w.开始生成();
   const body = imagePayload(f.calls);
   assert.ok(body.source_image, '改动必须带 source_image');
@@ -2259,24 +2283,21 @@ test('改动 falls back to softThumb base64 when http source cannot materialize'
   f.w.materializeSourceImage = orig;
 });
 
-test('random invented core forces ordinary clothing; no lingerie/nude defaults', async t => {
+test('random generation does not invent clothing or exposure choices', async t => {
   const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')));
   assert.equal(typeof f.w.扩写随机核心, 'function');
   const bare = f.w.扩写随机核心('窗边的虚构成年女人', 'fictional adult woman by a window');
-  assert.match(bare.核心, /普通日常服装|衣着整齐/);
-  assert.match(bare.核心, /非内衣非暴露|非内衣/);
-  assert.doesNotMatch(bare.核心, /(?<!非)(内衣|裸体|全裸|暴露|性感)/);
-  assert.match(bare.详英, /ordinary everyday clothing|fully clothed/i);
-  assert.match(bare.详英, /not lingerie|not nude/i);
-  assert.doesNotMatch(bare.详英.replace(/not (?:lingerie|nude|revealing)/gi, ''), /\bnude\b|\blingerie\b|\bnaked\b/i);
+  assert.doesNotMatch(bare.核心, /普通日常服装|衣着整齐|非内衣|非暴露|裸体|全裸|性感/);
+  assert.doesNotMatch(bare.详英, /ordinary everyday clothing|fully clothed|modest attire|not lingerie|not nude|not revealing|\bnaked\b/i);
   const clothed = f.w.扩写随机核心('穿红毛衣的虚构成年男人', 'fictional adult man in a red sweater');
-  assert.match(clothed.核心, /非内衣|非裸体|衣着整齐/);
-  assert.doesNotMatch(clothed.详英.replace(/not (?:lingerie|nude)/gi, ''), /\bnude\b|\blingerie\b/i);
+  assert.match(clothed.核心, /穿红毛衣/);
+  assert.match(clothed.详英, /red sweater/i);
+  assert.doesNotMatch(clothed.核心, /衣着整齐|非内衣|非裸体|非暴露/);
   const item = f.w.本地随机一项();
   assert.ok(item && item.核心);
-  assert.doesNotMatch(item.详英 || '', /\bnude\b|\bnaked\b|\blingerie\b/i);
-  assert.doesNotMatch(item.核心, /(?<!非)(全裸|裸体)/);
-  // 随机详英出站加日常着装；可见核心保持本地项原文
+  assert.doesNotMatch(item.详英 || '', /ordinary everyday clothing|fully clothed|modest attire|not lingerie|not nude|not revealing|\bnaked\b/i);
+  assert.doesNotMatch(item.核心, /普通日常服装|衣着整齐|非内衣|非暴露|裸体|全裸|性感/);
+  // 随机内容不追加衣着/暴露决定；可见核心保持本地项原文。
   f.w.本地随机一项 = () => ({
     中文: '公园里的虚构成年人',
     英文: 'fictional adult in a park',
@@ -2286,10 +2307,20 @@ test('random invented core forces ordinary clothing; no lingerie/nude defaults',
   f.w.document.getElementById('出图引擎').value = 'horde-real';
   await f.w.开始随机生成();
   assert.equal(f.w.document.getElementById('角色描述').value, '公园里的虚构成年人，全身正面', '可见核心不被随机着装回写改写');
-  const body = imagePayload(f.calls);
-  const prompt = String(body.prompt || '');
-  assert.match(prompt, /ordinary everyday clothing|fully clothed|clothing matching the core/i);
-  assert.doesNotMatch(prompt.split(/adult mode enabled/i)[0] || prompt, /\blingerie\b|\bnude\b|\bnaked\b|skimpy|cleavage/i);
+  assert.doesNotMatch(f.w.document.getElementById('安全英文').value, /ordinary everyday clothing|fully clothed|modest attire|not lingerie|not nude|not revealing/i);
+});
+
+test('Horde generation prefers authenticated same-origin proxy before anonymous browser fallback', async t => {
+  const f = await setup(t, (url, options) => response(options.method === 'POST' ? job() : job('done')), false, { authenticatedHorde: true });
+  f.w.document.getElementById('出图引擎').value = 'horde-real';
+  await f.w.开始生成();
+  const proxied = f.calls.filter(c => c.method === 'POST' && /\/api\/images\/?$/.test(String(c.url)));
+  assert.equal(proxied.length, 1);
+  assert.equal(f.calls.filter(c => String(c.url).includes('aihorde.net/api/v2/generate/async')).length, 0);
+  const request = JSON.parse(proxied[0].body);
+  assert.equal(request.style, 'real');
+  assert.equal(request.enrichPrompt, false);
+  assert.equal(f.w.document.querySelector('#图像输出 img').getAttribute('data-engine'), 'horde-real');
 });
 
 test('#99 non-改动 still clears soft-adopted; 改动 rehydrates max step', async t => {
